@@ -3,6 +3,7 @@
 use eframe::egui;
 use jmt_core::{Diagram, EditMode, NodeType};
 use jmt_core::geometry::{Point, Rect};
+use jmt_core::node::{Corner, NodeId};
 
 use crate::canvas::DiagramCanvas;
 use crate::panels::{MenuBar, Toolbar, PropertiesPanel, StatusBar};
@@ -51,6 +52,34 @@ impl SelectionRect {
     }
 }
 
+/// State for resizing a node by its corner
+#[derive(Debug, Clone, Default)]
+pub struct ResizeState {
+    /// The node being resized
+    pub node_id: Option<NodeId>,
+    /// Which corner is being dragged
+    pub corner: Corner,
+}
+
+impl ResizeState {
+    /// Check if a resize is active
+    pub fn is_active(&self) -> bool {
+        self.node_id.is_some() && self.corner != Corner::None
+    }
+
+    /// Start a resize operation
+    pub fn start(&mut self, node_id: NodeId, corner: Corner) {
+        self.node_id = Some(node_id);
+        self.corner = corner;
+    }
+
+    /// Clear the resize state
+    pub fn clear(&mut self) {
+        self.node_id = None;
+        self.corner = Corner::None;
+    }
+}
+
 /// State for a single open diagram
 pub struct DiagramState {
     pub diagram: Diagram,
@@ -86,6 +115,8 @@ pub struct JmtApp {
     dragging_nodes: bool,
     /// Current cursor position on canvas (for preview rendering)
     pub cursor_pos: Option<egui::Pos2>,
+    /// Active resize state (when resizing a node by corner)
+    resize_state: ResizeState,
 }
 
 impl Default for JmtApp {
@@ -103,6 +134,7 @@ impl Default for JmtApp {
             selection_rect: SelectionRect::default(),
             dragging_nodes: false,
             cursor_pos: None,
+            resize_state: ResizeState::default(),
         }
     }
 }
@@ -484,41 +516,72 @@ impl eframe::App for JmtApp {
                 }
             }
 
-            // Handle drag start - determine if we're dragging nodes or marquee selecting
+            // Handle drag start - determine if we're resizing, dragging nodes, or marquee selecting
             if response.drag_started() {
                 if let Some(pos) = response.interact_pointer_pos() {
                     let point = Point::new(pos.x, pos.y);
+                    let corner_margin = 10.0; // Size of corner hit area
 
-                    // Check if we clicked on a node
-                    let clicked_node_id = self.current_diagram()
-                        .and_then(|state| state.diagram.find_node_at(point));
+                    // First, check if we clicked on a corner of a selected resizable node
+                    let mut corner_info: Option<(NodeId, Corner)> = None;
+                    if let Some(state) = self.current_diagram() {
+                        for node_id in state.diagram.selected_nodes() {
+                            if let Some(node) = state.diagram.find_node(node_id) {
+                                if node.can_resize() {
+                                    let corner = node.get_corner(point, corner_margin);
+                                    if corner != Corner::None {
+                                        corner_info = Some((node_id, corner));
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
 
-                    if let Some(node_id) = clicked_node_id {
-                        // Dragging on a node - switch to Arrow mode and start dragging
+                    if let Some((node_id, corner)) = corner_info {
+                        // We're starting a resize operation
                         if self.edit_mode != EditMode::Arrow {
                             self.set_edit_mode(EditMode::Arrow);
                         }
-
-                        // Select the node if not already selected
                         if let Some(state) = self.current_diagram_mut() {
-                            let already_selected = state.diagram.selected_nodes().contains(&node_id);
-                            if !already_selected {
-                                // Select this node (this allows click-and-drag in one motion)
-                                state.diagram.select_node(node_id);
-                            }
-                            // Push undo before we start moving
                             state.diagram.push_undo();
                         }
-                        self.dragging_nodes = true;
-                        self.selection_rect.clear();
-                    } else if self.edit_mode == EditMode::Arrow {
-                        // We're starting a marquee selection (only in Arrow mode)
+                        self.resize_state.start(node_id, corner);
                         self.dragging_nodes = false;
-                        self.selection_rect.start = Some(pos);
-                        self.selection_rect.current = Some(pos);
-                        // Clear current selection when starting a new marquee
-                        if let Some(state) = self.current_diagram_mut() {
-                            state.diagram.clear_selection();
+                        self.selection_rect.clear();
+                        self.status_message = "Resizing...".to_string();
+                    } else {
+                        // Check if we clicked on a node (for dragging)
+                        let clicked_node_id = self.current_diagram()
+                            .and_then(|state| state.diagram.find_node_at(point));
+
+                        if let Some(node_id) = clicked_node_id {
+                            // Dragging on a node - switch to Arrow mode and start dragging
+                            if self.edit_mode != EditMode::Arrow {
+                                self.set_edit_mode(EditMode::Arrow);
+                            }
+
+                            // Select the node if not already selected
+                            if let Some(state) = self.current_diagram_mut() {
+                                let already_selected = state.diagram.selected_nodes().contains(&node_id);
+                                if !already_selected {
+                                    // Select this node (this allows click-and-drag in one motion)
+                                    state.diagram.select_node(node_id);
+                                }
+                                // Push undo before we start moving
+                                state.diagram.push_undo();
+                            }
+                            self.dragging_nodes = true;
+                            self.selection_rect.clear();
+                        } else if self.edit_mode == EditMode::Arrow {
+                            // We're starting a marquee selection (only in Arrow mode)
+                            self.dragging_nodes = false;
+                            self.selection_rect.start = Some(pos);
+                            self.selection_rect.current = Some(pos);
+                            // Clear current selection when starting a new marquee
+                            if let Some(state) = self.current_diagram_mut() {
+                                state.diagram.clear_selection();
+                            }
                         }
                     }
                 }
@@ -527,13 +590,28 @@ impl eframe::App for JmtApp {
             // Handle dragging
             if response.dragged() {
                 if let Some(pos) = response.interact_pointer_pos() {
-                    if self.edit_mode == EditMode::Arrow {
+                    let delta = response.drag_delta();
+
+                    if self.resize_state.is_active() {
+                        // Handle resize
+                        let node_id = self.resize_state.node_id.unwrap();
+                        let corner = self.resize_state.corner;
+                        let min_width = 40.0;
+                        let min_height = 30.0;
+
+                        if let Some(state) = self.current_diagram_mut() {
+                            if let Some(node) = state.diagram.find_node_mut(node_id) {
+                                node.resize_from_corner(corner, delta.x, delta.y, min_width, min_height);
+                            }
+                            state.diagram.recalculate_connections();
+                            state.modified = true;
+                        }
+                    } else if self.edit_mode == EditMode::Arrow {
                         if self.dragging_nodes {
                             // Move selected nodes
                             if let Some(state) = self.current_diagram_mut() {
                                 let selected = state.diagram.selected_nodes();
                                 if !selected.is_empty() {
-                                    let delta = response.drag_delta();
                                     for id in selected {
                                         if let Some(node) = state.diagram.find_node_mut(id) {
                                             node.translate(delta.x, delta.y);
@@ -566,7 +644,11 @@ impl eframe::App for JmtApp {
 
             // Handle drag end
             if response.drag_stopped() {
-                if self.edit_mode == EditMode::Arrow {
+                if self.resize_state.is_active() {
+                    // Finished resizing
+                    self.resize_state.clear();
+                    self.status_message = "Ready".to_string();
+                } else if self.edit_mode == EditMode::Arrow {
                     if self.dragging_nodes {
                         // Undo was already pushed at drag start, nothing to do here
                     } else {

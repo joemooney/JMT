@@ -117,6 +117,67 @@ impl Rect {
             y2: self.y2 + dy,
         }
     }
+
+    /// Resize the rectangle by moving a corner, enforcing minimum size
+    pub fn resize_corner(
+        &self,
+        corner: crate::node::Corner,
+        dx: f32,
+        dy: f32,
+        min_width: f32,
+        min_height: f32,
+    ) -> Rect {
+        use crate::node::Corner;
+
+        let mut new_rect = *self;
+
+        match corner {
+            Corner::TopLeft => {
+                new_rect.x1 += dx;
+                new_rect.y1 += dy;
+            }
+            Corner::TopRight => {
+                new_rect.x2 += dx;
+                new_rect.y1 += dy;
+            }
+            Corner::BottomLeft => {
+                new_rect.x1 += dx;
+                new_rect.y2 += dy;
+            }
+            Corner::BottomRight => {
+                new_rect.x2 += dx;
+                new_rect.y2 += dy;
+            }
+            Corner::None => {}
+        }
+
+        // Enforce minimum size
+        if new_rect.width() < min_width {
+            match corner {
+                Corner::TopLeft | Corner::BottomLeft => {
+                    new_rect.x1 = new_rect.x2 - min_width;
+                }
+                Corner::TopRight | Corner::BottomRight => {
+                    new_rect.x2 = new_rect.x1 + min_width;
+                }
+                Corner::None => {}
+            }
+        }
+
+        if new_rect.height() < min_height {
+            match corner {
+                Corner::TopLeft | Corner::TopRight => {
+                    new_rect.y1 = new_rect.y2 - min_height;
+                }
+                Corner::BottomLeft | Corner::BottomRight => {
+                    new_rect.y2 = new_rect.y1 + min_height;
+                }
+                Corner::None => {}
+            }
+        }
+
+        new_rect
+    }
 }
 
 /// RGBA color

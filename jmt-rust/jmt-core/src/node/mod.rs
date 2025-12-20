@@ -234,6 +234,17 @@ impl Node {
         *bounds = bounds.translate(dx, dy);
     }
 
+    /// Resize the node by dragging a corner
+    pub fn resize_from_corner(&mut self, corner: Corner, dx: f32, dy: f32, min_width: f32, min_height: f32) {
+        let bounds = self.bounds_mut();
+        *bounds = bounds.resize_corner(corner, dx, dy, min_width, min_height);
+    }
+
+    /// Check if this node can be resized (States can, pseudo-states cannot)
+    pub fn can_resize(&self) -> bool {
+        matches!(self, Node::State(_))
+    }
+
     /// Get the center point of this node
     pub fn center(&self) -> Point {
         self.bounds().center()

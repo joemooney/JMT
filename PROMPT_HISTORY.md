@@ -333,7 +333,6 @@ After adding Initial or Final, auto-switch to Arrow. In Connect mode, clicking o
 - Committed and pushed auto-switch behavior
 
 **Next Steps (Future Sessions):**
-- Phase 3: Node resize from corners
 - Phase 4: Improve pseudo-state rendering
 - Phase 5: Connection label positioning
 - Phase 6: Region separator dragging
@@ -341,3 +340,43 @@ After adding Initial or Final, auto-switch to Arrow. In Connect mode, clicking o
 - Phase 8: Server integration with actual WebSocket communication
 - Phase 9: WASM build configuration
 - Phase 10: Desktop integration refinements
+
+---
+
+## Session 4 - Node Resize from Corners (2025-12-20)
+
+### Prompt: Continue with Phase 3 - Node resize from corners
+
+**User Request:**
+Continue development with the next planned phase: adding the ability to resize nodes by dragging their corners.
+
+**Actions Taken:**
+1. Added `resize_corner` method to `Rect` in geometry.rs that:
+   - Resizes rectangle by moving a specific corner
+   - Enforces minimum width and height constraints
+2. Added `resize_from_corner` and `can_resize` methods to `Node` in node/mod.rs:
+   - `resize_from_corner` delegates to Rect's resize_corner
+   - `can_resize` returns true only for State nodes (not pseudo-states)
+3. Added `ResizeState` struct to app.rs to track active resize operations:
+   - Stores node_id and corner being dragged
+   - Methods: is_active(), start(), clear()
+4. Modified drag handling in app.rs:
+   - On drag start: First check if clicking on a corner of a selected resizable node
+   - On dragging: Apply resize transformation if resize is active
+   - On drag end: Clear resize state
+5. Minimum size constraints: 40px width, 30px height
+
+**Files Modified:**
+- `jmt-core/src/geometry.rs` - Added resize_corner method to Rect
+- `jmt-core/src/node/mod.rs` - Added resize_from_corner, can_resize to Node
+- `jmt-client/src/app.rs` - Added ResizeState, corner detection, resize handling
+
+**Features Implemented:**
+- Click and drag any corner of a selected State to resize it
+- Minimum size constraints prevent nodes from becoming too small
+- Pseudo-states cannot be resized (fixed size)
+- Corner hit area is 10px for easy targeting
+- Undo is pushed before resize begins (supports undo/redo)
+
+**Git Operations:**
+- Committed and pushed corner resize feature
