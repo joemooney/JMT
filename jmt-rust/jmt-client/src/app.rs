@@ -936,11 +936,17 @@ impl eframe::App for JmtApp {
                     };
 
                     if is_double_click {
-                        // Double-click: add element and switch to arrow mode
-                        // Clear the last click to prevent triple-click being detected as another double
+                        // Double-click detected: the first click already added the node,
+                        // so just switch to Arrow mode without adding another node
                         self.last_click_time = None;
                         self.last_click_pos = None;
-                        self.handle_canvas_click(pos, true, ctrl_held);
+                        if self.edit_mode.is_add_node() {
+                            self.set_edit_mode(EditMode::Arrow);
+                            self.status_message = "Switched to Arrow mode".to_string();
+                        } else {
+                            // For non-add modes, handle normally (e.g., Arrow mode selection)
+                            self.handle_canvas_click(pos, true, ctrl_held);
+                        }
                     } else {
                         // Single click: record time/pos for potential double-click detection
                         self.last_click_time = Some(now);
