@@ -561,22 +561,29 @@ impl Diagram {
         let mut conn = Connection::new(source_id, target_id);
         conn.source_side = source_side;
         conn.target_side = target_side;
-        conn.calculate_segments(&source_bounds, &target_bounds, self.settings.stub_length);
 
         let id = conn.id;
         self.connections.push(conn);
+
+        // Recalculate all connections (slots and segments) since adding a connection
+        // may affect slot positions of other connections on the same node/side
+        self.recalculate_connections();
+
         Some(id)
     }
 
     /// Remove a connection by ID
     pub fn remove_connection(&mut self, id: ConnectionId) {
         self.connections.retain(|c| c.id != id);
+        // Recalculate remaining connections since slot positions may change
+        self.recalculate_connections();
     }
 
     /// Recalculate all connection segments (call after nodes move)
     pub fn recalculate_connections(&mut self) {
         let stub_len = self.settings.stub_length;
 
+        // First pass: recalculate sides for all connections
         for conn in &mut self.connections {
             let source_bounds = self
                 .nodes
@@ -594,7 +601,85 @@ impl Diagram {
                 let (source_side, target_side) = Connection::calculate_sides(&sb, &tb, stub_len);
                 conn.source_side = source_side;
                 conn.target_side = target_side;
+            }
+        }
+
+        // Second pass: calculate slot offsets to prevent overlap
+        self.recalculate_connection_slots();
+
+        // Third pass: recalculate segments with updated offsets
+        for conn in &mut self.connections {
+            let source_bounds = self
+                .nodes
+                .iter()
+                .find(|n| n.id() == conn.source_id)
+                .map(|n| n.bounds().clone());
+            let target_bounds = self
+                .nodes
+                .iter()
+                .find(|n| n.id() == conn.target_id)
+                .map(|n| n.bounds().clone());
+
+            if let (Some(sb), Some(tb)) = (source_bounds, target_bounds) {
                 conn.calculate_segments(&sb, &tb, stub_len);
+            }
+        }
+    }
+
+    /// Calculate slot offsets for all connections to prevent incoming/outgoing overlap
+    fn recalculate_connection_slots(&mut self) {
+        use crate::node::Side;
+
+        const SLOT_SPACING: f32 = 15.0;
+
+        // Collect all node IDs
+        let node_ids: Vec<NodeId> = self.nodes.iter().map(|n| n.id()).collect();
+
+        // For each node, calculate offsets for connections on each side
+        for node_id in node_ids {
+            for side in [Side::Top, Side::Bottom, Side::Left, Side::Right] {
+                // Find outgoing connections (this node is source, connection uses this side)
+                let outgoing_indices: Vec<usize> = self.connections
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, c)| c.source_id == node_id && c.source_side == side)
+                    .map(|(i, _)| i)
+                    .collect();
+
+                // Find incoming connections (this node is target, connection uses this side)
+                let incoming_indices: Vec<usize> = self.connections
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, c)| c.target_id == node_id && c.target_side == side)
+                    .map(|(i, _)| i)
+                    .collect();
+
+                let num_outgoing = outgoing_indices.len();
+                let num_incoming = incoming_indices.len();
+
+                // Assign offsets: outgoing on negative side, incoming on positive side
+                // Center each group around their respective side
+                for (slot, &idx) in outgoing_indices.iter().enumerate() {
+                    let offset = if num_outgoing == 1 && num_incoming == 0 {
+                        0.0 // Single connection, center it
+                    } else {
+                        // Offset to negative side
+                        let group_width = (num_outgoing as f32 - 1.0) * SLOT_SPACING;
+                        -SLOT_SPACING / 2.0 - group_width / 2.0 + (slot as f32) * SLOT_SPACING
+                    };
+                    self.connections[idx].source_offset = offset;
+                }
+
+                for (slot, &idx) in incoming_indices.iter().enumerate() {
+                    let offset = if num_incoming == 1 && num_outgoing == 0 {
+                        0.0 // Single connection, center it
+                    } else {
+                        // Offset to positive side
+                        let group_width = (num_incoming as f32 - 1.0) * SLOT_SPACING;
+                        SLOT_SPACING / 2.0 - group_width / 2.0 + (slot as f32) * SLOT_SPACING
+                    };
+                    self.connections[idx].target_offset = offset;
+                }
             }
         }
     }
