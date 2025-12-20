@@ -198,6 +198,39 @@ requirements:
     - field_name: description
       old_value: When aligning or distributing nodes, they are arranged in the order they were selected (not sorted by position). First selected node anchors the alignment, subsequent nodes follow in selection sequence.
       new_value: 'Smart ordering for align/distribute: If nodes are already sorted by position (marquee/lasso selection), maintains relative positions. If nodes are NOT sorted by position (explicit Ctrl+Click ordering), arranges them in the clicked sequence.'
+- id: eb15421c-5852-4bbe-aa0f-9d3825a064e8
+  spec_id: FR-018
+  title: Auto-connect uses position order for marquee selection
+  description: When marquee selecting nodes and clicking Connect, nodes are connected left-to-right by their x position instead of creation order. This ensures Initial → State1 → State2 → Final regardless of when nodes were added. Ctrl+Click selection still uses explicit clicked order.
+  status: Completed
+  priority: Medium
+  owner: joe
+  feature: 16-Diagram Editing
+  created_at: 2025-12-20T21:38:45.631515164Z
+  modified_at: 2025-12-20T21:38:45.631515164Z
+  req_type: Functional
+- id: c6f13ff4-f1ab-49a2-8b32-be5f424a0574
+  spec_id: FR-019
+  title: Distribute maintains minimum node separation
+  description: Distribute Horizontally/Vertically now places each node with a 20px gap from the previous node's edge, ensuring nodes never overlap regardless of their sizes. First node stays as anchor, subsequent nodes are positioned sequentially.
+  status: Completed
+  priority: Medium
+  owner: joe
+  feature: 17-Diagram Editing
+  created_at: 2025-12-20T21:38:51.802886762Z
+  modified_at: 2025-12-20T21:38:51.802886762Z
+  req_type: Functional
+- id: f7e544e0-ac18-44b9-89e2-2482d35b19fa
+  spec_id: FR-020
+  title: Text field focus prevents node deletion
+  description: Delete and Backspace keys are ignored when a text field has focus (e.g., editing node name in properties panel). This allows normal text editing without accidentally deleting selected nodes.
+  status: Completed
+  priority: Medium
+  owner: joe
+  feature: User Interface
+  created_at: 2025-12-20T21:38:57.098573444Z
+  modified_at: 2025-12-20T21:38:57.098573444Z
+  req_type: Functional
 id_config:
   format: SingleLevel
   numbering: Global
@@ -240,8 +273,8 @@ id_config:
     prefix: FOLDER
     description: Organizational folders
 features: []
-next_feature_number: 16
-next_spec_number: 18
+next_feature_number: 18
+next_spec_number: 21
 prefix_counters: {}
 relationship_definitions:
 - name: parent
