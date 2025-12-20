@@ -237,6 +237,22 @@ impl Diagram {
         }
     }
 
+    /// Select multiple nodes by their IDs
+    pub fn select_nodes(&mut self, ids: &[NodeId]) {
+        self.clear_selection();
+        for id in ids {
+            if let Some(node) = self.find_node_mut(*id) {
+                node.set_focus(true);
+            }
+        }
+    }
+
+    /// Select all nodes within a rectangle
+    pub fn select_nodes_in_rect(&mut self, rect: &Rect) {
+        let ids = self.find_nodes_in_rect(rect);
+        self.select_nodes(&ids);
+    }
+
     /// Select a single connection
     pub fn select_connection(&mut self, id: ConnectionId) {
         self.clear_selection();

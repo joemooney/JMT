@@ -116,6 +116,31 @@ jmt-rust/
 - Committed: `b15eea8` - Add Rust/egui implementation of JMT state machine editor
 - Pushed to GitHub: master branch
 
+---
+
+## Session 3 - Marquee Selection (2025-12-19)
+
+### Prompt: Add rectangular marquee selection
+
+**User Request:**
+Add the ability to drag the mouse and select all elements in a rectangular area.
+
+**Actions Taken:**
+1. Added `SelectionRect` struct in `jmt-client/src/app.rs` to track selection rectangle state
+2. Added `select_nodes` and `select_nodes_in_rect` methods to `Diagram` in `jmt-core/src/diagram.rs`
+3. Modified drag handling in `JmtApp` to detect:
+   - Drag on node → move selected nodes
+   - Drag on empty canvas → marquee selection
+4. Added visual rendering of selection rectangle (blue semi-transparent)
+5. On drag end, selects all nodes within the rectangle
+
+**Files Modified:**
+- `jmt-core/src/diagram.rs` - Added multi-select methods
+- `jmt-client/src/app.rs` - Added SelectionRect and marquee drag handling
+
+**Git Operations:**
+- Committed and pushed marquee selection feature
+
 **Next Steps (Future Sessions):**
 - Phase 2: Improve state rendering (corner rounding, activities display)
 - Phase 3: Node resize from corners
