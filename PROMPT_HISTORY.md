@@ -181,6 +181,26 @@ Clicking and dragging should immediately drag the element, not require click-rel
 **Git Operations:**
 - Committed and pushed click-and-drag fix
 
+---
+
+## Session 3 (continued) - Drag Switches to Arrow Mode (2025-12-19)
+
+### Prompt: Dragging node should exit Add mode
+
+**User Request:**
+If in Add: State mode and start dragging a node, should exit Add mode and switch to Arrow/select mode.
+
+**Actions Taken:**
+1. Modified drag_started handler to check for node under cursor regardless of edit mode
+2. If dragging on a node in any mode, switch to Arrow mode first, then start dragging
+3. Marquee selection only starts in Arrow mode (not when in Add modes)
+
+**Files Modified:**
+- `jmt-client/src/app.rs` - Switch to Arrow mode when dragging existing node
+
+**Git Operations:**
+- Committed and pushed mode switch on drag
+
 **Next Steps (Future Sessions):**
 - Phase 2: Improve state rendering (corner rounding, activities display)
 - Phase 3: Node resize from corners

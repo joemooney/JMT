@@ -359,35 +359,38 @@ impl eframe::App for JmtApp {
             // Handle drag start - determine if we're dragging nodes or marquee selecting
             if response.drag_started() {
                 if let Some(pos) = response.interact_pointer_pos() {
-                    if self.edit_mode == EditMode::Arrow {
-                        let point = Point::new(pos.x, pos.y);
+                    let point = Point::new(pos.x, pos.y);
 
-                        // Check if we clicked on a node
-                        let clicked_node_id = self.current_diagram()
-                            .and_then(|state| state.diagram.find_node_at(point));
+                    // Check if we clicked on a node
+                    let clicked_node_id = self.current_diagram()
+                        .and_then(|state| state.diagram.find_node_at(point));
 
-                        if let Some(node_id) = clicked_node_id {
-                            // We're dragging a node - select it if not already selected
-                            if let Some(state) = self.current_diagram_mut() {
-                                let already_selected = state.diagram.selected_nodes().contains(&node_id);
-                                if !already_selected {
-                                    // Select this node (this allows click-and-drag in one motion)
-                                    state.diagram.select_node(node_id);
-                                }
-                                // Push undo before we start moving
-                                state.diagram.push_undo();
+                    if let Some(node_id) = clicked_node_id {
+                        // Dragging on a node - switch to Arrow mode and start dragging
+                        if self.edit_mode != EditMode::Arrow {
+                            self.set_edit_mode(EditMode::Arrow);
+                        }
+
+                        // Select the node if not already selected
+                        if let Some(state) = self.current_diagram_mut() {
+                            let already_selected = state.diagram.selected_nodes().contains(&node_id);
+                            if !already_selected {
+                                // Select this node (this allows click-and-drag in one motion)
+                                state.diagram.select_node(node_id);
                             }
-                            self.dragging_nodes = true;
-                            self.selection_rect.clear();
-                        } else {
-                            // We're starting a marquee selection
-                            self.dragging_nodes = false;
-                            self.selection_rect.start = Some(pos);
-                            self.selection_rect.current = Some(pos);
-                            // Clear current selection when starting a new marquee
-                            if let Some(state) = self.current_diagram_mut() {
-                                state.diagram.clear_selection();
-                            }
+                            // Push undo before we start moving
+                            state.diagram.push_undo();
+                        }
+                        self.dragging_nodes = true;
+                        self.selection_rect.clear();
+                    } else if self.edit_mode == EditMode::Arrow {
+                        // We're starting a marquee selection (only in Arrow mode)
+                        self.dragging_nodes = false;
+                        self.selection_rect.start = Some(pos);
+                        self.selection_rect.current = Some(pos);
+                        // Clear current selection when starting a new marquee
+                        if let Some(state) = self.current_diagram_mut() {
+                            state.diagram.clear_selection();
                         }
                     }
                 }
