@@ -92,3 +92,13 @@ fan JsmGui
 - All editing happens in client; server only handles file I/O
 - Properties panel auto-switches based on selection
 - Connections auto-route when nodes move
+
+## Recent Features (Session 4)
+
+- **Corner resize**: Drag corners of selected states to resize (40x30 minimum)
+- **Marquee selection**: Drag on canvas to select multiple nodes
+- **Cursor preview**: Ghost element shown when adding nodes
+- **Auto-switch modes**: Returns to Arrow mode after Initial/Final or Connect miss
+- **Activity visibility**: Per-state and per-diagram toggle for entry/exit/do
+- **Auto-size states**: Fit to Content button grows state to fit text
+- **Alignment tools**: Dropdown with align and distribute options
