@@ -287,6 +287,31 @@ When adding a state or pseudo-state, show a dummy preview at the cursor position
 **Git Operations:**
 - Committed and pushed cursor preview
 
+---
+
+## Session 3 (continued) - Fix Connection Selection (2025-12-19)
+
+### Prompt: Should be able to select a transition and show its properties
+
+**User Request:**
+Select a transition and show its properties.
+
+**Actions Taken:**
+1. Fixed connection segments not being recalculated after undo/redo
+   - Added `recalculate_connections()` call in `undo()` method
+   - Added `recalculate_connections()` call in `redo()` method
+2. Increased click tolerance from 5px to 10px for easier selection
+3. Connection properties were already showing in Properties panel:
+   - Name, Event, Guard, Action fields
+   - Label preview
+
+**Files Modified:**
+- `jmt-core/src/diagram.rs` - Recalculate connections after undo/redo
+- `jmt-client/src/app.rs` - Increased click tolerance for connections
+
+**Git Operations:**
+- Committed and pushed connection selection fix
+
 **Next Steps (Future Sessions):**
 - Phase 3: Node resize from corners
 - Phase 4: Improve pseudo-state rendering

@@ -300,6 +300,8 @@ impl Diagram {
                 self.root_state = restored.root_state;
                 self.nodes = restored.nodes;
                 self.connections = restored.connections;
+                // Recalculate connection segments (they're not serialized)
+                self.recalculate_connections();
                 return true;
             }
         }
@@ -320,6 +322,8 @@ impl Diagram {
                 self.root_state = restored.root_state;
                 self.nodes = restored.nodes;
                 self.connections = restored.connections;
+                // Recalculate connection segments (they're not serialized)
+                self.recalculate_connections();
                 return true;
             }
         }

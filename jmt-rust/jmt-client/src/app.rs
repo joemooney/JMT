@@ -168,7 +168,7 @@ impl JmtApp {
                         .unwrap_or_default();
                     state.diagram.select_node(node_id);
                     self.status_message = format!("Selected: {}", name);
-                } else if let Some(conn_id) = state.diagram.find_connection_at(point, 5.0) {
+                } else if let Some(conn_id) = state.diagram.find_connection_at(point, 10.0) {
                     state.diagram.select_connection(conn_id);
                     self.status_message = "Selected connection".to_string();
                 } else {
