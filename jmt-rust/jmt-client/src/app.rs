@@ -86,6 +86,8 @@ pub struct DiagramState {
     pub diagram: Diagram,
     pub canvas: DiagramCanvas,
     pub modified: bool,
+    /// File path where this diagram is saved (None if not yet saved)
+    pub file_path: Option<std::path::PathBuf>,
 }
 
 impl DiagramState {
@@ -94,6 +96,17 @@ impl DiagramState {
             canvas: DiagramCanvas::new(),
             diagram,
             modified: false,
+            file_path: None,
+        }
+    }
+
+    /// Create with an existing file path (for opened files)
+    pub fn with_path(diagram: Diagram, path: std::path::PathBuf) -> Self {
+        Self {
+            canvas: DiagramCanvas::new(),
+            diagram,
+            modified: false,
+            file_path: Some(path),
         }
     }
 }
@@ -204,6 +217,118 @@ impl JmtApp {
             self.diagrams.remove(self.active_diagram);
             if self.active_diagram >= self.diagrams.len() {
                 self.active_diagram = self.diagrams.len() - 1;
+            }
+        }
+    }
+
+    /// Save the current diagram (prompts for path if not yet saved)
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn save(&mut self) {
+        if let Some(state) = self.current_diagram() {
+            if state.file_path.is_some() {
+                // Has a path, save directly
+                self.save_to_current_path();
+            } else {
+                // No path yet, do Save As
+                self.save_as();
+            }
+        }
+    }
+
+    /// Save the current diagram to its current path
+    #[cfg(not(target_arch = "wasm32"))]
+    fn save_to_current_path(&mut self) {
+        if let Some(state) = self.current_diagram() {
+            if let Some(path) = &state.file_path {
+                let json = serde_json::to_string_pretty(&state.diagram);
+                match json {
+                    Ok(content) => {
+                        match std::fs::write(path, &content) {
+                            Ok(_) => {
+                                let filename = path.file_name()
+                                    .map(|s| s.to_string_lossy().to_string())
+                                    .unwrap_or_else(|| "file".to_string());
+                                self.status_message = format!("Saved: {}", filename);
+                                // Mark as not modified after successful save
+                                if let Some(state) = self.current_diagram_mut() {
+                                    state.modified = false;
+                                }
+                            }
+                            Err(e) => {
+                                self.status_message = format!("Error saving: {}", e);
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        self.status_message = format!("Error serializing: {}", e);
+                    }
+                }
+            }
+        }
+    }
+
+    /// Save As - always prompts for a new file path
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn save_as(&mut self) {
+        use rfd::FileDialog;
+
+        if self.current_diagram().is_none() {
+            return;
+        }
+
+        // Get diagram name for default filename
+        let default_name = self.current_diagram()
+            .map(|s| s.diagram.settings.name.clone())
+            .unwrap_or_else(|| "diagram".to_string());
+
+        let dialog = FileDialog::new()
+            .set_title("Save Diagram As")
+            .add_filter("JMT Diagram", &["jmt"])
+            .add_filter("JSON", &["json"])
+            .set_file_name(&format!("{}.jmt", default_name));
+
+        if let Some(path) = dialog.save_file() {
+            // Update the file path
+            if let Some(state) = self.current_diagram_mut() {
+                state.file_path = Some(path);
+            }
+            // Now save to this path
+            self.save_to_current_path();
+        }
+    }
+
+    /// Open a diagram from file
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn open(&mut self) {
+        use rfd::FileDialog;
+
+        let dialog = FileDialog::new()
+            .set_title("Open Diagram")
+            .add_filter("JMT Diagram", &["jmt"])
+            .add_filter("JSON", &["json"])
+            .add_filter("All Files", &["*"]);
+
+        if let Some(path) = dialog.pick_file() {
+            match std::fs::read_to_string(&path) {
+                Ok(content) => {
+                    match serde_json::from_str::<Diagram>(&content) {
+                        Ok(diagram) => {
+                            let state = DiagramState::with_path(diagram, path.clone());
+                            self.diagrams.push(state);
+                            self.active_diagram = self.diagrams.len() - 1;
+                            let filename = path.file_name()
+                                .map(|s| s.to_string_lossy().to_string())
+                                .unwrap_or_else(|| "file".to_string());
+                            self.status_message = format!("Opened: {}", filename);
+                        }
+                        Err(e) => {
+                            self.status_message = format!("Error parsing file: {}", e);
+                        }
+                    }
+                }
+                Err(e) => {
+                    self.status_message = format!("Error reading file: {}", e);
+                }
             }
         }
     }
@@ -887,6 +1012,22 @@ impl JmtApp {
         if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
             self.pending_connection_source = None;
             self.set_edit_mode(EditMode::Arrow);
+        }
+
+        // Ctrl+S to Save, Ctrl+Shift+S to Save As
+        #[cfg(not(target_arch = "wasm32"))]
+        if ctx.input(|i| i.modifiers.command && i.key_pressed(egui::Key::S)) {
+            if ctx.input(|i| i.modifiers.shift) {
+                self.save_as();
+            } else {
+                self.save();
+            }
+        }
+
+        // Ctrl+O to Open
+        #[cfg(not(target_arch = "wasm32"))]
+        if ctx.input(|i| i.modifiers.command && i.key_pressed(egui::Key::O)) {
+            self.open();
         }
     }
 }

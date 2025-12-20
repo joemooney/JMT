@@ -30,19 +30,24 @@ impl MenuBar {
                     }
                 });
 
+                #[cfg(not(target_arch = "wasm32"))]
                 if ui.button("Open...").clicked() {
-                    // TODO: Implement file open via server
+                    app.open();
                     ui.close_menu();
                 }
 
-                if ui.button("Save").clicked() {
-                    // TODO: Implement file save via server
-                    ui.close_menu();
-                }
+                #[cfg(not(target_arch = "wasm32"))]
+                {
+                    let has_diagram = app.current_diagram().is_some();
+                    if ui.add_enabled(has_diagram, egui::Button::new("Save")).clicked() {
+                        app.save();
+                        ui.close_menu();
+                    }
 
-                if ui.button("Save As...").clicked() {
-                    // TODO: Implement save as via server
-                    ui.close_menu();
+                    if ui.add_enabled(has_diagram, egui::Button::new("Save As...")).clicked() {
+                        app.save_as();
+                        ui.close_menu();
+                    }
                 }
 
                 ui.separator();
