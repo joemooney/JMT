@@ -4,6 +4,7 @@ use eframe::egui;
 use jmt_core::{Diagram, EditMode, NodeType, DiagramType};
 use jmt_core::geometry::{Point, Rect};
 use jmt_core::node::{Corner, NodeId};
+use std::time::Instant;
 
 use crate::canvas::DiagramCanvas;
 use crate::panels::{MenuBar, Toolbar, PropertiesPanel, StatusBar};
@@ -97,6 +98,11 @@ impl DiagramState {
     }
 }
 
+/// Double-click detection threshold in milliseconds
+const DOUBLE_CLICK_TIME_MS: u128 = 500;
+/// Maximum distance (in pixels) between clicks to count as double-click
+const DOUBLE_CLICK_DISTANCE: f32 = 10.0;
+
 /// The main JMT application
 pub struct JmtApp {
     /// Open diagrams
@@ -119,6 +125,10 @@ pub struct JmtApp {
     resize_state: ResizeState,
     /// Lasso selection points (freeform polygon)
     lasso_points: Vec<egui::Pos2>,
+    /// Time of last click (for custom double-click detection)
+    last_click_time: Option<Instant>,
+    /// Position of last click (for custom double-click detection)
+    last_click_pos: Option<egui::Pos2>,
 }
 
 impl Default for JmtApp {
@@ -138,6 +148,8 @@ impl Default for JmtApp {
             cursor_pos: None,
             resize_state: ResizeState::default(),
             lasso_points: Vec::new(),
+            last_click_time: None,
+            last_click_pos: None,
         }
     }
 }
@@ -907,15 +919,34 @@ impl eframe::App for JmtApp {
                 self.render_cursor_preview(&painter, pos);
             }
 
-            // Handle mouse clicks
+            // Handle mouse clicks with custom double-click detection (500ms window)
             // Double-click in add mode will add element AND switch back to arrow mode
-            // Use double_clicked() exclusively - don't also process as single click
-            let is_double_click = response.double_clicked();
-            let is_single_click = response.clicked() && !is_double_click;
             let ctrl_held = ui.input(|i| i.modifiers.ctrl);
-            if is_single_click || is_double_click {
+            if response.clicked() {
                 if let Some(pos) = response.interact_pointer_pos() {
-                    self.handle_canvas_click(pos, is_double_click, ctrl_held);
+                    let now = Instant::now();
+
+                    // Check if this is a double-click (within time and distance threshold)
+                    let is_double_click = if let (Some(last_time), Some(last_pos)) = (self.last_click_time, self.last_click_pos) {
+                        let time_diff = now.duration_since(last_time).as_millis();
+                        let distance = ((pos.x - last_pos.x).powi(2) + (pos.y - last_pos.y).powi(2)).sqrt();
+                        time_diff <= DOUBLE_CLICK_TIME_MS && distance <= DOUBLE_CLICK_DISTANCE
+                    } else {
+                        false
+                    };
+
+                    if is_double_click {
+                        // Double-click: add element and switch to arrow mode
+                        // Clear the last click to prevent triple-click being detected as another double
+                        self.last_click_time = None;
+                        self.last_click_pos = None;
+                        self.handle_canvas_click(pos, true, ctrl_held);
+                    } else {
+                        // Single click: record time/pos for potential double-click detection
+                        self.last_click_time = Some(now);
+                        self.last_click_pos = Some(pos);
+                        self.handle_canvas_click(pos, false, ctrl_held);
+                    }
                 }
             }
 
