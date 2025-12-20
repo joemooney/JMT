@@ -9,6 +9,34 @@ pub struct Toolbar;
 impl Toolbar {
     pub fn show(ui: &mut egui::Ui, app: &mut JmtApp) {
         ui.horizontal(|ui| {
+            // Undo/Redo buttons
+            let can_undo = app.current_diagram()
+                .map(|s| s.diagram.can_undo())
+                .unwrap_or(false);
+            let can_redo = app.current_diagram()
+                .map(|s| s.diagram.can_redo())
+                .unwrap_or(false);
+
+            if ui.add_enabled(can_undo, egui::Button::new("Undo"))
+                .on_hover_text("Undo last action (Ctrl+Z)")
+                .clicked()
+            {
+                if let Some(state) = app.current_diagram_mut() {
+                    state.diagram.undo();
+                }
+            }
+
+            if ui.add_enabled(can_redo, egui::Button::new("Redo"))
+                .on_hover_text("Redo last undone action (Ctrl+Shift+Z)")
+                .clicked()
+            {
+                if let Some(state) = app.current_diagram_mut() {
+                    state.diagram.redo();
+                }
+            }
+
+            ui.separator();
+
             // Selection tools
             ui.label("Select:");
             Self::tool_button(ui, app, EditMode::Arrow, "Arrow", "Select and move nodes");

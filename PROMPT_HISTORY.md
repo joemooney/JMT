@@ -141,6 +141,26 @@ Add the ability to drag the mouse and select all elements in a rectangular area.
 **Git Operations:**
 - Committed and pushed marquee selection feature
 
+---
+
+## Session 3 (continued) - Undo/Redo Buttons (2025-12-19)
+
+### Prompt: Add undo and redo buttons
+
+**User Request:**
+Add undo and redo buttons for undoing/redoing the last action.
+
+**Actions Taken:**
+1. Added Undo and Redo buttons to the toolbar (at the beginning)
+2. Buttons are disabled when undo/redo is not available
+3. Buttons show tooltip with keyboard shortcuts (Ctrl+Z, Ctrl+Shift+Z)
+
+**Files Modified:**
+- `jmt-client/src/panels/toolbar.rs` - Added Undo/Redo buttons
+
+**Git Operations:**
+- Committed and pushed undo/redo buttons
+
 **Next Steps (Future Sessions):**
 - Phase 2: Improve state rendering (corner rounding, activities display)
 - Phase 3: Node resize from corners
