@@ -669,7 +669,6 @@ impl Toolbar {
         const MIN_SEPARATION: f32 = 20.0; // Minimum gap between nodes
 
         if let Some(state) = app.current_diagram_mut() {
-            // Use selection order so nodes are arranged in the order they were selected
             let selected_ids = state.diagram.selected_nodes_in_order();
             if selected_ids.len() < 2 {
                 return;
@@ -677,15 +676,45 @@ impl Toolbar {
 
             state.diagram.push_undo();
 
-            // Collect bounds of selected nodes (in selection order)
-            let bounds: Vec<_> = selected_ids.iter()
-                .filter_map(|id| state.diagram.find_node(*id))
-                .map(|n| n.bounds().clone())
+            // Collect node IDs with bounds
+            let mut nodes_with_bounds: Vec<_> = selected_ids.iter()
+                .filter_map(|id| {
+                    state.diagram.find_node(*id).map(|n| (*id, n.bounds().clone()))
+                })
                 .collect();
 
-            if bounds.is_empty() {
+            if nodes_with_bounds.len() < 2 {
                 return;
             }
+
+            // Determine if we should use selection order or position-based order
+            // For vertical alignment (CenterV), check if selection is already sorted by x
+            // For horizontal alignment (CenterH), check if selection is already sorted by y
+            // If already sorted by position, user likely used marquee - use position order
+            // If not sorted, user explicitly ordered via Ctrl+Click - use selection order
+            let is_horizontal_align = matches!(mode, AlignMode::Left | AlignMode::Right | AlignMode::CenterH);
+
+            let use_position_order = if is_horizontal_align {
+                // For horizontal alignment, spreading is vertical - check if sorted by y
+                Self::is_sorted_by_position(&nodes_with_bounds, false)
+            } else {
+                // For vertical alignment (CenterV), spreading is horizontal - check if sorted by x
+                Self::is_sorted_by_position(&nodes_with_bounds, true)
+            };
+
+            // Sort by position if using position-based order (marquee selection)
+            if use_position_order {
+                if is_horizontal_align {
+                    // Sort by Y for horizontal alignment (vertical spreading)
+                    nodes_with_bounds.sort_by(|a, b| a.1.y1.partial_cmp(&b.1.y1).unwrap());
+                } else {
+                    // Sort by X for vertical alignment (horizontal spreading)
+                    nodes_with_bounds.sort_by(|a, b| a.1.x1.partial_cmp(&b.1.x1).unwrap());
+                }
+            }
+
+            // Collect just bounds for alignment target calculation
+            let bounds: Vec<_> = nodes_with_bounds.iter().map(|(_, b)| b.clone()).collect();
 
             // Calculate alignment target
             let target = match mode {
@@ -706,7 +735,7 @@ impl Toolbar {
             };
 
             // Apply alignment
-            for id in selected_ids.iter() {
+            for (id, _) in nodes_with_bounds.iter() {
                 if let Some(node) = state.diagram.find_node_mut(*id) {
                     let bounds = node.bounds();
                     let offset = match mode {
@@ -729,57 +758,37 @@ impl Toolbar {
                 }
             }
 
-            // Prevent overlapping: spread nodes along the perpendicular axis IN SELECTION ORDER
-            // For horizontal alignment (Left/Right/CenterH), spread vertically
-            // For vertical alignment (Top/Bottom/CenterV), spread horizontally
-            let is_horizontal_align = matches!(mode, AlignMode::Left | AlignMode::Right | AlignMode::CenterH);
-
-            // Collect updated positions with node IDs - KEEP SELECTION ORDER (don't sort by position)
-            let mut nodes_with_bounds: Vec<_> = selected_ids.iter()
-                .filter_map(|id| {
+            // Re-collect bounds after alignment
+            let mut nodes_with_bounds: Vec<_> = nodes_with_bounds.iter()
+                .filter_map(|(id, _)| {
                     state.diagram.find_node(*id).map(|n| (*id, n.bounds().clone()))
                 })
                 .collect();
 
-            if nodes_with_bounds.len() < 2 {
-                state.diagram.recalculate_connections();
-                state.modified = true;
-                return;
-            }
-
-            // NOTE: We do NOT sort here - we keep the selection order
-            // Nodes are arranged in the sequence they were selected
-
-            // Check for overlaps and spread if needed, maintaining selection order
+            // Check for overlaps and spread if needed
             for i in 1..nodes_with_bounds.len() {
                 let (_prev_id, prev_bounds) = nodes_with_bounds[i - 1].clone();
                 let (curr_id, curr_bounds) = nodes_with_bounds[i].clone();
 
                 if is_horizontal_align {
-                    // Vertical alignment (CenterV) - spread horizontally in selection order
                     // Check vertical overlap
                     let min_y = prev_bounds.y2 + MIN_SEPARATION;
                     if curr_bounds.y1 < min_y {
-                        // Need to push this node down
                         let offset = min_y - curr_bounds.y1;
                         if let Some(node) = state.diagram.find_node_mut(curr_id) {
                             node.translate(0.0, offset);
                         }
-                        // Update the bounds in our list for subsequent comparisons
                         nodes_with_bounds[i].1.y1 += offset;
                         nodes_with_bounds[i].1.y2 += offset;
                     }
                 } else {
-                    // Horizontal alignment (CenterH) - spread horizontally in selection order
                     // Check horizontal overlap
                     let min_x = prev_bounds.x2 + MIN_SEPARATION;
                     if curr_bounds.x1 < min_x {
-                        // Need to push this node right
                         let offset = min_x - curr_bounds.x1;
                         if let Some(node) = state.diagram.find_node_mut(curr_id) {
                             node.translate(offset, 0.0);
                         }
-                        // Update the bounds in our list for subsequent comparisons
                         nodes_with_bounds[i].1.x1 += offset;
                         nodes_with_bounds[i].1.x2 += offset;
                     }
@@ -791,11 +800,25 @@ impl Toolbar {
         }
     }
 
+    /// Check if nodes are already sorted by position (indicates marquee selection)
+    fn is_sorted_by_position(nodes: &[(uuid::Uuid, jmt_core::geometry::Rect)], by_x: bool) -> bool {
+        if nodes.len() < 2 {
+            return true;
+        }
+        for i in 1..nodes.len() {
+            let prev_pos = if by_x { nodes[i-1].1.x1 } else { nodes[i-1].1.y1 };
+            let curr_pos = if by_x { nodes[i].1.x1 } else { nodes[i].1.y1 };
+            if curr_pos < prev_pos {
+                return false; // Not sorted, user explicitly ordered
+            }
+        }
+        true // Already sorted by position
+    }
+
     fn distribute_nodes(app: &mut JmtApp, mode: DistributeMode) {
         const MIN_SEPARATION: f32 = 20.0; // Minimum gap between nodes
 
         if let Some(state) = app.current_diagram_mut() {
-            // Use selection order so nodes are distributed in the order they were selected
             let selected_ids = state.diagram.selected_nodes_in_order();
             if selected_ids.len() < 3 {
                 return; // Need at least 3 nodes to distribute
@@ -803,8 +826,8 @@ impl Toolbar {
 
             state.diagram.push_undo();
 
-            // Collect node IDs with their bounds and center positions (in selection order)
-            let nodes_with_info: Vec<_> = selected_ids.iter()
+            // Collect node IDs with their bounds and center positions
+            let mut nodes_with_info: Vec<_> = selected_ids.iter()
                 .filter_map(|id| {
                     state.diagram.find_node(*id).map(|n| {
                         let bounds = n.bounds().clone();
@@ -818,8 +841,24 @@ impl Toolbar {
                 return;
             }
 
-            // NOTE: We do NOT sort here - distribute in selection order
-            // First selected node becomes first position, last selected becomes last position
+            // Determine if we should use selection order or position-based order
+            let by_x = matches!(mode, DistributeMode::Horizontal);
+            let nodes_for_check: Vec<_> = nodes_with_info.iter()
+                .map(|(id, b, _, _)| (*id, b.clone()))
+                .collect();
+            let use_position_order = Self::is_sorted_by_position(&nodes_for_check, by_x);
+
+            // Sort by position if using position-based order (marquee selection)
+            if use_position_order {
+                match mode {
+                    DistributeMode::Horizontal => {
+                        nodes_with_info.sort_by(|a, b| a.2.partial_cmp(&b.2).unwrap());
+                    }
+                    DistributeMode::Vertical => {
+                        nodes_with_info.sort_by(|a, b| a.3.partial_cmp(&b.3).unwrap());
+                    }
+                }
+            }
 
             match mode {
                 DistributeMode::Horizontal => {
