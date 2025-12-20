@@ -1,0 +1,91 @@
+syntax = "proto3";
+package jmt;
+
+import "diagram.proto";
+
+// Request to create a new diagram
+message NewDiagramRequest {
+  string name = 1;
+}
+
+// Response with new diagram
+message NewDiagramResponse {
+  Diagram diagram = 1;
+}
+
+// Request to open a diagram from file
+message OpenDiagramRequest {
+  string path = 1;
+}
+
+// Response with opened diagram or error
+message OpenDiagramResponse {
+  oneof result {
+    Diagram diagram = 1;
+    string error = 2;
+  }
+}
+
+// Request to save a diagram
+message SaveDiagramRequest {
+  Diagram diagram = 1;
+  optional string path = 2;  // If empty, use diagram's existing path
+}
+
+// Response from save operation
+message SaveDiagramResponse {
+  bool success = 1;
+  optional string error = 2;
+  optional string saved_path = 3;
+}
+
+// Request to list files in a directory
+message ListFilesRequest {
+  string directory = 1;
+  string extension_filter = 2;  // e.g., ".json"
+}
+
+// File information
+message FileInfo {
+  string name = 1;
+  string path = 2;
+  int64 modified_time = 3;
+}
+
+// Response with list of files
+message ListFilesResponse {
+  repeated FileInfo files = 1;
+}
+
+// Request for default project path
+message GetProjectPathRequest {}
+
+// Response with project path
+message GetProjectPathResponse {
+  string path = 1;
+}
+
+// Generic command envelope (for WebSocket transport)
+message Command {
+  uint64 request_id = 1;
+  oneof command {
+    NewDiagramRequest new_diagram = 2;
+    OpenDiagramRequest open_diagram = 3;
+    SaveDiagramRequest save_diagram = 4;
+    ListFilesRequest list_files = 5;
+    GetProjectPathRequest get_project_path = 6;
+  }
+}
+
+// Generic response envelope (for WebSocket transport)
+message Response {
+  uint64 request_id = 1;
+  oneof response {
+    NewDiagramResponse new_diagram = 2;
+    OpenDiagramResponse open_diagram = 3;
+    SaveDiagramResponse save_diagram = 4;
+    ListFilesResponse list_files = 5;
+    GetProjectPathResponse get_project_path = 6;
+    string error = 7;
+  }
+}

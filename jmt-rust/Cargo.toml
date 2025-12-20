@@ -1,0 +1,50 @@
+[workspace]
+resolver = "2"
+members = [
+    "jmt-core",
+    "jmt-proto",
+    "jmt-server",
+    "jmt-client",
+    "jmt-desktop",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["Joe"]
+license = "MIT"
+
+[workspace.dependencies]
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# IDs
+uuid = { version = "1.0", features = ["v4", "serde"] }
+
+# Async
+tokio = { version = "1", features = ["full"] }
+
+# Protobuf
+prost = "0.13"
+prost-types = "0.13"
+bytes = "1.0"
+
+# gRPC
+tonic = "0.12"
+
+# WebSocket
+tokio-tungstenite = "0.24"
+
+# GUI
+eframe = "0.30"
+egui = "0.30"
+egui_extras = "0.30"
+
+# Error handling
+thiserror = "2.0"
+anyhow = "1.0"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = "0.3"

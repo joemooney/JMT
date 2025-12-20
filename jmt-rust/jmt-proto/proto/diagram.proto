@@ -1,0 +1,130 @@
+syntax = "proto3";
+package jmt;
+
+// A 2D point
+message Point {
+  float x = 1;
+  float y = 2;
+}
+
+// A rectangle defined by two corners
+message Rect {
+  float x1 = 1;
+  float y1 = 2;
+  float x2 = 3;
+  float y2 = 4;
+}
+
+// RGBA color
+message Color {
+  uint32 r = 1;
+  uint32 g = 2;
+  uint32 b = 3;
+  uint32 a = 4;
+}
+
+// Types of nodes
+enum NodeType {
+  STATE = 0;
+  INITIAL = 1;
+  FINAL = 2;
+  CHOICE = 3;
+  FORK = 4;
+  JOIN = 5;
+  JUNCTION = 6;
+}
+
+// Connection side
+enum Side {
+  SIDE_NONE = 0;
+  TOP = 1;
+  BOTTOM = 2;
+  LEFT = 3;
+  RIGHT = 4;
+}
+
+// A region within a composite state
+message Region {
+  string id = 1;
+  string name = 2;
+  Rect bounds = 3;
+  repeated string child_node_ids = 4;
+  bool is_horizontal = 5;
+}
+
+// A state node
+message StateNode {
+  string id = 1;
+  string name = 2;
+  Rect bounds = 3;
+  optional Color fill_color = 4;
+  optional string parent_region_id = 5;
+  string entry_activity = 6;
+  string exit_activity = 7;
+  string do_activity = 8;
+  repeated Region regions = 9;
+}
+
+// A pseudo-state node
+message PseudoStateNode {
+  string id = 1;
+  string name = 2;
+  NodeType kind = 3;
+  Rect bounds = 4;
+  Color fill_color = 5;
+  optional string parent_region_id = 6;
+}
+
+// A node (either state or pseudo-state)
+message Node {
+  oneof node {
+    StateNode state = 1;
+    PseudoStateNode pseudo = 2;
+  }
+}
+
+// A line segment
+message LineSegment {
+  Point start = 1;
+  Point end = 2;
+}
+
+// A connection (transition) between nodes
+message Connection {
+  string id = 1;
+  string name = 2;
+  string source_id = 3;
+  string target_id = 4;
+  Side source_side = 5;
+  Side target_side = 6;
+  float source_offset = 7;
+  float target_offset = 8;
+  string event = 9;
+  string guard = 10;
+  string action = 11;
+}
+
+// Diagram settings
+message DiagramSettings {
+  string name = 1;
+  optional string file_path = 2;
+  Color state_color = 3;
+  float corner_rounding = 4;
+  float stub_length = 5;
+  float arrow_width = 6;
+  float arrow_height = 7;
+  float corner_size = 8;
+  float pseudo_corner_size = 9;
+  float default_state_width = 10;
+  float default_state_height = 11;
+  float default_pseudo_size = 12;
+}
+
+// A complete diagram
+message Diagram {
+  string id = 1;
+  DiagramSettings settings = 2;
+  StateNode root_state = 3;
+  repeated Node nodes = 4;
+  repeated Connection connections = 5;
+}

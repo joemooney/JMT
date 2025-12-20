@@ -1,0 +1,19 @@
+[package]
+name = "jmt-desktop"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Desktop launcher for JMT state machine editor"
+
+[[bin]]
+name = "jmt"
+path = "src/main.rs"
+
+[dependencies]
+jmt-client = { path = "../jmt-client" }
+jmt-server = { path = "../jmt-server" }
+tokio = { workspace = true }
+eframe = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }

@@ -7,7 +7,7 @@
 - Create and edit state machine diagrams
 - Support multiple diagrams via tabbed interface
 - Add, move, resize, and delete diagram elements
-- Align and organize shapes
+- Align and organize shapes (left, right, center, top, bottom, middle)
 - Select single or multiple elements
 - Undo/redo operations
 
@@ -18,46 +18,63 @@
 - Entry, exit, and do activities
 - Composite states containing regions with substates
 - Visual representation as rounded rectangles
+- Customizable fill colors
 
 #### Pseudo-states
-- Initial state (starting point)
-- Final state (terminal point)
-- Choice (conditional branching)
-- Fork (parallel split)
-- Join (parallel merge)
-- Junction (unconditional branching)
+- Initial state (filled circle - starting point)
+- Final state (double circle - terminal point)
+- Choice (diamond - conditional branching)
+- Fork (bar - parallel split)
+- Join (bar - parallel merge)
+- Junction (diamond - unconditional branching)
 
 #### Transitions
 - Connect states with directional arrows
 - Event trigger
 - Guard condition
 - Action specification
-- Multiple rendering styles (LINE, ARC, U_SHAPE, L_SHAPE, STEP, S_SHAPE)
-
-### Code Generation
-- Generate C++ code from state machine diagram
-- Output event enums
-- Output state variables
-- Output transition definitions
-- Output initial transitions
+- Automatic routing with stubs
 
 ### File Operations
-- Save diagrams to file
-- Load diagrams from file
-- Backup functionality
+- Save diagrams to JSON format
+- Load diagrams from JSON files
+- Auto-save support (planned)
 
 ## Non-Functional Requirements
 
 ### Platform
-- Cross-platform via JVM
-- Fantom runtime required
+- Desktop: Linux, macOS, Windows
+- Web: Browser via WASM (planned)
+
+### Architecture
+- Client-server split for WASM support
+- Protobuf communication between client and server
+- Desktop spawns local server; WASM connects to remote server
 
 ### User Interface
 - Graphical editor with canvas
 - Properties/attributes panel
 - Menu bar and toolbar
-- Status bar
+- Status bar showing current mode
 
 ### Performance
 - Responsive diagram editing
-- Efficient rendering of complex hierarchical states
+- Efficient rendering via immediate mode GUI
+- Fast serialization/deserialization
+
+## Technical Requirements
+
+### Rust Implementation
+- Cargo workspace with 5 crates:
+  - `jmt-core`: Shared data types (geometry, nodes, connections, diagrams)
+  - `jmt-proto`: Protobuf definitions for client-server communication
+  - `jmt-server`: WebSocket server for file operations
+  - `jmt-client`: egui frontend (WASM-compatible)
+  - `jmt-desktop`: Desktop launcher
+
+### Dependencies
+- `eframe`/`egui` for GUI
+- `serde`/`serde_json` for serialization
+- `prost` for protobuf
+- `tokio` for async runtime
+- `tokio-tungstenite` for WebSocket
