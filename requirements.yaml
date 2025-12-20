@@ -182,14 +182,22 @@ requirements:
 - id: d82f7b38-48d1-4360-a837-72c887a5ab89
   spec_id: FR-017
   title: Align and distribute preserve selection order
-  description: When aligning or distributing nodes, they are arranged in the order they were selected (not sorted by position). First selected node anchors the alignment, subsequent nodes follow in selection sequence.
+  description: 'Smart ordering for align/distribute: If nodes are already sorted by position (marquee/lasso selection), maintains relative positions. If nodes are NOT sorted by position (explicit Ctrl+Click ordering), arranges them in the clicked sequence.'
   status: Completed
   priority: Medium
   owner: joe
-  feature: Diagram Editing
+  feature: 15-Diagram Editing
   created_at: 2025-12-20T20:13:58.966840851Z
-  modified_at: 2025-12-20T20:13:58.966840851Z
+  modified_at: 2025-12-20T20:47:35.986156029Z
   req_type: Functional
+  history:
+  - id: a18a3a89-0bfa-40e4-bc20-6ded8989b6cf
+    author: CLI
+    timestamp: 2025-12-20T20:47:35.986155729Z
+    changes:
+    - field_name: description
+      old_value: When aligning or distributing nodes, they are arranged in the order they were selected (not sorted by position). First selected node anchors the alignment, subsequent nodes follow in selection sequence.
+      new_value: 'Smart ordering for align/distribute: If nodes are already sorted by position (marquee/lasso selection), maintains relative positions. If nodes are NOT sorted by position (explicit Ctrl+Click ordering), arranges them in the clicked sequence.'
 id_config:
   format: SingleLevel
   numbering: Global
@@ -232,7 +240,7 @@ id_config:
     prefix: FOLDER
     description: Organizational folders
 features: []
-next_feature_number: 15
+next_feature_number: 16
 next_spec_number: 18
 prefix_counters: {}
 relationship_definitions:
