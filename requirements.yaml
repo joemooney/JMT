@@ -9,11 +9,77 @@ requirements:
   status: Draft
   priority: Medium
   owner: ''
-  feature: Uncategorized
+  feature: 1-Uncategorized
   created_at: 2025-12-20T04:26:52.332160306Z
   created_by: Joe Mooney
   modified_at: 2025-12-20T04:26:52.332160306Z
   req_type: Folder
+- id: 0f5c5fda-6aef-486a-92e8-39c10d7bfc91
+  spec_id: FR-002
+  title: Double-click add mode auto-switch
+  description: In add mode, double-clicking adds the element AND automatically switches back to Arrow mode. Single-click adds element and stays in current mode.
+  status: Completed
+  priority: Medium
+  owner: joe
+  feature: 2-Diagram Editing
+  created_at: 2025-12-20T18:12:20.978027748Z
+  modified_at: 2025-12-20T18:12:20.978027748Z
+  req_type: Functional
+- id: 9d455cc1-d4e2-48f6-a515-d79741d5ada9
+  spec_id: FR-003
+  title: Center elements on cursor position when adding
+  description: When adding diagram elements, they are centered on the cursor position to match the preview ghost shape shown while hovering. Applies to all element types across all diagram types.
+  status: Completed
+  priority: Medium
+  owner: joe
+  feature: 3-Diagram Editing
+  created_at: 2025-12-20T18:12:26.759591822Z
+  modified_at: 2025-12-20T18:12:26.759591822Z
+  req_type: Functional
+- id: 9d5a390f-29b2-4ec4-bb3d-ac18e280cc69
+  spec_id: FR-004
+  title: Alignment label clarity - Vertically/Horizontally naming
+  description: 'Renamed alignment menu items for clarity: ''Align Center'' renamed to ''Align Vertically'' (aligns on vertical axis), ''Align Middle'' renamed to ''Align Horizontally'' (aligns on horizontal axis).'
+  status: Completed
+  priority: Low
+  owner: joe
+  feature: 4-User Interface
+  created_at: 2025-12-20T18:12:32.665850903Z
+  modified_at: 2025-12-20T18:12:32.665850903Z
+  req_type: Functional
+- id: 95ba109a-4562-4fd9-85b1-c94ec5e6c601
+  spec_id: FR-005
+  title: Theme-aware toolbar icons for dark mode
+  description: 'Toolbar icons adapt to the current theme: light strokes (rgb 220,220,220) on dark backgrounds in dark mode, black strokes on light backgrounds in light mode. Button backgrounds also adapt to theme.'
+  status: Completed
+  priority: Medium
+  owner: joe
+  feature: 5-User Interface
+  created_at: 2025-12-20T18:12:47.972357254Z
+  modified_at: 2025-12-20T18:12:47.972357254Z
+  req_type: Functional
+- id: 46ff05d9-8ab2-42d7-bc34-9b4f63c1a3f4
+  spec_id: FR-006
+  title: Minimum separation on align and distribute
+  description: Align and Distribute operations maintain a minimum 20px separation between nodes to prevent overlapping. After alignment, nodes are spread along the perpendicular axis if they would overlap. Distribute expands the range if needed to maintain separation.
+  status: Completed
+  priority: Medium
+  owner: joe
+  feature: 6-Diagram Editing
+  created_at: 2025-12-20T18:12:54.451795720Z
+  modified_at: 2025-12-20T18:12:54.451795720Z
+  req_type: Functional
+- id: 24aa9a65-824f-4cf3-8bac-e619dc69420b
+  spec_id: FR-007
+  title: Ctrl+Click for toggle node selection
+  description: Ctrl+Click on a node toggles its selection (adds if not selected, removes if selected). Regular click replaces selection with the clicked node. Ctrl+Click on empty space preserves current selection.
+  status: Completed
+  priority: Medium
+  owner: joe
+  feature: Diagram Editing
+  created_at: 2025-12-20T18:13:01.056015213Z
+  modified_at: 2025-12-20T18:13:01.056015213Z
+  req_type: Functional
 id_config:
   format: SingleLevel
   numbering: Global
@@ -56,8 +122,8 @@ id_config:
     prefix: FOLDER
     description: Organizational folders
 features: []
-next_feature_number: 1
-next_spec_number: 2
+next_feature_number: 7
+next_spec_number: 8
 prefix_counters: {}
 relationship_definitions:
 - name: parent
