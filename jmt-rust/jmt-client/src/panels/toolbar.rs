@@ -833,54 +833,46 @@ impl Toolbar {
 
             match mode {
                 DistributeMode::Horizontal => {
-                    // Calculate the minimum required spacing based on node widths
-                    let total_node_width: f32 = nodes_with_info.iter()
-                        .map(|(_, b, _, _)| b.width())
-                        .sum();
-                    let total_min_gaps = MIN_SEPARATION * (nodes_with_info.len() - 1) as f32;
+                    // First node stays in place, each subsequent node is placed
+                    // with MIN_SEPARATION gap from the previous node's right edge
+                    let mut prev_right = nodes_with_info.first().unwrap().1.x2;
 
-                    // Use first node's current position as anchor
-                    let first_center = nodes_with_info.first().unwrap().2;
+                    for (i, (id, bounds, _, _)) in nodes_with_info.iter().enumerate() {
+                        if i == 0 {
+                            // First node stays in place
+                            continue;
+                        }
+                        // Place this node's left edge at prev_right + MIN_SEPARATION
+                        let target_left = prev_right + MIN_SEPARATION;
+                        let current_left = bounds.x1;
+                        let offset = target_left - current_left;
 
-                    // Calculate minimum required space
-                    let min_required_space = total_node_width + total_min_gaps
-                        - nodes_with_info.first().unwrap().1.width() / 2.0
-                        - nodes_with_info.last().unwrap().1.width() / 2.0;
-
-                    let count = nodes_with_info.len();
-                    let spacing = min_required_space / (count - 1) as f32;
-
-                    for (i, (id, _, current_x, _)) in nodes_with_info.iter().enumerate() {
-                        let target_x = first_center + spacing * i as f32;
-                        let offset = target_x - current_x;
                         if let Some(node) = state.diagram.find_node_mut(*id) {
                             node.translate(offset, 0.0);
+                            // Update prev_right for next iteration
+                            prev_right = node.bounds().x2;
                         }
                     }
                 }
                 DistributeMode::Vertical => {
-                    // Calculate the minimum required spacing based on node heights
-                    let total_node_height: f32 = nodes_with_info.iter()
-                        .map(|(_, b, _, _)| b.height())
-                        .sum();
-                    let total_min_gaps = MIN_SEPARATION * (nodes_with_info.len() - 1) as f32;
+                    // First node stays in place, each subsequent node is placed
+                    // with MIN_SEPARATION gap from the previous node's bottom edge
+                    let mut prev_bottom = nodes_with_info.first().unwrap().1.y2;
 
-                    // Use first node's current position as anchor
-                    let first_center = nodes_with_info.first().unwrap().3;
+                    for (i, (id, bounds, _, _)) in nodes_with_info.iter().enumerate() {
+                        if i == 0 {
+                            // First node stays in place
+                            continue;
+                        }
+                        // Place this node's top edge at prev_bottom + MIN_SEPARATION
+                        let target_top = prev_bottom + MIN_SEPARATION;
+                        let current_top = bounds.y1;
+                        let offset = target_top - current_top;
 
-                    // Calculate minimum required space
-                    let min_required_space = total_node_height + total_min_gaps
-                        - nodes_with_info.first().unwrap().1.height() / 2.0
-                        - nodes_with_info.last().unwrap().1.height() / 2.0;
-
-                    let count = nodes_with_info.len();
-                    let spacing = min_required_space / (count - 1) as f32;
-
-                    for (i, (id, _, _, current_y)) in nodes_with_info.iter().enumerate() {
-                        let target_y = first_center + spacing * i as f32;
-                        let offset = target_y - current_y;
                         if let Some(node) = state.diagram.find_node_mut(*id) {
                             node.translate(0.0, offset);
+                            // Update prev_bottom for next iteration
+                            prev_bottom = node.bounds().y2;
                         }
                     }
                 }
