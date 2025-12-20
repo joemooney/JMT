@@ -93,6 +93,22 @@ impl MenuBar {
                 }
             });
 
+            // Convert menu
+            #[cfg(not(target_arch = "wasm32"))]
+            ui.menu_button("Convert", |ui| {
+                let has_diagram = app.current_diagram().is_some();
+
+                if ui.add_enabled(has_diagram, egui::Button::new("Export as PNG...")).clicked() {
+                    app.export_png(false);
+                    ui.close_menu();
+                }
+
+                if ui.add_enabled(has_diagram, egui::Button::new("Export as PNG (Autocrop)...")).clicked() {
+                    app.export_png(true);
+                    ui.close_menu();
+                }
+            });
+
             // View menu
             ui.menu_button("View", |ui| {
                 // Show activities toggle

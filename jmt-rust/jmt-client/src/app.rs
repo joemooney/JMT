@@ -335,6 +335,402 @@ impl JmtApp {
         }
     }
 
+    /// Export the current diagram as PNG
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn export_png(&mut self, autocrop: bool) {
+        use rfd::FileDialog;
+        use image::{ImageBuffer, Rgba};
+
+        let state = match self.current_diagram() {
+            Some(s) => s,
+            None => return,
+        };
+
+        // Get diagram name for default filename
+        let default_name = state.diagram.settings.name.clone();
+
+        let dialog = FileDialog::new()
+            .set_title("Export as PNG")
+            .add_filter("PNG Image", &["png"])
+            .set_file_name(&format!("{}.png", default_name));
+
+        if let Some(path) = dialog.save_file() {
+            // Calculate diagram bounds
+            let (min_x, min_y, max_x, max_y) = self.calculate_diagram_bounds();
+
+            if max_x <= min_x || max_y <= min_y {
+                self.status_message = "No elements to export".to_string();
+                return;
+            }
+
+            // Add margin
+            let margin = if autocrop { 20.0 } else { 50.0 };
+            let (x_offset, y_offset, width, height) = if autocrop {
+                (min_x - margin, min_y - margin,
+                 (max_x - min_x + margin * 2.0) as u32,
+                 (max_y - min_y + margin * 2.0) as u32)
+            } else {
+                // Use fixed canvas size with content positioned
+                let canvas_width = (max_x + margin * 2.0).max(800.0) as u32;
+                let canvas_height = (max_y + margin * 2.0).max(600.0) as u32;
+                (0.0, 0.0, canvas_width, canvas_height)
+            };
+
+            // Create image buffer with white background
+            let mut img: ImageBuffer<Rgba<u8>, Vec<u8>> = ImageBuffer::from_pixel(
+                width, height,
+                Rgba([255, 255, 255, 255])
+            );
+
+            // Render diagram elements to the image
+            if let Some(state) = self.current_diagram() {
+                Self::render_diagram_to_image(&mut img, &state.diagram, x_offset, y_offset);
+            }
+
+            // Save the image
+            match img.save(&path) {
+                Ok(_) => {
+                    let filename = path.file_name()
+                        .map(|s| s.to_string_lossy().to_string())
+                        .unwrap_or_else(|| "file".to_string());
+                    self.status_message = format!("Exported: {}", filename);
+                }
+                Err(e) => {
+                    self.status_message = format!("Error exporting: {}", e);
+                }
+            }
+        }
+    }
+
+    /// Calculate the bounding box of all diagram elements
+    #[cfg(not(target_arch = "wasm32"))]
+    fn calculate_diagram_bounds(&self) -> (f32, f32, f32, f32) {
+        let state = match self.current_diagram() {
+            Some(s) => s,
+            None => return (0.0, 0.0, 0.0, 0.0),
+        };
+
+        let mut min_x = f32::MAX;
+        let mut min_y = f32::MAX;
+        let mut max_x = f32::MIN;
+        let mut max_y = f32::MIN;
+
+        // State machine nodes
+        for node in state.diagram.nodes() {
+            let bounds = node.bounds();
+            min_x = min_x.min(bounds.x1);
+            min_y = min_y.min(bounds.y1);
+            max_x = max_x.max(bounds.x2);
+            max_y = max_y.max(bounds.y2);
+        }
+
+        // Connection endpoints
+        for conn in state.diagram.connections() {
+            for seg in &conn.segments {
+                min_x = min_x.min(seg.start.x).min(seg.end.x);
+                min_y = min_y.min(seg.start.y).min(seg.end.y);
+                max_x = max_x.max(seg.start.x).max(seg.end.x);
+                max_y = max_y.max(seg.start.y).max(seg.end.y);
+            }
+        }
+
+        (min_x, min_y, max_x, max_y)
+    }
+
+    /// Render diagram to an image buffer
+    #[cfg(not(target_arch = "wasm32"))]
+    fn render_diagram_to_image(
+        img: &mut image::ImageBuffer<image::Rgba<u8>, Vec<u8>>,
+        diagram: &Diagram,
+        x_offset: f32,
+        y_offset: f32,
+    ) {
+        use image::Rgba;
+
+        let state_fill = Rgba([255, 255, 204, 255]); // Light yellow
+        let state_stroke = Rgba([0, 0, 0, 255]); // Black
+        let pseudo_fill = Rgba([0, 0, 0, 255]); // Black for initial/final
+        let connection_color = Rgba([100, 100, 100, 255]); // Gray
+
+        // Draw states
+        for node in diagram.nodes() {
+            let bounds = node.bounds();
+            let x1 = (bounds.x1 - x_offset) as i32;
+            let y1 = (bounds.y1 - y_offset) as i32;
+            let x2 = (bounds.x2 - x_offset) as i32;
+            let y2 = (bounds.y2 - y_offset) as i32;
+
+            match node {
+                jmt_core::node::Node::State(_) => {
+                    // Draw filled rounded rectangle (simplified to rectangle)
+                    Self::draw_filled_rect(img, x1, y1, x2, y2, state_fill);
+                    Self::draw_rect_outline(img, x1, y1, x2, y2, state_stroke);
+
+                    // Draw state name
+                    let name = node.name();
+                    let cx = (x1 + x2) / 2;
+                    let cy = (y1 + y2) / 2;
+                    Self::draw_text_centered(img, cx, cy, name, state_stroke);
+                }
+                jmt_core::node::Node::Pseudo(ps) => {
+                    let cx = ((bounds.x1 + bounds.x2) / 2.0 - x_offset) as i32;
+                    let cy = ((bounds.y1 + bounds.y2) / 2.0 - y_offset) as i32;
+                    let radius = ((bounds.x2 - bounds.x1) / 2.0) as i32;
+
+                    match ps.kind {
+                        jmt_core::node::PseudoStateKind::Initial => {
+                            Self::draw_filled_circle(img, cx, cy, radius, pseudo_fill);
+                        }
+                        jmt_core::node::PseudoStateKind::Final => {
+                            Self::draw_circle_outline(img, cx, cy, radius, pseudo_fill);
+                            Self::draw_filled_circle(img, cx, cy, radius - 4, pseudo_fill);
+                        }
+                        jmt_core::node::PseudoStateKind::Choice | jmt_core::node::PseudoStateKind::Junction => {
+                            // Diamond shape
+                            Self::draw_diamond(img, cx, cy, radius, state_stroke);
+                        }
+                        jmt_core::node::PseudoStateKind::Fork | jmt_core::node::PseudoStateKind::Join => {
+                            // Thick bar
+                            Self::draw_filled_rect(img, x1, y1, x2, y2, pseudo_fill);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Draw connections
+        for conn in diagram.connections() {
+            for seg in &conn.segments {
+                let x1 = (seg.start.x - x_offset) as i32;
+                let y1 = (seg.start.y - y_offset) as i32;
+                let x2 = (seg.end.x - x_offset) as i32;
+                let y2 = (seg.end.y - y_offset) as i32;
+                Self::draw_line(img, x1, y1, x2, y2, connection_color);
+            }
+
+            // Draw arrowhead at target
+            if let Some(last_seg) = conn.segments.last() {
+                let x2 = (last_seg.end.x - x_offset) as i32;
+                let y2 = (last_seg.end.y - y_offset) as i32;
+                let x1 = (last_seg.start.x - x_offset) as i32;
+                let y1 = (last_seg.start.y - y_offset) as i32;
+                Self::draw_arrowhead(img, x1, y1, x2, y2, connection_color);
+            }
+        }
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    fn draw_filled_rect(img: &mut image::ImageBuffer<image::Rgba<u8>, Vec<u8>>, x1: i32, y1: i32, x2: i32, y2: i32, color: image::Rgba<u8>) {
+        let (width, height) = img.dimensions();
+        for y in y1.max(0)..y2.min(height as i32) {
+            for x in x1.max(0)..x2.min(width as i32) {
+                img.put_pixel(x as u32, y as u32, color);
+            }
+        }
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    fn draw_rect_outline(img: &mut image::ImageBuffer<image::Rgba<u8>, Vec<u8>>, x1: i32, y1: i32, x2: i32, y2: i32, color: image::Rgba<u8>) {
+        Self::draw_line(img, x1, y1, x2, y1, color); // Top
+        Self::draw_line(img, x1, y2, x2, y2, color); // Bottom
+        Self::draw_line(img, x1, y1, x1, y2, color); // Left
+        Self::draw_line(img, x2, y1, x2, y2, color); // Right
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    fn draw_line(img: &mut image::ImageBuffer<image::Rgba<u8>, Vec<u8>>, x1: i32, y1: i32, x2: i32, y2: i32, color: image::Rgba<u8>) {
+        let (width, height) = img.dimensions();
+        let dx = (x2 - x1).abs();
+        let dy = (y2 - y1).abs();
+        let sx = if x1 < x2 { 1 } else { -1 };
+        let sy = if y1 < y2 { 1 } else { -1 };
+        let mut err = dx - dy;
+        let mut x = x1;
+        let mut y = y1;
+
+        loop {
+            if x >= 0 && x < width as i32 && y >= 0 && y < height as i32 {
+                img.put_pixel(x as u32, y as u32, color);
+            }
+            if x == x2 && y == y2 { break; }
+            let e2 = 2 * err;
+            if e2 > -dy { err -= dy; x += sx; }
+            if e2 < dx { err += dx; y += sy; }
+        }
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    fn draw_filled_circle(img: &mut image::ImageBuffer<image::Rgba<u8>, Vec<u8>>, cx: i32, cy: i32, radius: i32, color: image::Rgba<u8>) {
+        let (width, height) = img.dimensions();
+        for dy in -radius..=radius {
+            for dx in -radius..=radius {
+                if dx * dx + dy * dy <= radius * radius {
+                    let x = cx + dx;
+                    let y = cy + dy;
+                    if x >= 0 && x < width as i32 && y >= 0 && y < height as i32 {
+                        img.put_pixel(x as u32, y as u32, color);
+                    }
+                }
+            }
+        }
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    fn draw_circle_outline(img: &mut image::ImageBuffer<image::Rgba<u8>, Vec<u8>>, cx: i32, cy: i32, radius: i32, color: image::Rgba<u8>) {
+        let (width, height) = img.dimensions();
+        let r2_outer = radius * radius;
+        let r2_inner = (radius - 2) * (radius - 2);
+        for dy in -radius..=radius {
+            for dx in -radius..=radius {
+                let d2 = dx * dx + dy * dy;
+                if d2 <= r2_outer && d2 >= r2_inner {
+                    let x = cx + dx;
+                    let y = cy + dy;
+                    if x >= 0 && x < width as i32 && y >= 0 && y < height as i32 {
+                        img.put_pixel(x as u32, y as u32, color);
+                    }
+                }
+            }
+        }
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    fn draw_diamond(img: &mut image::ImageBuffer<image::Rgba<u8>, Vec<u8>>, cx: i32, cy: i32, radius: i32, color: image::Rgba<u8>) {
+        // Draw diamond outline
+        Self::draw_line(img, cx, cy - radius, cx + radius, cy, color); // Top to right
+        Self::draw_line(img, cx + radius, cy, cx, cy + radius, color); // Right to bottom
+        Self::draw_line(img, cx, cy + radius, cx - radius, cy, color); // Bottom to left
+        Self::draw_line(img, cx - radius, cy, cx, cy - radius, color); // Left to top
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    fn draw_arrowhead(img: &mut image::ImageBuffer<image::Rgba<u8>, Vec<u8>>, x1: i32, y1: i32, x2: i32, y2: i32, color: image::Rgba<u8>) {
+        let dx = (x2 - x1) as f32;
+        let dy = (y2 - y1) as f32;
+        let len = (dx * dx + dy * dy).sqrt();
+        if len < 1.0 { return; }
+
+        let ux = dx / len;
+        let uy = dy / len;
+
+        let arrow_len = 10.0;
+        let arrow_width = 5.0;
+
+        let ax = x2 as f32 - ux * arrow_len;
+        let ay = y2 as f32 - uy * arrow_len;
+
+        let p1x = (ax - uy * arrow_width) as i32;
+        let p1y = (ay + ux * arrow_width) as i32;
+        let p2x = (ax + uy * arrow_width) as i32;
+        let p2y = (ay - ux * arrow_width) as i32;
+
+        Self::draw_line(img, x2, y2, p1x, p1y, color);
+        Self::draw_line(img, x2, y2, p2x, p2y, color);
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    fn draw_text_centered(img: &mut image::ImageBuffer<image::Rgba<u8>, Vec<u8>>, cx: i32, cy: i32, text: &str, color: image::Rgba<u8>) {
+        // Simple text rendering - draw each character as a small pattern
+        // This is a simplified version; for production, use a proper font rendering library
+        let char_width = 6;
+        let char_height = 10;
+        let text_width = text.len() as i32 * char_width;
+        let start_x = cx - text_width / 2;
+        let start_y = cy - char_height / 2;
+
+        for (i, c) in text.chars().enumerate() {
+            let x = start_x + i as i32 * char_width;
+            Self::draw_simple_char(img, x, start_y, c, color);
+        }
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    fn draw_simple_char(img: &mut image::ImageBuffer<image::Rgba<u8>, Vec<u8>>, x: i32, y: i32, c: char, color: image::Rgba<u8>) {
+        // Very simple bitmap font for basic characters
+        let (width, height) = img.dimensions();
+        let patterns: &[(char, &[u8])] = &[
+            ('A', &[0b01110, 0b10001, 0b10001, 0b11111, 0b10001, 0b10001, 0b10001]),
+            ('B', &[0b11110, 0b10001, 0b10001, 0b11110, 0b10001, 0b10001, 0b11110]),
+            ('C', &[0b01110, 0b10001, 0b10000, 0b10000, 0b10000, 0b10001, 0b01110]),
+            ('D', &[0b11110, 0b10001, 0b10001, 0b10001, 0b10001, 0b10001, 0b11110]),
+            ('E', &[0b11111, 0b10000, 0b10000, 0b11110, 0b10000, 0b10000, 0b11111]),
+            ('F', &[0b11111, 0b10000, 0b10000, 0b11110, 0b10000, 0b10000, 0b10000]),
+            ('G', &[0b01110, 0b10001, 0b10000, 0b10111, 0b10001, 0b10001, 0b01110]),
+            ('H', &[0b10001, 0b10001, 0b10001, 0b11111, 0b10001, 0b10001, 0b10001]),
+            ('I', &[0b01110, 0b00100, 0b00100, 0b00100, 0b00100, 0b00100, 0b01110]),
+            ('J', &[0b00111, 0b00010, 0b00010, 0b00010, 0b00010, 0b10010, 0b01100]),
+            ('K', &[0b10001, 0b10010, 0b10100, 0b11000, 0b10100, 0b10010, 0b10001]),
+            ('L', &[0b10000, 0b10000, 0b10000, 0b10000, 0b10000, 0b10000, 0b11111]),
+            ('M', &[0b10001, 0b11011, 0b10101, 0b10101, 0b10001, 0b10001, 0b10001]),
+            ('N', &[0b10001, 0b11001, 0b10101, 0b10011, 0b10001, 0b10001, 0b10001]),
+            ('O', &[0b01110, 0b10001, 0b10001, 0b10001, 0b10001, 0b10001, 0b01110]),
+            ('P', &[0b11110, 0b10001, 0b10001, 0b11110, 0b10000, 0b10000, 0b10000]),
+            ('Q', &[0b01110, 0b10001, 0b10001, 0b10001, 0b10101, 0b10010, 0b01101]),
+            ('R', &[0b11110, 0b10001, 0b10001, 0b11110, 0b10100, 0b10010, 0b10001]),
+            ('S', &[0b01110, 0b10001, 0b10000, 0b01110, 0b00001, 0b10001, 0b01110]),
+            ('T', &[0b11111, 0b00100, 0b00100, 0b00100, 0b00100, 0b00100, 0b00100]),
+            ('U', &[0b10001, 0b10001, 0b10001, 0b10001, 0b10001, 0b10001, 0b01110]),
+            ('V', &[0b10001, 0b10001, 0b10001, 0b10001, 0b10001, 0b01010, 0b00100]),
+            ('W', &[0b10001, 0b10001, 0b10001, 0b10101, 0b10101, 0b11011, 0b10001]),
+            ('X', &[0b10001, 0b10001, 0b01010, 0b00100, 0b01010, 0b10001, 0b10001]),
+            ('Y', &[0b10001, 0b10001, 0b01010, 0b00100, 0b00100, 0b00100, 0b00100]),
+            ('Z', &[0b11111, 0b00001, 0b00010, 0b00100, 0b01000, 0b10000, 0b11111]),
+            ('0', &[0b01110, 0b10001, 0b10011, 0b10101, 0b11001, 0b10001, 0b01110]),
+            ('1', &[0b00100, 0b01100, 0b00100, 0b00100, 0b00100, 0b00100, 0b01110]),
+            ('2', &[0b01110, 0b10001, 0b00001, 0b00110, 0b01000, 0b10000, 0b11111]),
+            ('3', &[0b01110, 0b10001, 0b00001, 0b00110, 0b00001, 0b10001, 0b01110]),
+            ('4', &[0b00010, 0b00110, 0b01010, 0b10010, 0b11111, 0b00010, 0b00010]),
+            ('5', &[0b11111, 0b10000, 0b11110, 0b00001, 0b00001, 0b10001, 0b01110]),
+            ('6', &[0b00110, 0b01000, 0b10000, 0b11110, 0b10001, 0b10001, 0b01110]),
+            ('7', &[0b11111, 0b00001, 0b00010, 0b00100, 0b01000, 0b01000, 0b01000]),
+            ('8', &[0b01110, 0b10001, 0b10001, 0b01110, 0b10001, 0b10001, 0b01110]),
+            ('9', &[0b01110, 0b10001, 0b10001, 0b01111, 0b00001, 0b00010, 0b01100]),
+            ('a', &[0b00000, 0b00000, 0b01110, 0b00001, 0b01111, 0b10001, 0b01111]),
+            ('b', &[0b10000, 0b10000, 0b10110, 0b11001, 0b10001, 0b10001, 0b11110]),
+            ('c', &[0b00000, 0b00000, 0b01110, 0b10000, 0b10000, 0b10001, 0b01110]),
+            ('d', &[0b00001, 0b00001, 0b01101, 0b10011, 0b10001, 0b10001, 0b01111]),
+            ('e', &[0b00000, 0b00000, 0b01110, 0b10001, 0b11111, 0b10000, 0b01110]),
+            ('f', &[0b00110, 0b01001, 0b01000, 0b11100, 0b01000, 0b01000, 0b01000]),
+            ('g', &[0b00000, 0b01111, 0b10001, 0b10001, 0b01111, 0b00001, 0b01110]),
+            ('h', &[0b10000, 0b10000, 0b10110, 0b11001, 0b10001, 0b10001, 0b10001]),
+            ('i', &[0b00100, 0b00000, 0b01100, 0b00100, 0b00100, 0b00100, 0b01110]),
+            ('j', &[0b00010, 0b00000, 0b00110, 0b00010, 0b00010, 0b10010, 0b01100]),
+            ('k', &[0b10000, 0b10000, 0b10010, 0b10100, 0b11000, 0b10100, 0b10010]),
+            ('l', &[0b01100, 0b00100, 0b00100, 0b00100, 0b00100, 0b00100, 0b01110]),
+            ('m', &[0b00000, 0b00000, 0b11010, 0b10101, 0b10101, 0b10001, 0b10001]),
+            ('n', &[0b00000, 0b00000, 0b10110, 0b11001, 0b10001, 0b10001, 0b10001]),
+            ('o', &[0b00000, 0b00000, 0b01110, 0b10001, 0b10001, 0b10001, 0b01110]),
+            ('p', &[0b00000, 0b00000, 0b11110, 0b10001, 0b11110, 0b10000, 0b10000]),
+            ('q', &[0b00000, 0b00000, 0b01101, 0b10011, 0b01111, 0b00001, 0b00001]),
+            ('r', &[0b00000, 0b00000, 0b10110, 0b11001, 0b10000, 0b10000, 0b10000]),
+            ('s', &[0b00000, 0b00000, 0b01110, 0b10000, 0b01110, 0b00001, 0b11110]),
+            ('t', &[0b01000, 0b01000, 0b11100, 0b01000, 0b01000, 0b01001, 0b00110]),
+            ('u', &[0b00000, 0b00000, 0b10001, 0b10001, 0b10001, 0b10011, 0b01101]),
+            ('v', &[0b00000, 0b00000, 0b10001, 0b10001, 0b10001, 0b01010, 0b00100]),
+            ('w', &[0b00000, 0b00000, 0b10001, 0b10001, 0b10101, 0b10101, 0b01010]),
+            ('x', &[0b00000, 0b00000, 0b10001, 0b01010, 0b00100, 0b01010, 0b10001]),
+            ('y', &[0b00000, 0b00000, 0b10001, 0b10001, 0b01111, 0b00001, 0b01110]),
+            ('z', &[0b00000, 0b00000, 0b11111, 0b00010, 0b00100, 0b01000, 0b11111]),
+            (' ', &[0b00000, 0b00000, 0b00000, 0b00000, 0b00000, 0b00000, 0b00000]),
+            ('_', &[0b00000, 0b00000, 0b00000, 0b00000, 0b00000, 0b00000, 0b11111]),
+        ];
+
+        let pattern = patterns.iter().find(|(ch, _)| *ch == c.to_ascii_uppercase() || *ch == c);
+        if let Some((_, bits)) = pattern {
+            for (row, &byte) in bits.iter().enumerate() {
+                for col in 0..5 {
+                    if (byte >> (4 - col)) & 1 == 1 {
+                        let px = x + col;
+                        let py = y + row as i32;
+                        if px >= 0 && px < width as i32 && py >= 0 && py < height as i32 {
+                            img.put_pixel(px as u32, py as u32, color);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     /// Set the edit mode
     pub fn set_edit_mode(&mut self, mode: EditMode) {
         // Special handling: If switching to Connect mode with multiple nodes selected,
