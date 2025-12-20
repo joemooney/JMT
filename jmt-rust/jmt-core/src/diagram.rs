@@ -91,6 +91,10 @@ pub struct Diagram {
     /// Selection order - tracks the order in which nodes were selected
     #[serde(skip)]
     selection_order: Vec<NodeId>,
+    /// True if selection order was explicitly set via Ctrl+Click (use selection order)
+    /// False if selection was via marquee/lasso (use position order for align/distribute)
+    #[serde(skip)]
+    explicit_selection_order: bool,
 }
 
 impl Diagram {
@@ -133,6 +137,7 @@ impl Diagram {
             max_undo_levels: 50,
             // Selection tracking
             selection_order: Vec::new(),
+            explicit_selection_order: false,
         }
     }
 
@@ -413,6 +418,7 @@ impl Diagram {
     }
 
     /// Toggle element selection by ID (works across all diagram types)
+    /// When adding via Ctrl+Click, marks as explicit ordering
     pub fn toggle_element_selection(&mut self, id: Uuid) {
         // Try state machine nodes
         if let Some(node) = self.find_node_mut(id) {
@@ -423,6 +429,7 @@ impl Diagram {
             } else {
                 node.set_focus(true);
                 self.selection_order.push(id);
+                self.explicit_selection_order = true;
             }
             return;
         }
@@ -435,6 +442,7 @@ impl Diagram {
             } else {
                 lifeline.has_focus = true;
                 self.selection_order.push(id);
+                self.explicit_selection_order = true;
             }
             return;
         }
@@ -447,6 +455,7 @@ impl Diagram {
             } else {
                 actor.has_focus = true;
                 self.selection_order.push(id);
+                self.explicit_selection_order = true;
             }
             return;
         }
@@ -457,6 +466,7 @@ impl Diagram {
             } else {
                 uc.has_focus = true;
                 self.selection_order.push(id);
+                self.explicit_selection_order = true;
             }
             return;
         }
@@ -467,6 +477,7 @@ impl Diagram {
             } else {
                 sb.has_focus = true;
                 self.selection_order.push(id);
+                self.explicit_selection_order = true;
             }
             return;
         }
@@ -479,6 +490,7 @@ impl Diagram {
             } else {
                 action.has_focus = true;
                 self.selection_order.push(id);
+                self.explicit_selection_order = true;
             }
             return;
         }
@@ -489,6 +501,7 @@ impl Diagram {
             } else {
                 swimlane.has_focus = true;
                 self.selection_order.push(id);
+                self.explicit_selection_order = true;
             }
             return;
         }
@@ -499,6 +512,7 @@ impl Diagram {
             } else {
                 obj.has_focus = true;
                 self.selection_order.push(id);
+                self.explicit_selection_order = true;
             }
             return;
         }
@@ -931,18 +945,20 @@ impl Diagram {
             obj.has_focus = false;
         }
         self.selection_order.clear();
+        self.explicit_selection_order = false;
     }
 
-    /// Select a single node
+    /// Select a single node (not explicit ordering - single click selection)
     pub fn select_node(&mut self, id: NodeId) {
         self.clear_selection();
         if let Some(node) = self.find_node_mut(id) {
             node.set_focus(true);
             self.selection_order.push(id);
         }
+        self.explicit_selection_order = false;
     }
 
-    /// Select multiple nodes by their IDs (preserves order of ids slice)
+    /// Select multiple nodes by their IDs (not explicit ordering - marquee/batch)
     pub fn select_nodes(&mut self, ids: &[NodeId]) {
         self.clear_selection();
         for id in ids {
@@ -951,6 +967,7 @@ impl Diagram {
                 self.selection_order.push(*id);
             }
         }
+        self.explicit_selection_order = false;
     }
 
     /// Select all nodes within a rectangle
@@ -1040,9 +1057,12 @@ impl Diagram {
                 }
             }
         }
+        // Lasso selection is not explicit ordering
+        self.explicit_selection_order = false;
     }
 
     /// Toggle a node's selection (add if not selected, remove if selected)
+    /// When adding via Ctrl+Click, marks as explicit ordering
     pub fn toggle_node_selection(&mut self, id: NodeId) {
         if let Some(node) = self.find_node_mut(id) {
             let currently_selected = node.has_focus();
@@ -1051,19 +1071,22 @@ impl Diagram {
                 node.set_focus(false);
                 self.selection_order.retain(|&x| x != id);
             } else {
-                // Add to selection (at end of order)
+                // Add to selection (at end of order) - explicit ordering
                 node.set_focus(true);
                 self.selection_order.push(id);
+                self.explicit_selection_order = true;
             }
         }
     }
 
     /// Add a node to the current selection without clearing existing selection
+    /// Marks as explicit ordering (Ctrl+Click behavior)
     pub fn add_to_selection(&mut self, id: NodeId) {
         if let Some(node) = self.find_node_mut(id) {
             if !node.has_focus() {
                 node.set_focus(true);
                 self.selection_order.push(id);
+                self.explicit_selection_order = true;
             }
         }
     }
@@ -1093,6 +1116,12 @@ impl Diagram {
             .filter(|id| self.find_node(**id).map(|n| n.has_focus()).unwrap_or(false))
             .copied()
             .collect()
+    }
+
+    /// Returns true if selection was made via explicit Ctrl+Click ordering
+    /// Returns false if selection was via marquee/lasso (should use position order)
+    pub fn has_explicit_selection_order(&self) -> bool {
+        self.explicit_selection_order
     }
 
     /// Get selected connection ID (if any)

@@ -674,6 +674,9 @@ impl Toolbar {
                 return;
             }
 
+            // Check if user explicitly ordered via Ctrl+Click
+            let use_selection_order = state.diagram.has_explicit_selection_order();
+
             state.diagram.push_undo();
 
             // Collect node IDs with bounds
@@ -687,23 +690,10 @@ impl Toolbar {
                 return;
             }
 
-            // Determine if we should use selection order or position-based order
-            // For vertical alignment (CenterV), check if selection is already sorted by x
-            // For horizontal alignment (CenterH), check if selection is already sorted by y
-            // If already sorted by position, user likely used marquee - use position order
-            // If not sorted, user explicitly ordered via Ctrl+Click - use selection order
             let is_horizontal_align = matches!(mode, AlignMode::Left | AlignMode::Right | AlignMode::CenterH);
 
-            let use_position_order = if is_horizontal_align {
-                // For horizontal alignment, spreading is vertical - check if sorted by y
-                Self::is_sorted_by_position(&nodes_with_bounds, false)
-            } else {
-                // For vertical alignment (CenterV), spreading is horizontal - check if sorted by x
-                Self::is_sorted_by_position(&nodes_with_bounds, true)
-            };
-
-            // Sort by position if using position-based order (marquee selection)
-            if use_position_order {
+            // Sort by position if NOT using explicit selection order (marquee/lasso)
+            if !use_selection_order {
                 if is_horizontal_align {
                     // Sort by Y for horizontal alignment (vertical spreading)
                     nodes_with_bounds.sort_by(|a, b| a.1.y1.partial_cmp(&b.1.y1).unwrap());
@@ -800,21 +790,6 @@ impl Toolbar {
         }
     }
 
-    /// Check if nodes are already sorted by position (indicates marquee selection)
-    fn is_sorted_by_position(nodes: &[(uuid::Uuid, jmt_core::geometry::Rect)], by_x: bool) -> bool {
-        if nodes.len() < 2 {
-            return true;
-        }
-        for i in 1..nodes.len() {
-            let prev_pos = if by_x { nodes[i-1].1.x1 } else { nodes[i-1].1.y1 };
-            let curr_pos = if by_x { nodes[i].1.x1 } else { nodes[i].1.y1 };
-            if curr_pos < prev_pos {
-                return false; // Not sorted, user explicitly ordered
-            }
-        }
-        true // Already sorted by position
-    }
-
     fn distribute_nodes(app: &mut JmtApp, mode: DistributeMode) {
         const MIN_SEPARATION: f32 = 20.0; // Minimum gap between nodes
 
@@ -823,6 +798,9 @@ impl Toolbar {
             if selected_ids.len() < 3 {
                 return; // Need at least 3 nodes to distribute
             }
+
+            // Check if user explicitly ordered via Ctrl+Click
+            let use_selection_order = state.diagram.has_explicit_selection_order();
 
             state.diagram.push_undo();
 
@@ -841,15 +819,8 @@ impl Toolbar {
                 return;
             }
 
-            // Determine if we should use selection order or position-based order
-            let by_x = matches!(mode, DistributeMode::Horizontal);
-            let nodes_for_check: Vec<_> = nodes_with_info.iter()
-                .map(|(id, b, _, _)| (*id, b.clone()))
-                .collect();
-            let use_position_order = Self::is_sorted_by_position(&nodes_for_check, by_x);
-
-            // Sort by position if using position-based order (marquee selection)
-            if use_position_order {
+            // Sort by position if NOT using explicit selection order (marquee/lasso)
+            if !use_selection_order {
                 match mode {
                     DistributeMode::Horizontal => {
                         nodes_with_info.sort_by(|a, b| a.2.partial_cmp(&b.2).unwrap());
