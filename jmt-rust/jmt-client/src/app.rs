@@ -1,7 +1,7 @@
 //! Main application state and update loop
 
 use eframe::egui;
-use jmt_core::{Diagram, EditMode, NodeType};
+use jmt_core::{Diagram, EditMode, NodeType, DiagramType};
 use jmt_core::geometry::{Point, Rect};
 use jmt_core::node::{Corner, NodeId};
 
@@ -157,11 +157,19 @@ impl JmtApp {
 
     /// Create a new diagram
     pub fn new_diagram(&mut self) {
-        let name = format!("Diagram {}", self.diagrams.len() + 1);
-        let diagram = Diagram::new(&name);
+        self.new_diagram_of_type(DiagramType::StateMachine);
+    }
+
+    /// Create a new diagram of a specific type
+    pub fn new_diagram_of_type(&mut self, diagram_type: DiagramType) {
+        let type_name = diagram_type.display_name();
+        let name = format!("{} {}", type_name, self.diagrams.len() + 1);
+        let mut diagram = Diagram::new(&name);
+        diagram.diagram_type = diagram_type;
         self.diagrams.push(DiagramState::new(diagram));
         self.active_diagram = self.diagrams.len() - 1;
-        self.status_message = format!("Created new diagram: {}", name);
+        self.edit_mode = EditMode::Arrow;
+        self.status_message = format!("Created new {}", type_name);
     }
 
     /// Close the current diagram
@@ -471,10 +479,11 @@ impl eframe::App for JmtApp {
             ui.horizontal(|ui| {
                 for (i, diagram_state) in self.diagrams.iter().enumerate() {
                     let name = &diagram_state.diagram.settings.name;
+                    let type_icon = diagram_state.diagram.diagram_type.icon();
                     let label = if diagram_state.modified {
-                        format!("{}*", name)
+                        format!("{} {}*", type_icon, name)
                     } else {
-                        name.clone()
+                        format!("{} {}", type_icon, name)
                     };
 
                     if ui.selectable_label(i == self.active_diagram, &label).clicked() {
@@ -482,9 +491,25 @@ impl eframe::App for JmtApp {
                     }
                 }
 
-                if ui.button("+").clicked() {
-                    self.new_diagram();
-                }
+                // New diagram dropdown
+                egui::menu::menu_button(ui, "+ New", |ui| {
+                    if ui.button("State Machine").clicked() {
+                        self.new_diagram_of_type(DiagramType::StateMachine);
+                        ui.close_menu();
+                    }
+                    if ui.button("Sequence").clicked() {
+                        self.new_diagram_of_type(DiagramType::Sequence);
+                        ui.close_menu();
+                    }
+                    if ui.button("Use Case").clicked() {
+                        self.new_diagram_of_type(DiagramType::UseCase);
+                        ui.close_menu();
+                    }
+                    if ui.button("Activity").clicked() {
+                        self.new_diagram_of_type(DiagramType::Activity);
+                        ui.close_menu();
+                    }
+                });
             });
 
             ui.separator();

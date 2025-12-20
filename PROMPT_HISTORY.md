@@ -380,3 +380,106 @@ Continue development with the next planned phase: adding the ability to resize n
 
 **Git Operations:**
 - Committed and pushed corner resize feature
+
+---
+
+## Session 4 (continued) - Multiple Diagram Types (2025-12-20)
+
+### Prompt: Add sequence, use case, and activity diagrams
+
+**User Request:**
+"fantastic! Can you add a sequence diagram, use case diagram, and activity diagrams. Do a best effort. I am going to bed so just follow your instincts and implement as much as you can"
+
+**Actions Taken:**
+
+1. Created `DiagramType` enum in `jmt-core/src/diagram_type.rs`:
+   - StateMachine (default), Sequence, UseCase, Activity
+   - Added `display_name()` and `icon()` methods
+
+2. Created Sequence Diagram module (`jmt-core/src/sequence/`):
+   - `Lifeline` - represents participants with head rectangle and dashed line
+   - `Message` - sync/async/return/self messages with MessageKind enum
+   - `Activation` - execution occurrence boxes
+   - `CombinedFragment` - alt, opt, loop, par, etc. with InteractionOperand
+
+3. Created Use Case Diagram module (`jmt-core/src/usecase/`):
+   - `Actor` - stick figure with positioning
+   - `UseCase` - ellipse with extension points
+   - `SystemBoundary` - containing rectangle
+   - `UseCaseRelationship` - association, include, extend, generalization
+
+4. Created Activity Diagram module (`jmt-core/src/activity/`):
+   - `Action` - various action types (action, call behavior, send/accept signals)
+   - `Swimlane` - vertical/horizontal partitions
+   - `ControlFlow` - flows between actions with guards
+   - `ObjectNode` - central buffer, data store, pins
+   - `ActivityPartition` - swimlane container
+
+5. Extended `EditMode` enum with ~30 new modes for all diagram types:
+   - Sequence: AddLifeline, AddMessage, AddSyncMessage, AddAsyncMessage, AddReturnMessage, AddSelfMessage, AddActivation, AddFragment
+   - Use Case: AddActor, AddUseCase, AddSystemBoundary, AddAssociation, AddInclude, AddExtend, AddGeneralization
+   - Activity: AddAction, AddDecision, AddSendSignal, AddAcceptEvent, AddTimeEvent, AddSwimlane, AddObjectNode, AddDataStore
+   - Added `modes_for_diagram_type()` method
+
+6. Updated `Diagram` struct:
+   - Added `diagram_type` field
+   - Added collections for all element types (lifelines, messages, actors, use_cases, actions, swimlanes, etc.)
+   - Added helper methods: add_lifeline(), add_actor(), add_use_case(), add_action(), etc.
+   - Updated restore_from() for undo/redo
+
+7. Updated Renderer (`jmt-client/src/canvas/renderer.rs`):
+   - Main render() dispatches based on diagram_type
+   - Added rendering methods for all diagram types:
+     - render_lifeline(), render_message(), render_combined_fragment()
+     - render_actor(), render_use_case(), render_system_boundary(), render_uc_relationship()
+     - render_swimlane(), render_action(), render_control_flow()
+     - render_stick_figure() helper for actors
+
+8. Updated Toolbar (`jmt-client/src/panels/toolbar.rs`):
+   - Dynamic tool display based on current diagram type
+   - Added show_state_machine_tools(), show_sequence_tools(), show_use_case_tools(), show_activity_tools()
+   - Icons for each tool type
+
+9. Updated Menu Bar (`jmt-client/src/panels/menu_bar.rs`):
+   - File > New submenu with diagram type options
+   - Create State Machine, Sequence, Use Case, or Activity diagram
+
+10. Updated App (`jmt-client/src/app.rs`):
+    - Added `new_diagram_of_type()` method
+    - Tab display shows diagram type icon
+    - "+ New" button opens dropdown for diagram type selection
+
+**New Files Created:**
+- `jmt-core/src/diagram_type.rs`
+- `jmt-core/src/sequence/mod.rs`
+- `jmt-core/src/sequence/lifeline.rs`
+- `jmt-core/src/sequence/message.rs`
+- `jmt-core/src/sequence/activation.rs`
+- `jmt-core/src/sequence/fragment.rs`
+- `jmt-core/src/usecase/mod.rs`
+- `jmt-core/src/usecase/actor.rs`
+- `jmt-core/src/usecase/use_case.rs`
+- `jmt-core/src/usecase/system_boundary.rs`
+- `jmt-core/src/usecase/relationship.rs`
+- `jmt-core/src/activity/mod.rs`
+- `jmt-core/src/activity/action.rs`
+- `jmt-core/src/activity/swimlane.rs`
+- `jmt-core/src/activity/control_flow.rs`
+- `jmt-core/src/activity/object_node.rs`
+- `jmt-core/src/activity/partition.rs`
+
+**Files Modified:**
+- `jmt-core/src/lib.rs` - Added new module exports
+- `jmt-core/src/edit_mode.rs` - Extended with diagram-specific modes
+- `jmt-core/src/diagram.rs` - Added diagram_type and element collections
+- `jmt-client/src/canvas/renderer.rs` - Added rendering for all diagram types
+- `jmt-client/src/panels/toolbar.rs` - Dynamic diagram-specific tools
+- `jmt-client/src/panels/menu_bar.rs` - New diagram submenu
+- `jmt-client/src/app.rs` - Diagram type creation and tab display
+
+**Build Status:**
+- Successfully compiles with `cargo build`
+- Application runs and displays correctly
+
+**Git Operations:**
+- Committed and pushed diagram types feature

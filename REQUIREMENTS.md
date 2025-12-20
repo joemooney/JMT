@@ -2,14 +2,22 @@
 
 ## Functional Requirements
 
+### Diagram Types
+
+- **State Machine Diagram** - Design hierarchical state machines
+- **Sequence Diagram** - Model object interactions over time
+- **Use Case Diagram** - Capture system functionality and actors
+- **Activity Diagram** - Model workflows and business processes
+
 ### Diagram Editing
 
-- Create and edit state machine diagrams
-- Support multiple diagrams via tabbed interface
+- Create diagrams of any supported type
+- Support multiple diagrams via tabbed interface with type icons
 - Add, move, resize, and delete diagram elements
 - Align and organize shapes (left, right, center, top, bottom, middle)
 - Select single or multiple elements
 - Undo/redo operations
+- Dynamic toolbar showing diagram-type-specific tools
 
 ### State Machine Elements
 
@@ -34,6 +42,69 @@
 - Guard condition
 - Action specification
 - Automatic routing with stubs
+
+### Sequence Diagram Elements
+
+#### Lifelines
+- Represent objects/participants in interactions
+- Visual: Rectangle head with dashed vertical line
+- Optional stereotype and destruction marker
+
+#### Messages
+- Synchronous messages (filled arrowhead)
+- Asynchronous messages (open arrowhead)
+- Return messages (dashed line)
+- Self messages (loop back to same lifeline)
+
+#### Activations
+- Execution occurrence boxes on lifelines
+- Can be nested
+
+#### Combined Fragments
+- alt, opt, loop, par, break, critical, neg, assert, ignore, consider
+
+### Use Case Diagram Elements
+
+#### Actors
+- Stick figure representation
+- Named entities external to system
+
+#### Use Cases
+- Ellipse representation
+- Named system functions
+
+#### System Boundary
+- Rectangle containing use cases
+- Named system context
+
+#### Relationships
+- Association (solid line)
+- Include (dashed arrow with <<include>>)
+- Extend (dashed arrow with <<extend>>)
+- Generalization (solid line with hollow triangle)
+
+### Activity Diagram Elements
+
+#### Actions
+- Rounded rectangle actions
+- Call behavior actions
+- Send/accept signal actions (pentagon shapes)
+- Accept time event actions
+
+#### Control Nodes
+- Initial node (filled circle)
+- Final node (double circle)
+- Decision/merge nodes (diamond)
+- Fork/join bars
+
+#### Swimlanes
+- Vertical or horizontal partitions
+- Named responsibility areas
+
+#### Object Nodes
+- Central buffer nodes
+- Data store nodes
+- Input/output pins
 
 ### File Operations
 - Save diagrams to JSON format

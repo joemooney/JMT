@@ -1,7 +1,7 @@
 //! Toolbar panel
 
 use eframe::egui;
-use jmt_core::EditMode;
+use jmt_core::{EditMode, DiagramType};
 use crate::app::JmtApp;
 
 pub struct Toolbar;
@@ -43,21 +43,18 @@ impl Toolbar {
 
             ui.separator();
 
-            // Node creation tools
-            ui.label("Add:");
-            Self::tool_button(ui, app, EditMode::AddState, "▢ State", "Add a state");
-            Self::tool_button(ui, app, EditMode::AddInitial, "● Initial", "Add initial pseudo-state");
-            Self::tool_button(ui, app, EditMode::AddFinal, "◉ Final", "Add final pseudo-state");
-            Self::tool_button(ui, app, EditMode::AddChoice, "◇ Choice", "Add choice pseudo-state");
-            Self::tool_button(ui, app, EditMode::AddJunction, "◆ Junction", "Add junction pseudo-state");
-            Self::tool_button(ui, app, EditMode::AddFork, "┳ Fork", "Add fork pseudo-state");
-            Self::tool_button(ui, app, EditMode::AddJoin, "┻ Join", "Add join pseudo-state");
+            // Get current diagram type
+            let diagram_type = app.current_diagram()
+                .map(|s| s.diagram.diagram_type)
+                .unwrap_or(DiagramType::StateMachine);
 
-            ui.separator();
-
-            // Connection tool
-            ui.label("Connect:");
-            Self::tool_button(ui, app, EditMode::Connect, "→ Transition", "Create a transition between nodes");
+            // Show diagram-specific tools
+            match diagram_type {
+                DiagramType::StateMachine => Self::show_state_machine_tools(ui, app),
+                DiagramType::Sequence => Self::show_sequence_tools(ui, app),
+                DiagramType::UseCase => Self::show_use_case_tools(ui, app),
+                DiagramType::Activity => Self::show_activity_tools(ui, app),
+            }
 
             ui.separator();
 
@@ -123,6 +120,75 @@ impl Toolbar {
         if response.on_hover_text(tooltip).clicked() {
             app.set_edit_mode(mode);
         }
+    }
+
+    fn show_state_machine_tools(ui: &mut egui::Ui, app: &mut JmtApp) {
+        ui.label("Add:");
+        Self::tool_button(ui, app, EditMode::AddState, "▢ State", "Add a state");
+        Self::tool_button(ui, app, EditMode::AddInitial, "● Initial", "Add initial pseudo-state");
+        Self::tool_button(ui, app, EditMode::AddFinal, "◉ Final", "Add final pseudo-state");
+        Self::tool_button(ui, app, EditMode::AddChoice, "◇ Choice", "Add choice pseudo-state");
+        Self::tool_button(ui, app, EditMode::AddJunction, "◆ Junction", "Add junction pseudo-state");
+        Self::tool_button(ui, app, EditMode::AddFork, "┳ Fork", "Add fork pseudo-state");
+        Self::tool_button(ui, app, EditMode::AddJoin, "┻ Join", "Add join pseudo-state");
+
+        ui.separator();
+        ui.label("Connect:");
+        Self::tool_button(ui, app, EditMode::Connect, "→ Transition", "Create a transition between nodes");
+    }
+
+    fn show_sequence_tools(ui: &mut egui::Ui, app: &mut JmtApp) {
+        ui.label("Add:");
+        Self::tool_button(ui, app, EditMode::AddLifeline, "⎸ Lifeline", "Add a lifeline");
+        Self::tool_button(ui, app, EditMode::AddActivation, "▮ Activation", "Add an activation box");
+        Self::tool_button(ui, app, EditMode::AddFragment, "⊡ Fragment", "Add a combined fragment");
+
+        ui.separator();
+        ui.label("Messages:");
+        Self::tool_button(ui, app, EditMode::AddSyncMessage, "→ Sync", "Add synchronous message");
+        Self::tool_button(ui, app, EditMode::AddAsyncMessage, "⇢ Async", "Add asynchronous message");
+        Self::tool_button(ui, app, EditMode::AddReturnMessage, "⇠ Return", "Add return message");
+        Self::tool_button(ui, app, EditMode::AddSelfMessage, "↺ Self", "Add self message");
+    }
+
+    fn show_use_case_tools(ui: &mut egui::Ui, app: &mut JmtApp) {
+        ui.label("Add:");
+        Self::tool_button(ui, app, EditMode::AddActor, "☺ Actor", "Add an actor");
+        Self::tool_button(ui, app, EditMode::AddUseCase, "○ Use Case", "Add a use case");
+        Self::tool_button(ui, app, EditMode::AddSystemBoundary, "▭ System", "Add system boundary");
+
+        ui.separator();
+        ui.label("Connect:");
+        Self::tool_button(ui, app, EditMode::AddAssociation, "─ Association", "Add association");
+        Self::tool_button(ui, app, EditMode::AddInclude, "⟵ Include", "Add include relationship");
+        Self::tool_button(ui, app, EditMode::AddExtend, "⟶ Extend", "Add extend relationship");
+        Self::tool_button(ui, app, EditMode::AddGeneralization, "▷ Generalize", "Add generalization");
+    }
+
+    fn show_activity_tools(ui: &mut egui::Ui, app: &mut JmtApp) {
+        ui.label("Add:");
+        Self::tool_button(ui, app, EditMode::AddAction, "▢ Action", "Add an action");
+        Self::tool_button(ui, app, EditMode::AddInitial, "● Initial", "Add initial node");
+        Self::tool_button(ui, app, EditMode::AddFinal, "◉ Final", "Add final node");
+        Self::tool_button(ui, app, EditMode::AddDecision, "◇ Decision", "Add decision/merge node");
+        Self::tool_button(ui, app, EditMode::AddFork, "┳ Fork", "Add fork bar");
+        Self::tool_button(ui, app, EditMode::AddJoin, "┻ Join", "Add join bar");
+
+        ui.separator();
+        ui.label("Signals:");
+        Self::tool_button(ui, app, EditMode::AddSendSignal, "▷ Send", "Add send signal action");
+        Self::tool_button(ui, app, EditMode::AddAcceptEvent, "◁ Accept", "Add accept event action");
+        Self::tool_button(ui, app, EditMode::AddTimeEvent, "⏱ Time", "Add time event action");
+
+        ui.separator();
+        ui.label("Objects:");
+        Self::tool_button(ui, app, EditMode::AddObjectNode, "▤ Object", "Add object node");
+        Self::tool_button(ui, app, EditMode::AddDataStore, "▥ Data Store", "Add data store");
+        Self::tool_button(ui, app, EditMode::AddSwimlane, "⎮ Swimlane", "Add swimlane");
+
+        ui.separator();
+        ui.label("Connect:");
+        Self::tool_button(ui, app, EditMode::Connect, "→ Flow", "Create control flow");
     }
 
     fn align_nodes(app: &mut JmtApp, mode: AlignMode) {

@@ -1,6 +1,7 @@
 //! Menu bar panel
 
 use eframe::egui;
+use jmt_core::DiagramType;
 use crate::app::JmtApp;
 
 pub struct MenuBar;
@@ -10,10 +11,24 @@ impl MenuBar {
         egui::menu::bar(ui, |ui| {
             // File menu
             ui.menu_button("File", |ui| {
-                if ui.button("New").clicked() {
-                    app.new_diagram();
-                    ui.close_menu();
-                }
+                ui.menu_button("New", |ui| {
+                    if ui.button("State Machine Diagram").clicked() {
+                        app.new_diagram_of_type(DiagramType::StateMachine);
+                        ui.close_menu();
+                    }
+                    if ui.button("Sequence Diagram").clicked() {
+                        app.new_diagram_of_type(DiagramType::Sequence);
+                        ui.close_menu();
+                    }
+                    if ui.button("Use Case Diagram").clicked() {
+                        app.new_diagram_of_type(DiagramType::UseCase);
+                        ui.close_menu();
+                    }
+                    if ui.button("Activity Diagram").clicked() {
+                        app.new_diagram_of_type(DiagramType::Activity);
+                        ui.close_menu();
+                    }
+                });
 
                 if ui.button("Open...").clicked() {
                     // TODO: Implement file open via server

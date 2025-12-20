@@ -2,14 +2,18 @@
 
 ## Vision
 
-JMT (Joe's Modeling Toolkit) is a visual state machine modeling toolkit that enables developers to design UML-style hierarchical state machine diagrams. The project is being rewritten in Rust with egui for a modern, cross-platform experience including web browser support.
+JMT (Joe's Modeling Toolkit) is a visual UML modeling toolkit that enables developers to design various UML diagram types. The project is being rewritten in Rust with egui for a modern, cross-platform experience including web browser support.
 
 ## What This Project Does
 
-- Provides a graphical user interface for creating state machine diagrams
-- Supports UML state machine concepts: states, transitions, pseudo-states (initial, final, choice, fork, join, junction)
+- Provides a graphical user interface for creating UML diagrams
+- Supports multiple diagram types:
+  - **State Machine Diagrams** - states, transitions, pseudo-states (initial, final, choice, fork, join, junction)
+  - **Sequence Diagrams** - lifelines, messages (sync/async/return), activations, combined fragments
+  - **Use Case Diagrams** - actors, use cases, system boundaries, relationships (association, include, extend, generalization)
+  - **Activity Diagrams** - actions, decisions, forks/joins, swimlanes, object nodes, control flows
 - Enables hierarchical state machines with regions and nested substates
-- Supports multiple diagrams via tabbed interface
+- Supports multiple diagrams via tabbed interface with diagram type indicators
 
 ## Target Users
 
@@ -29,13 +33,15 @@ The original implementation uses Fantom (JVM) with FWT for the GUI. See `fan/` d
 
 ## Key Features
 
-1. **Visual Editing** - Click to add, drag to move, resize from corners
-2. **State Types** - Simple states, composite states with regions
-3. **Transitions** - Connections with events, guards, and actions
-4. **Pseudo-states** - Initial, final, choice, fork, join, junction nodes
-5. **Multi-diagram** - Tab-based interface for multiple diagrams
-6. **Undo/Redo** - Full undo/redo support
-7. **Web Support** - WASM build for browser-based editing (planned)
+1. **Multiple Diagram Types** - State machine, sequence, use case, and activity diagrams
+2. **Visual Editing** - Click to add, drag to move, resize from corners
+3. **Dynamic Toolbars** - Context-aware tools based on diagram type
+4. **State Types** - Simple states, composite states with regions
+5. **Transitions** - Connections with events, guards, and actions
+6. **Pseudo-states** - Initial, final, choice, fork, join, junction nodes
+7. **Multi-diagram** - Tab-based interface with diagram type icons
+8. **Undo/Redo** - Full undo/redo support
+9. **Web Support** - WASM build for browser-based editing (planned)
 
 ## Project Structure
 
