@@ -75,7 +75,7 @@ impl Toolbar {
                         Self::align_nodes(app, AlignMode::Left);
                         ui.close_menu();
                     }
-                    if ui.button("⫿ Align Center").clicked() {
+                    if ui.button("⫿ Align Vertically").clicked() {
                         Self::align_nodes(app, AlignMode::CenterH);
                         ui.close_menu();
                     }
@@ -90,7 +90,7 @@ impl Toolbar {
                         Self::align_nodes(app, AlignMode::Top);
                         ui.close_menu();
                     }
-                    if ui.button("⫟ Align Middle").clicked() {
+                    if ui.button("⫟ Align Horizontally").clicked() {
                         Self::align_nodes(app, AlignMode::CenterV);
                         ui.close_menu();
                     }
