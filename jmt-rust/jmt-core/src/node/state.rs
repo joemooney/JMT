@@ -27,6 +27,9 @@ pub struct State {
     pub do_activity: String,
     /// Regions for composite states
     pub regions: Vec<Region>,
+    /// Whether to show activities in this state (None = use diagram default)
+    #[serde(default)]
+    pub show_activities: Option<bool>,
     /// Whether this state is currently selected
     #[serde(skip)]
     pub has_focus: bool,
@@ -45,6 +48,7 @@ impl State {
             exit_activity: String::new(),
             do_activity: String::new(),
             regions: Vec::new(),
+            show_activities: None, // Use diagram default
             has_focus: false,
         }
     }
@@ -61,6 +65,7 @@ impl State {
             exit_activity: String::new(),
             do_activity: String::new(),
             regions: Vec::new(),
+            show_activities: None, // Use diagram default
             has_focus: false,
         }
     }
@@ -127,6 +132,12 @@ impl State {
             || !self.do_activity.is_empty()
     }
 
+    /// Check if activities should be shown for this state
+    /// If show_activities is None, uses the diagram default
+    pub fn should_show_activities(&self, diagram_default: bool) -> bool {
+        self.show_activities.unwrap_or(diagram_default) && self.has_activities()
+    }
+
     /// Get the header height (area for name and activities)
     pub fn header_height(&self) -> f32 {
         if self.has_activities() {
@@ -134,6 +145,71 @@ impl State {
         } else {
             25.0
         }
+    }
+
+    /// Calculate the required height for this state based on content
+    /// char_width: approximate character width in pixels
+    /// line_height: height per line of text
+    pub fn calculate_required_size(&self, show_activities: bool, char_width: f32, line_height: f32) -> (f32, f32) {
+        let padding = 8.0;
+        let name_height = line_height + 4.0; // Name + some padding
+        let separator_height = 4.0;
+
+        // Calculate required width based on name
+        let name_width = self.name.len() as f32 * char_width + padding * 2.0;
+        let mut required_width = name_width.max(60.0); // Minimum width
+
+        // Calculate required height
+        let mut required_height = name_height + padding;
+
+        if show_activities && self.has_activities() {
+            required_height += separator_height;
+
+            // Calculate width and height for each activity
+            if !self.entry_activity.is_empty() {
+                let text = format!("entry / {}", self.entry_activity);
+                let lines: Vec<&str> = text.lines().collect();
+                for line in &lines {
+                    let line_width = line.len() as f32 * char_width + padding * 2.0;
+                    required_width = required_width.max(line_width);
+                }
+                required_height += lines.len() as f32 * line_height;
+            }
+            if !self.exit_activity.is_empty() {
+                let text = format!("exit / {}", self.exit_activity);
+                let lines: Vec<&str> = text.lines().collect();
+                for line in &lines {
+                    let line_width = line.len() as f32 * char_width + padding * 2.0;
+                    required_width = required_width.max(line_width);
+                }
+                required_height += lines.len() as f32 * line_height;
+            }
+            if !self.do_activity.is_empty() {
+                let text = format!("do / {}", self.do_activity);
+                let lines: Vec<&str> = text.lines().collect();
+                for line in &lines {
+                    let line_width = line.len() as f32 * char_width + padding * 2.0;
+                    required_width = required_width.max(line_width);
+                }
+                required_height += lines.len() as f32 * line_height;
+            }
+
+            required_height += padding;
+        }
+
+        (required_width, required_height)
+    }
+
+    /// Resize state to fit its content
+    pub fn resize_to_fit(&mut self, show_activities: bool) {
+        let (required_width, required_height) = self.calculate_required_size(show_activities, 7.0, 12.0);
+
+        // Only grow, don't shrink below minimum
+        let new_width = self.bounds.width().max(required_width);
+        let new_height = self.bounds.height().max(required_height);
+
+        self.bounds.x2 = self.bounds.x1 + new_width;
+        self.bounds.y2 = self.bounds.y1 + new_height;
     }
 }
 

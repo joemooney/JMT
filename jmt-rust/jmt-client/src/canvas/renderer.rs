@@ -65,8 +65,9 @@ impl DiagramCanvas {
             Color32::BLACK,
         );
 
-        // Draw activities if present
-        if state.has_activities() {
+        // Draw activities if they should be shown
+        let show_activities = state.should_show_activities(settings.show_activities);
+        if show_activities {
             // Draw separator line
             let line_y = rect.min.y + 24.0;
             painter.line_segment(
@@ -74,36 +75,48 @@ impl DiagramCanvas {
                 Stroke::new(1.0, Color32::BLACK),
             );
 
-            // Draw activities text
+            // Draw activities text (supporting multi-line)
+            let line_height = 12.0;
             let mut y = line_y + 4.0;
+
             if !state.entry_activity.is_empty() {
-                painter.text(
-                    Pos2::new(rect.min.x + 4.0, y),
-                    egui::Align2::LEFT_TOP,
-                    format!("entry / {}", state.entry_activity),
-                    egui::FontId::proportional(10.0),
-                    Color32::BLACK,
-                );
-                y += 12.0;
+                let text = format!("entry / {}", state.entry_activity);
+                for line in text.lines() {
+                    painter.text(
+                        Pos2::new(rect.min.x + 4.0, y),
+                        egui::Align2::LEFT_TOP,
+                        line,
+                        egui::FontId::proportional(10.0),
+                        Color32::BLACK,
+                    );
+                    y += line_height;
+                }
             }
             if !state.exit_activity.is_empty() {
-                painter.text(
-                    Pos2::new(rect.min.x + 4.0, y),
-                    egui::Align2::LEFT_TOP,
-                    format!("exit / {}", state.exit_activity),
-                    egui::FontId::proportional(10.0),
-                    Color32::BLACK,
-                );
-                y += 12.0;
+                let text = format!("exit / {}", state.exit_activity);
+                for line in text.lines() {
+                    painter.text(
+                        Pos2::new(rect.min.x + 4.0, y),
+                        egui::Align2::LEFT_TOP,
+                        line,
+                        egui::FontId::proportional(10.0),
+                        Color32::BLACK,
+                    );
+                    y += line_height;
+                }
             }
             if !state.do_activity.is_empty() {
-                painter.text(
-                    Pos2::new(rect.min.x + 4.0, y),
-                    egui::Align2::LEFT_TOP,
-                    format!("do / {}", state.do_activity),
-                    egui::FontId::proportional(10.0),
-                    Color32::BLACK,
-                );
+                let text = format!("do / {}", state.do_activity);
+                for line in text.lines() {
+                    painter.text(
+                        Pos2::new(rect.min.x + 4.0, y),
+                        egui::Align2::LEFT_TOP,
+                        line,
+                        egui::FontId::proportional(10.0),
+                        Color32::BLACK,
+                    );
+                    y += line_height;
+                }
             }
         }
 

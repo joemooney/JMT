@@ -75,6 +75,17 @@ impl MenuBar {
 
             // View menu
             ui.menu_button("View", |ui| {
+                // Show activities toggle
+                if let Some(state) = app.current_diagram_mut() {
+                    let mut show = state.diagram.settings.show_activities;
+                    if ui.checkbox(&mut show, "Show Activities").on_hover_text("Show/hide activities in states by default").changed() {
+                        state.diagram.settings.show_activities = show;
+                        state.modified = true;
+                    }
+                }
+
+                ui.separator();
+
                 if ui.button("Zoom In").clicked() {
                     // TODO: Implement zoom
                     ui.close_menu();

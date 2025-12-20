@@ -54,6 +54,30 @@ impl PropertiesPanel {
         // Show state-specific properties
         if let Some(state) = node.as_state_mut() {
             ui.separator();
+
+            // Show activities checkbox
+            ui.horizontal(|ui| {
+                let mut show = state.show_activities.unwrap_or(true);
+                let label = if state.show_activities.is_some() {
+                    "Show Activities"
+                } else {
+                    "Show Activities (using diagram default)"
+                };
+                if ui.checkbox(&mut show, label).changed() {
+                    state.show_activities = Some(show);
+                    *modified = true;
+                }
+            });
+
+            // Reset to diagram default button
+            if state.show_activities.is_some() {
+                if ui.small_button("Use diagram default").clicked() {
+                    state.show_activities = None;
+                    *modified = true;
+                }
+            }
+
+            ui.separator();
             ui.label("Activities:");
 
             ui.horizontal(|ui| {
@@ -74,6 +98,15 @@ impl PropertiesPanel {
                 ui.label("Do:");
             });
             if ui.text_edit_multiline(&mut state.do_activity).changed() {
+                *modified = true;
+            }
+
+            ui.separator();
+
+            // Auto-fit button
+            if ui.button("⬚ Fit to Content").on_hover_text("Resize state to fit its content").clicked() {
+                let show_activities = state.show_activities.unwrap_or(true);
+                state.resize_to_fit(show_activities);
                 *modified = true;
             }
 

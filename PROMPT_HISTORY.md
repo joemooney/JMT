@@ -229,8 +229,38 @@ Make the Align: buttons a dropdown under align and add an icon for each. Also ad
 **Git Operations:**
 - Committed and pushed align dropdown and distribute
 
+---
+
+## Session 3 (continued) - Auto-size States and Activity Visibility (2025-12-19)
+
+### Prompt: State size should grow to accommodate text, add show/hide activities
+
+**User Request:**
+The size of the state should grow to accommodate the text. Have a checkbox per state (in properties) and per diagram (View menu) to show or hide the entry/exit/do activities.
+
+**Actions Taken:**
+1. Added `show_activities` field to State (Option<bool> - None uses diagram default)
+2. Added `show_activities` field to DiagramSettings (global default, true by default)
+3. Added `calculate_required_size()` and `resize_to_fit()` methods to State
+4. Updated renderer to check visibility settings and support multi-line activities
+5. Added to Properties panel:
+   - "Show Activities" checkbox per state
+   - "Use diagram default" button to reset
+   - "Fit to Content" button to auto-resize state
+6. Added to View menu:
+   - "Show Activities" checkbox for diagram-wide default
+
+**Files Modified:**
+- `jmt-core/src/node/state.rs` - Added show_activities, size calculation methods
+- `jmt-core/src/settings.rs` - Added show_activities to DiagramSettings
+- `jmt-client/src/canvas/renderer.rs` - Check visibility, multi-line support
+- `jmt-client/src/panels/properties.rs` - Added checkbox and fit button
+- `jmt-client/src/panels/menu_bar.rs` - Added View > Show Activities
+
+**Git Operations:**
+- Committed and pushed auto-size and activity visibility
+
 **Next Steps (Future Sessions):**
-- Phase 2: Improve state rendering (corner rounding, activities display)
 - Phase 3: Node resize from corners
 - Phase 4: Improve pseudo-state rendering
 - Phase 5: Connection label positioning

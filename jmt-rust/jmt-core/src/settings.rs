@@ -28,6 +28,13 @@ pub struct DiagramSettings {
     pub default_state_height: f32,
     /// Default pseudo-state dimensions
     pub default_pseudo_size: f32,
+    /// Whether to show activities in states by default
+    #[serde(default = "default_show_activities")]
+    pub show_activities: bool,
+}
+
+fn default_show_activities() -> bool {
+    true
 }
 
 impl Default for DiagramSettings {
@@ -45,6 +52,7 @@ impl Default for DiagramSettings {
             default_state_width: 100.0,
             default_state_height: 60.0,
             default_pseudo_size: 20.0,
+            show_activities: true,
         }
     }
 }
