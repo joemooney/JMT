@@ -483,3 +483,80 @@ Continue development with the next planned phase: adding the ability to resize n
 
 **Git Operations:**
 - Committed and pushed diagram types feature
+
+---
+
+## Session 4 (continued) - Graphical Icons and Click-to-Place (2025-12-20)
+
+### Prompt: Create graphical symbols for diagram elements
+
+**User Request:**
+"For these new diagrams can you attempt to create the symbols graphically to represent the different elements such as Actor, Use Case, System, etc."
+
+**Actions Taken:**
+1. Replaced all Unicode toolbar icons with custom-painted egui graphics
+2. Created `icon_tool_button()` method with custom drawing closures
+3. Implemented graphical icons for all element types:
+   - State Machine: State rectangle, circles (initial/final), diamonds (choice/junction), bars (fork/join)
+   - Sequence: Lifeline with head/dashed line, message arrows, activation box, fragment rectangle
+   - Use Case: Stick figure actor, use case ellipse, system boundary rectangle
+   - Activity: Action rounded rect, decision diamond, signal pentagons, swimlane, object nodes
+
+**Files Modified:**
+- `jmt-client/src/panels/toolbar.rs` - Complete rewrite with graphical icons using egui Painter
+
+**Git Operations:**
+- Committed and pushed graphical icons
+
+---
+
+## Session 4 (continued) - Click-to-Add Elements (2025-12-20)
+
+### Prompt: Add Actor on click
+
+**User Request:**
+"When I click on Add: Actor icon, can we then allow me to add an Actor stick figure to the diagram?"
+
+**Actions Taken:**
+1. Extended `handle_canvas_click()` to handle all new edit modes
+2. Added helper methods to Diagram for creating elements:
+   - `add_decision_node()`, `add_send_signal()`, `add_accept_event()`, `add_time_event()`
+   - `add_object_node()`, `add_data_store()`, `add_combined_fragment()`
+3. Added cursor preview ghost shapes for all new element types
+4. Fixed field name error (`combined_fragments` → `fragments`)
+
+**Files Modified:**
+- `jmt-client/src/app.rs` - Click handlers and cursor previews for all diagram elements
+- `jmt-core/src/diagram.rs` - Helper methods for creating elements
+
+**Git Operations:**
+- Committed and pushed click-to-place for all diagram element types
+
+---
+
+## Session 4 (continued) - Double-Click Auto-Switch to Arrow Mode (2025-12-20)
+
+### Prompt: Double-click to add and switch to arrow mode
+
+**User Request:**
+"If you are in add mode, by default if you double click to add instead of single click then it will add and automatically switch back to arrow mode"
+
+**Actions Taken:**
+1. Modified `handle_canvas_click()` to accept `switch_to_arrow` parameter
+2. Added double-click detection in the update() method
+3. On single-click in add mode: adds element, stays in current mode
+4. On double-click in add mode: adds element AND switches back to Arrow mode
+5. Updated all add handlers to check the `switch_to_arrow` flag:
+   - State, Choice, Junction, Fork, Join
+   - Lifeline, Fragment
+   - Actor, UseCase, SystemBoundary
+   - Action, Decision, SendSignal, AcceptEvent, TimeEvent, Swimlane, ObjectNode, DataStore
+
+**Files Modified:**
+- `jmt-client/src/app.rs` - Double-click detection and auto-switch logic
+
+**Build Status:**
+- Successfully compiles with `cargo build`
+
+**Git Operations:**
+- Committed and pushed double-click auto-switch feature

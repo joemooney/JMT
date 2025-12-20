@@ -190,7 +190,8 @@ impl JmtApp {
     }
 
     /// Handle canvas click
-    fn handle_canvas_click(&mut self, pos: egui::Pos2) {
+    /// If `switch_to_arrow` is true, switch back to Arrow mode after adding element
+    fn handle_canvas_click(&mut self, pos: egui::Pos2, switch_to_arrow: bool) {
         let point = Point::new(pos.x, pos.y);
         let edit_mode = self.edit_mode;
         let pending_source = self.pending_connection_source;
@@ -222,6 +223,9 @@ impl JmtApp {
                 state.diagram.select_node(id);
                 state.modified = true;
                 self.status_message = "Added state".to_string();
+                if switch_to_arrow {
+                    self.edit_mode = EditMode::Arrow;
+                }
             }
             EditMode::AddInitial => {
                 state.diagram.push_undo();
@@ -247,6 +251,9 @@ impl JmtApp {
                 state.diagram.select_node(id);
                 state.modified = true;
                 self.status_message = "Added choice pseudo-state".to_string();
+                if switch_to_arrow {
+                    self.edit_mode = EditMode::Arrow;
+                }
             }
             EditMode::AddJunction => {
                 state.diagram.push_undo();
@@ -254,6 +261,9 @@ impl JmtApp {
                 state.diagram.select_node(id);
                 state.modified = true;
                 self.status_message = "Added junction pseudo-state".to_string();
+                if switch_to_arrow {
+                    self.edit_mode = EditMode::Arrow;
+                }
             }
             EditMode::AddFork => {
                 state.diagram.push_undo();
@@ -261,6 +271,9 @@ impl JmtApp {
                 state.diagram.select_node(id);
                 state.modified = true;
                 self.status_message = "Added fork pseudo-state".to_string();
+                if switch_to_arrow {
+                    self.edit_mode = EditMode::Arrow;
+                }
             }
             EditMode::AddJoin => {
                 state.diagram.push_undo();
@@ -268,6 +281,9 @@ impl JmtApp {
                 state.diagram.select_node(id);
                 state.modified = true;
                 self.status_message = "Added join pseudo-state".to_string();
+                if switch_to_arrow {
+                    self.edit_mode = EditMode::Arrow;
+                }
             }
             EditMode::Connect => {
                 if let Some(node_id) = state.diagram.find_node_at(point) {
@@ -301,6 +317,9 @@ impl JmtApp {
                 let _id = state.diagram.add_lifeline("Object", pos.x, pos.y);
                 state.modified = true;
                 self.status_message = "Added lifeline".to_string();
+                if switch_to_arrow {
+                    self.edit_mode = EditMode::Arrow;
+                }
             }
             EditMode::AddActivation => {
                 // TODO: Activations need to be attached to lifelines
@@ -311,6 +330,9 @@ impl JmtApp {
                 state.diagram.add_combined_fragment(pos.x, pos.y, 200.0, 150.0);
                 state.modified = true;
                 self.status_message = "Added combined fragment".to_string();
+                if switch_to_arrow {
+                    self.edit_mode = EditMode::Arrow;
+                }
             }
             EditMode::AddSyncMessage | EditMode::AddAsyncMessage |
             EditMode::AddReturnMessage | EditMode::AddSelfMessage | EditMode::AddMessage => {
@@ -324,18 +346,27 @@ impl JmtApp {
                 let _id = state.diagram.add_actor("Actor", pos.x, pos.y);
                 state.modified = true;
                 self.status_message = "Added actor".to_string();
+                if switch_to_arrow {
+                    self.edit_mode = EditMode::Arrow;
+                }
             }
             EditMode::AddUseCase => {
                 state.diagram.push_undo();
                 let _id = state.diagram.add_use_case("Use Case", pos.x, pos.y);
                 state.modified = true;
                 self.status_message = "Added use case".to_string();
+                if switch_to_arrow {
+                    self.edit_mode = EditMode::Arrow;
+                }
             }
             EditMode::AddSystemBoundary => {
                 state.diagram.push_undo();
                 let _id = state.diagram.add_system_boundary("System", pos.x, pos.y, 300.0, 400.0);
                 state.modified = true;
                 self.status_message = "Added system boundary".to_string();
+                if switch_to_arrow {
+                    self.edit_mode = EditMode::Arrow;
+                }
             }
             EditMode::AddAssociation | EditMode::AddInclude |
             EditMode::AddExtend | EditMode::AddGeneralization => {
@@ -349,48 +380,72 @@ impl JmtApp {
                 let _id = state.diagram.add_action("Action", pos.x, pos.y);
                 state.modified = true;
                 self.status_message = "Added action".to_string();
+                if switch_to_arrow {
+                    self.edit_mode = EditMode::Arrow;
+                }
             }
             EditMode::AddDecision => {
                 state.diagram.push_undo();
                 state.diagram.add_decision_node(pos.x, pos.y);
                 state.modified = true;
                 self.status_message = "Added decision node".to_string();
+                if switch_to_arrow {
+                    self.edit_mode = EditMode::Arrow;
+                }
             }
             EditMode::AddSendSignal => {
                 state.diagram.push_undo();
                 state.diagram.add_send_signal("Send", pos.x, pos.y);
                 state.modified = true;
                 self.status_message = "Added send signal".to_string();
+                if switch_to_arrow {
+                    self.edit_mode = EditMode::Arrow;
+                }
             }
             EditMode::AddAcceptEvent => {
                 state.diagram.push_undo();
                 state.diagram.add_accept_event("Accept", pos.x, pos.y);
                 state.modified = true;
                 self.status_message = "Added accept event".to_string();
+                if switch_to_arrow {
+                    self.edit_mode = EditMode::Arrow;
+                }
             }
             EditMode::AddTimeEvent => {
                 state.diagram.push_undo();
                 state.diagram.add_time_event("Time", pos.x, pos.y);
                 state.modified = true;
                 self.status_message = "Added time event".to_string();
+                if switch_to_arrow {
+                    self.edit_mode = EditMode::Arrow;
+                }
             }
             EditMode::AddSwimlane => {
                 state.diagram.push_undo();
                 let _id = state.diagram.add_swimlane("Lane", pos.x, pos.y, 200.0, 400.0);
                 state.modified = true;
                 self.status_message = "Added swimlane".to_string();
+                if switch_to_arrow {
+                    self.edit_mode = EditMode::Arrow;
+                }
             }
             EditMode::AddObjectNode => {
                 state.diagram.push_undo();
                 state.diagram.add_object_node("Object", pos.x, pos.y);
                 state.modified = true;
                 self.status_message = "Added object node".to_string();
+                if switch_to_arrow {
+                    self.edit_mode = EditMode::Arrow;
+                }
             }
             EditMode::AddDataStore => {
                 state.diagram.push_undo();
                 state.diagram.add_data_store("DataStore", pos.x, pos.y);
                 state.modified = true;
                 self.status_message = "Added data store".to_string();
+                if switch_to_arrow {
+                    self.edit_mode = EditMode::Arrow;
+                }
             }
 
             _ => {}
@@ -810,9 +865,11 @@ impl eframe::App for JmtApp {
             }
 
             // Handle mouse clicks
-            if response.clicked() {
+            // Double-click in add mode will add element AND switch back to arrow mode
+            let is_double_click = response.double_clicked();
+            if response.clicked() || is_double_click {
                 if let Some(pos) = response.interact_pointer_pos() {
-                    self.handle_canvas_click(pos);
+                    self.handle_canvas_click(pos, is_double_click);
                 }
             }
 
