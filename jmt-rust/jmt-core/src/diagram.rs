@@ -569,6 +569,74 @@ impl Diagram {
         id
     }
 
+    /// Add a decision/merge node
+    pub fn add_decision_node(&mut self, x: f32, y: f32) -> Uuid {
+        use crate::activity::ActionKind;
+        let mut action = Action::new("", x, y);
+        action.kind = ActionKind::Action; // We'll use a pseudo-state for this
+        action.bounds = crate::geometry::Rect::from_pos_size(x - 15.0, y - 15.0, 30.0, 30.0);
+        let id = action.id;
+        self.actions.push(action);
+        id
+    }
+
+    /// Add a send signal action
+    pub fn add_send_signal(&mut self, name: &str, x: f32, y: f32) -> Uuid {
+        use crate::activity::ActionKind;
+        let mut action = Action::new(name, x, y);
+        action.kind = ActionKind::SendSignal;
+        let id = action.id;
+        self.actions.push(action);
+        id
+    }
+
+    /// Add an accept event action
+    pub fn add_accept_event(&mut self, name: &str, x: f32, y: f32) -> Uuid {
+        use crate::activity::ActionKind;
+        let mut action = Action::new(name, x, y);
+        action.kind = ActionKind::AcceptEvent;
+        let id = action.id;
+        self.actions.push(action);
+        id
+    }
+
+    /// Add a time event action
+    pub fn add_time_event(&mut self, name: &str, x: f32, y: f32) -> Uuid {
+        use crate::activity::ActionKind;
+        let mut action = Action::new(name, x, y);
+        action.kind = ActionKind::AcceptTimeEvent;
+        let id = action.id;
+        self.actions.push(action);
+        id
+    }
+
+    /// Add an object node
+    pub fn add_object_node(&mut self, name: &str, x: f32, y: f32) -> Uuid {
+        use crate::activity::{ObjectNode, ObjectNodeKind};
+        let node = ObjectNode::new(name, ObjectNodeKind::CentralBuffer, x, y);
+        let id = node.id;
+        self.object_nodes.push(node);
+        id
+    }
+
+    /// Add a data store
+    pub fn add_data_store(&mut self, name: &str, x: f32, y: f32) -> Uuid {
+        use crate::activity::ObjectNode;
+        let node = ObjectNode::new_data_store(name, x, y);
+        let id = node.id;
+        self.object_nodes.push(node);
+        id
+    }
+
+    /// Add a combined fragment to a sequence diagram
+    pub fn add_combined_fragment(&mut self, x: f32, y: f32, w: f32, h: f32) -> Uuid {
+        use crate::sequence::{CombinedFragment, FragmentKind};
+        let fragment = CombinedFragment::new(FragmentKind::Alt, x, y, w, h);
+        let id = fragment.id;
+        self.fragments.push(fragment);
+        id
+    }
+
     /// Find an action at a given point
     pub fn find_action_at(&self, pos: Point) -> Option<Uuid> {
         self.actions.iter()

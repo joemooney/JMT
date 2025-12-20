@@ -294,6 +294,105 @@ impl JmtApp {
                     self.status_message = "Ready".to_string();
                 }
             }
+
+            // === Sequence Diagram Elements ===
+            EditMode::AddLifeline => {
+                state.diagram.push_undo();
+                let _id = state.diagram.add_lifeline("Object", pos.x, pos.y);
+                state.modified = true;
+                self.status_message = "Added lifeline".to_string();
+            }
+            EditMode::AddActivation => {
+                // TODO: Activations need to be attached to lifelines
+                self.status_message = "Click on a lifeline to add activation".to_string();
+            }
+            EditMode::AddFragment => {
+                state.diagram.push_undo();
+                state.diagram.add_combined_fragment(pos.x, pos.y, 200.0, 150.0);
+                state.modified = true;
+                self.status_message = "Added combined fragment".to_string();
+            }
+            EditMode::AddSyncMessage | EditMode::AddAsyncMessage |
+            EditMode::AddReturnMessage | EditMode::AddSelfMessage | EditMode::AddMessage => {
+                // TODO: Messages need source and target lifelines
+                self.status_message = "Click on source lifeline, then target lifeline".to_string();
+            }
+
+            // === Use Case Diagram Elements ===
+            EditMode::AddActor => {
+                state.diagram.push_undo();
+                let _id = state.diagram.add_actor("Actor", pos.x, pos.y);
+                state.modified = true;
+                self.status_message = "Added actor".to_string();
+            }
+            EditMode::AddUseCase => {
+                state.diagram.push_undo();
+                let _id = state.diagram.add_use_case("Use Case", pos.x, pos.y);
+                state.modified = true;
+                self.status_message = "Added use case".to_string();
+            }
+            EditMode::AddSystemBoundary => {
+                state.diagram.push_undo();
+                let _id = state.diagram.add_system_boundary("System", pos.x, pos.y, 300.0, 400.0);
+                state.modified = true;
+                self.status_message = "Added system boundary".to_string();
+            }
+            EditMode::AddAssociation | EditMode::AddInclude |
+            EditMode::AddExtend | EditMode::AddGeneralization => {
+                // TODO: Relationships need source and target elements
+                self.status_message = "Click on source element, then target element".to_string();
+            }
+
+            // === Activity Diagram Elements ===
+            EditMode::AddAction => {
+                state.diagram.push_undo();
+                let _id = state.diagram.add_action("Action", pos.x, pos.y);
+                state.modified = true;
+                self.status_message = "Added action".to_string();
+            }
+            EditMode::AddDecision => {
+                state.diagram.push_undo();
+                state.diagram.add_decision_node(pos.x, pos.y);
+                state.modified = true;
+                self.status_message = "Added decision node".to_string();
+            }
+            EditMode::AddSendSignal => {
+                state.diagram.push_undo();
+                state.diagram.add_send_signal("Send", pos.x, pos.y);
+                state.modified = true;
+                self.status_message = "Added send signal".to_string();
+            }
+            EditMode::AddAcceptEvent => {
+                state.diagram.push_undo();
+                state.diagram.add_accept_event("Accept", pos.x, pos.y);
+                state.modified = true;
+                self.status_message = "Added accept event".to_string();
+            }
+            EditMode::AddTimeEvent => {
+                state.diagram.push_undo();
+                state.diagram.add_time_event("Time", pos.x, pos.y);
+                state.modified = true;
+                self.status_message = "Added time event".to_string();
+            }
+            EditMode::AddSwimlane => {
+                state.diagram.push_undo();
+                let _id = state.diagram.add_swimlane("Lane", pos.x, pos.y, 200.0, 400.0);
+                state.modified = true;
+                self.status_message = "Added swimlane".to_string();
+            }
+            EditMode::AddObjectNode => {
+                state.diagram.push_undo();
+                state.diagram.add_object_node("Object", pos.x, pos.y);
+                state.modified = true;
+                self.status_message = "Added object node".to_string();
+            }
+            EditMode::AddDataStore => {
+                state.diagram.push_undo();
+                state.diagram.add_data_store("DataStore", pos.x, pos.y);
+                state.modified = true;
+                self.status_message = "Added data store".to_string();
+            }
+
             _ => {}
         }
     }
@@ -405,6 +504,182 @@ impl JmtApp {
             EditMode::Arrow => {
                 // No preview needed for selection mode
             }
+
+            // === Use Case Diagram Previews ===
+            EditMode::AddActor => {
+                // Draw a ghost stick figure
+                let stroke = egui::Stroke::new(1.5, egui::Color32::from_rgba_unmultiplied(0, 0, 0, preview_alpha));
+                let head_y = pos.y - 20.0;
+                let head_r = 8.0;
+                let body_top = head_y + head_r;
+                let body_bottom = body_top + 20.0;
+                let arm_y = body_top + 8.0;
+                let leg_bottom = body_bottom + 18.0;
+
+                painter.circle_stroke(egui::Pos2::new(pos.x, head_y), head_r, stroke);
+                painter.line_segment([egui::Pos2::new(pos.x, body_top), egui::Pos2::new(pos.x, body_bottom)], stroke);
+                painter.line_segment([egui::Pos2::new(pos.x - 15.0, arm_y), egui::Pos2::new(pos.x + 15.0, arm_y)], stroke);
+                painter.line_segment([egui::Pos2::new(pos.x, body_bottom), egui::Pos2::new(pos.x - 12.0, leg_bottom)], stroke);
+                painter.line_segment([egui::Pos2::new(pos.x, body_bottom), egui::Pos2::new(pos.x + 12.0, leg_bottom)], stroke);
+            }
+            EditMode::AddUseCase => {
+                // Draw a ghost ellipse
+                let radius = egui::Vec2::new(50.0, 30.0);
+                painter.add(egui::Shape::ellipse_stroke(
+                    pos,
+                    radius,
+                    egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(0, 0, 0, preview_alpha)),
+                ));
+                painter.text(
+                    pos,
+                    egui::Align2::CENTER_CENTER,
+                    "Use Case",
+                    egui::FontId::proportional(11.0),
+                    egui::Color32::from_rgba_unmultiplied(0, 0, 0, preview_alpha),
+                );
+            }
+            EditMode::AddSystemBoundary => {
+                // Draw a ghost rectangle
+                let rect = egui::Rect::from_center_size(pos, egui::Vec2::new(150.0, 200.0));
+                painter.rect(
+                    rect,
+                    egui::Rounding::same(4.0),
+                    egui::Color32::from_rgba_unmultiplied(245, 245, 245, 80),
+                    egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(0, 0, 0, preview_alpha)),
+                );
+                painter.text(
+                    egui::Pos2::new(pos.x, rect.top() + 15.0),
+                    egui::Align2::CENTER_CENTER,
+                    "System",
+                    egui::FontId::proportional(12.0),
+                    egui::Color32::from_rgba_unmultiplied(0, 0, 0, preview_alpha),
+                );
+            }
+
+            // === Sequence Diagram Previews ===
+            EditMode::AddLifeline => {
+                // Draw a ghost lifeline
+                let head_rect = egui::Rect::from_center_size(
+                    egui::Pos2::new(pos.x, pos.y - 40.0),
+                    egui::Vec2::new(80.0, 30.0),
+                );
+                painter.rect(
+                    head_rect,
+                    egui::Rounding::same(2.0),
+                    egui::Color32::from_rgba_unmultiplied(255, 255, 255, preview_alpha),
+                    egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(0, 0, 0, preview_alpha)),
+                );
+                // Dashed line
+                let line_top = head_rect.bottom();
+                let line_bottom = pos.y + 60.0;
+                let mut y = line_top;
+                while y < line_bottom {
+                    let end_y = (y + 6.0).min(line_bottom);
+                    painter.line_segment(
+                        [egui::Pos2::new(pos.x, y), egui::Pos2::new(pos.x, end_y)],
+                        egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(0, 0, 0, preview_alpha)),
+                    );
+                    y += 10.0;
+                }
+                painter.text(
+                    head_rect.center(),
+                    egui::Align2::CENTER_CENTER,
+                    "Object",
+                    egui::FontId::proportional(11.0),
+                    egui::Color32::from_rgba_unmultiplied(0, 0, 0, preview_alpha),
+                );
+            }
+
+            // === Activity Diagram Previews ===
+            EditMode::AddAction => {
+                // Draw a ghost action (rounded rectangle)
+                let rect = egui::Rect::from_center_size(pos, egui::Vec2::new(100.0, 40.0));
+                painter.rect(
+                    rect,
+                    egui::Rounding::same(10.0),
+                    egui::Color32::from_rgba_unmultiplied(200, 230, 255, preview_alpha),
+                    egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(0, 0, 0, preview_alpha)),
+                );
+                painter.text(
+                    pos,
+                    egui::Align2::CENTER_CENTER,
+                    "Action",
+                    egui::FontId::proportional(11.0),
+                    egui::Color32::from_rgba_unmultiplied(0, 0, 0, preview_alpha),
+                );
+            }
+            EditMode::AddDecision => {
+                // Draw a ghost diamond
+                let size = 15.0;
+                let points = vec![
+                    egui::Pos2::new(pos.x, pos.y - size),
+                    egui::Pos2::new(pos.x + size, pos.y),
+                    egui::Pos2::new(pos.x, pos.y + size),
+                    egui::Pos2::new(pos.x - size, pos.y),
+                ];
+                painter.add(egui::Shape::convex_polygon(
+                    points,
+                    egui::Color32::from_rgba_unmultiplied(255, 255, 255, preview_alpha),
+                    egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(0, 0, 0, preview_alpha)),
+                ));
+            }
+            EditMode::AddSendSignal => {
+                // Draw a ghost pentagon (send signal)
+                let w = 50.0;
+                let h = 25.0;
+                let points = vec![
+                    egui::Pos2::new(pos.x - w/2.0, pos.y - h/2.0),
+                    egui::Pos2::new(pos.x + w/2.0 - 10.0, pos.y - h/2.0),
+                    egui::Pos2::new(pos.x + w/2.0, pos.y),
+                    egui::Pos2::new(pos.x + w/2.0 - 10.0, pos.y + h/2.0),
+                    egui::Pos2::new(pos.x - w/2.0, pos.y + h/2.0),
+                ];
+                painter.add(egui::Shape::convex_polygon(
+                    points,
+                    egui::Color32::from_rgba_unmultiplied(255, 230, 200, preview_alpha),
+                    egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(0, 0, 0, preview_alpha)),
+                ));
+            }
+            EditMode::AddAcceptEvent => {
+                // Draw a ghost concave pentagon
+                let w = 50.0;
+                let h = 25.0;
+                let points = vec![
+                    egui::Pos2::new(pos.x - w/2.0, pos.y - h/2.0),
+                    egui::Pos2::new(pos.x + w/2.0, pos.y - h/2.0),
+                    egui::Pos2::new(pos.x + w/2.0, pos.y + h/2.0),
+                    egui::Pos2::new(pos.x - w/2.0, pos.y + h/2.0),
+                    egui::Pos2::new(pos.x - w/2.0 + 10.0, pos.y),
+                ];
+                painter.add(egui::Shape::convex_polygon(
+                    points,
+                    egui::Color32::from_rgba_unmultiplied(200, 255, 200, preview_alpha),
+                    egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(0, 0, 0, preview_alpha)),
+                ));
+            }
+            EditMode::AddSwimlane => {
+                // Draw a ghost swimlane
+                let rect = egui::Rect::from_center_size(pos, egui::Vec2::new(100.0, 200.0));
+                painter.rect(
+                    rect,
+                    egui::Rounding::ZERO,
+                    egui::Color32::from_rgba_unmultiplied(230, 230, 255, 80),
+                    egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(0, 0, 0, preview_alpha)),
+                );
+                // Header line
+                painter.line_segment(
+                    [egui::Pos2::new(rect.left(), rect.top() + 25.0), egui::Pos2::new(rect.right(), rect.top() + 25.0)],
+                    egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(0, 0, 0, preview_alpha)),
+                );
+                painter.text(
+                    egui::Pos2::new(pos.x, rect.top() + 12.0),
+                    egui::Align2::CENTER_CENTER,
+                    "Lane",
+                    egui::FontId::proportional(11.0),
+                    egui::Color32::from_rgba_unmultiplied(0, 0, 0, preview_alpha),
+                );
+            }
+
             _ => {}
         }
     }
