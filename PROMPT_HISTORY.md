@@ -560,3 +560,41 @@ Continue development with the next planned phase: adding the ability to resize n
 
 **Git Operations:**
 - Committed and pushed double-click auto-switch feature
+
+---
+
+## Session 4 (continued) - Center Nodes on Cursor (2025-12-20)
+
+### Prompt: Fix node placement to match preview position
+
+**User Request:**
+"When you add a node the cursor is pointing to the middle of the node in the outline shown, but when you click to add it is drawn using the cursor position at the top left corner of the node rather than the cursor being in the center of the added node"
+
+**Actions Taken:**
+1. Modified all `add_*` methods in `jmt-core/src/diagram.rs` to center elements on the cursor position
+2. Fixed State Machine elements:
+   - `add_state()` - centers using width/height
+   - `add_pseudo_state()` - centers using kind's default_size()
+3. Fixed Sequence elements:
+   - `add_lifeline()` - adjusts y to center on head
+4. Fixed Use Case elements:
+   - `add_actor()` - centers vertically (x was already center)
+   - `add_use_case()` - centers both axes (default 120x60)
+   - `add_system_boundary()` - centers using w/h parameters
+5. Fixed Activity elements:
+   - `add_action()` - centers (default 100x50)
+   - `add_swimlane()` - centers using w/h parameters
+   - `add_decision_node()` - centers (30x30 diamond)
+   - `add_send_signal()`, `add_accept_event()` - centers (100x40)
+   - `add_time_event()` - centers (30x40)
+   - `add_object_node()`, `add_data_store()` - centers (80x40)
+   - `add_combined_fragment()` - centers using w/h parameters
+
+**Files Modified:**
+- `jmt-core/src/diagram.rs` - All add methods now center on cursor position
+
+**Build Status:**
+- Successfully compiles with `cargo build`
+
+**Git Operations:**
+- Committed and pushed node centering fix
