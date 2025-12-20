@@ -11,6 +11,8 @@ pub enum EditMode {
     Arrow,
     /// Rectangle selection mode
     Select,
+    /// Lasso (freeform) selection mode
+    Lasso,
 
     // === State Machine Diagram modes ===
     /// Adding a new state
@@ -147,6 +149,7 @@ impl EditMode {
         match self {
             EditMode::Arrow => "Select",
             EditMode::Select => "Rectangle Select",
+            EditMode::Lasso => "Lasso Select",
             // State machine
             EditMode::AddState => "Add State",
             EditMode::AddInitial => "Add Initial",
@@ -192,7 +195,7 @@ impl EditMode {
 
     /// Returns edit modes available for a given diagram type
     pub fn modes_for_diagram_type(diagram_type: DiagramType) -> Vec<EditMode> {
-        let mut modes = vec![EditMode::Arrow, EditMode::Select];
+        let mut modes = vec![EditMode::Arrow, EditMode::Lasso];
 
         match diagram_type {
             DiagramType::StateMachine => {

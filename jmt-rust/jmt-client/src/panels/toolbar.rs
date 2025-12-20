@@ -44,6 +44,30 @@ impl Toolbar {
             ui.label("Select:");
             Self::tool_button(ui, app, EditMode::Arrow, "↖ Arrow", "Select and move nodes");
 
+            // Lasso selection - freeform lasso icon
+            Self::icon_tool_button(ui, app, EditMode::Lasso, "Lasso select - draw around elements to select", |painter, rect, stroke_color| {
+                // Draw a lasso loop shape
+                let cx = rect.center().x;
+                let cy = rect.center().y;
+                let r = rect.width() / 2.5;
+
+                // Draw a curved lasso path
+                let points: Vec<Pos2> = (0..=12).map(|i| {
+                    let t = i as f32 / 12.0;
+                    let angle = t * std::f32::consts::PI * 1.8 - std::f32::consts::PI * 0.4;
+                    let wobble = (t * std::f32::consts::PI * 4.0).sin() * 0.15;
+                    let radius = r * (1.0 + wobble);
+                    Pos2::new(cx + radius * angle.cos(), cy + radius * angle.sin())
+                }).collect();
+
+                painter.add(egui::Shape::line(points, Stroke::new(1.5, stroke_color)));
+
+                // Add a small circle at the end (lasso tip)
+                let end_x = cx + r * 0.9;
+                let end_y = cy - r * 0.6;
+                painter.circle_filled(Pos2::new(end_x, end_y), 2.0, stroke_color);
+            });
+
             ui.separator();
 
             // Get current diagram type

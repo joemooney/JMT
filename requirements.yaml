@@ -102,6 +102,17 @@ requirements:
   created_at: 2025-12-20T20:00:00.000000000Z
   modified_at: 2025-12-20T20:00:00.000000000Z
   req_type: Functional
+- id: 3b9c5d6e-7f8a-9b0c-1d2e-3f4a5b6c7d8e
+  spec_id: FR-010
+  title: Lasso selection tool
+  description: Freeform lasso selection tool allows drawing around elements to select them. Located next to Arrow tool in toolbar. Draws while dragging, selects elements whose center falls inside the lasso polygon. Works across all diagram types.
+  status: Completed
+  priority: Medium
+  owner: joe
+  feature: Diagram Editing
+  created_at: 2025-12-20T21:00:00.000000000Z
+  modified_at: 2025-12-20T21:00:00.000000000Z
+  req_type: Functional
 id_config:
   format: SingleLevel
   numbering: Global
@@ -145,7 +156,7 @@ id_config:
     description: Organizational folders
 features: []
 next_feature_number: 8
-next_spec_number: 10
+next_spec_number: 11
 prefix_counters: {}
 relationship_definitions:
 - name: parent

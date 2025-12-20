@@ -661,6 +661,89 @@ impl Diagram {
         self.select_nodes(&ids);
     }
 
+    /// Select all elements whose center is inside a polygon (for lasso selection)
+    pub fn select_elements_in_polygon(&mut self, polygon: &[Point]) {
+        use crate::geometry::point_in_polygon;
+
+        self.clear_selection();
+
+        match self.diagram_type {
+            DiagramType::StateMachine => {
+                // Select nodes whose center is in the polygon
+                let mut ids = Vec::new();
+                for node in &self.nodes {
+                    let center = node.bounds().center();
+                    if point_in_polygon(center, polygon) {
+                        ids.push(node.id());
+                    }
+                }
+                self.select_nodes(&ids);
+            }
+            DiagramType::Sequence => {
+                // Select lifelines
+                for lifeline in &mut self.lifelines {
+                    let center = lifeline.head_bounds().center();
+                    if point_in_polygon(center, polygon) {
+                        lifeline.has_focus = true;
+                        self.selection_order.push(lifeline.id);
+                    }
+                }
+            }
+            DiagramType::UseCase => {
+                // Select actors
+                for actor in &mut self.actors {
+                    let center = actor.center();
+                    if point_in_polygon(center, polygon) {
+                        actor.has_focus = true;
+                        self.selection_order.push(actor.id);
+                    }
+                }
+                // Select use cases
+                for uc in &mut self.use_cases {
+                    let center = uc.center();
+                    if point_in_polygon(center, polygon) {
+                        uc.has_focus = true;
+                        self.selection_order.push(uc.id);
+                    }
+                }
+                // Select system boundaries
+                for sb in &mut self.system_boundaries {
+                    let center = sb.bounds.center();
+                    if point_in_polygon(center, polygon) {
+                        sb.has_focus = true;
+                        self.selection_order.push(sb.id);
+                    }
+                }
+            }
+            DiagramType::Activity => {
+                // Select actions
+                for action in &mut self.actions {
+                    let center = action.center();
+                    if point_in_polygon(center, polygon) {
+                        action.has_focus = true;
+                        self.selection_order.push(action.id);
+                    }
+                }
+                // Select swimlanes
+                for swimlane in &mut self.swimlanes {
+                    let center = swimlane.bounds.center();
+                    if point_in_polygon(center, polygon) {
+                        swimlane.has_focus = true;
+                        self.selection_order.push(swimlane.id);
+                    }
+                }
+                // Select object nodes
+                for obj in &mut self.object_nodes {
+                    let center = obj.bounds.center();
+                    if point_in_polygon(center, polygon) {
+                        obj.has_focus = true;
+                        self.selection_order.push(obj.id);
+                    }
+                }
+            }
+        }
+    }
+
     /// Toggle a node's selection (add if not selected, remove if selected)
     pub fn toggle_node_selection(&mut self, id: NodeId) {
         if let Some(node) = self.find_node_mut(id) {

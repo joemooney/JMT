@@ -788,6 +788,51 @@ Continue development with the next planned phase: adding the ability to resize n
 - Successfully compiles with `cargo build`
 
 **Git Operations:**
+- Committed: `b527a53`
+
+---
+
+## Session 5 (continued) - Lasso Selection Tool (2025-12-20)
+
+### Prompt: Add lasso selection tool
+
+**User Request:**
+"In addition to marquee selection we should have lasso. Add that as a button beside Arrow. Then if we draw a lasso around a group of nodes it will select all those nodes"
+
+**Actions Taken:**
+1. Added `Lasso` to EditMode enum in edit_mode.rs
+2. Added `lasso_points: Vec<egui::Pos2>` field to JmtApp for tracking lasso path
+3. Added Lasso button with graphical icon to toolbar (next to Arrow)
+   - Icon shows a curved lasso loop shape
+4. Implemented lasso drawing:
+   - On drag start: Clear lasso points and add first point
+   - On dragging: Add points with distance threshold (>3px) to avoid too many points
+   - Draw lasso path as blue line with semi-transparent closing line
+5. Added `point_in_polygon()` function to geometry.rs using ray casting algorithm
+6. Added `select_elements_in_polygon()` method to Diagram:
+   - Works for all diagram types
+   - Selects elements whose center is inside the polygon
+7. On drag end: Select all elements inside the lasso polygon
+
+**Files Modified:**
+- `jmt-core/src/edit_mode.rs` - Added Lasso mode
+- `jmt-core/src/geometry.rs` - Added point_in_polygon function
+- `jmt-core/src/lib.rs` - Exported point_in_polygon
+- `jmt-core/src/diagram.rs` - Added select_elements_in_polygon method
+- `jmt-client/src/app.rs` - Added lasso_points, lasso handling
+- `jmt-client/src/panels/toolbar.rs` - Added Lasso button with icon
+
+**Features Implemented:**
+- Freeform lasso selection tool
+- Located next to Arrow tool in toolbar
+- Draw around elements to select them
+- Works across all diagram types
+- Elements selected if their center is inside the lasso
+
+**Build Status:**
+- Successfully compiles with `cargo build`
+
+**Git Operations:**
 - To be committed
 
 ---

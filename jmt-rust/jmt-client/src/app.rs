@@ -117,6 +117,8 @@ pub struct JmtApp {
     pub cursor_pos: Option<egui::Pos2>,
     /// Active resize state (when resizing a node by corner)
     resize_state: ResizeState,
+    /// Lasso selection points (freeform polygon)
+    lasso_points: Vec<egui::Pos2>,
 }
 
 impl Default for JmtApp {
@@ -135,6 +137,7 @@ impl Default for JmtApp {
             dragging_nodes: false,
             cursor_pos: None,
             resize_state: ResizeState::default(),
+            lasso_points: Vec::new(),
         }
     }
 }
@@ -982,6 +985,15 @@ impl eframe::App for JmtApp {
                             if let Some(state) = self.current_diagram_mut() {
                                 state.diagram.clear_selection();
                             }
+                        } else if self.edit_mode == EditMode::Lasso {
+                            // We're starting a lasso selection
+                            self.dragging_nodes = false;
+                            self.lasso_points.clear();
+                            self.lasso_points.push(pos);
+                            // Clear current selection when starting a new lasso
+                            if let Some(state) = self.current_diagram_mut() {
+                                state.diagram.clear_selection();
+                            }
                         }
                     }
                 }
@@ -1023,6 +1035,14 @@ impl eframe::App for JmtApp {
                             // Update marquee selection rectangle
                             self.selection_rect.current = Some(pos);
                         }
+                    } else if self.edit_mode == EditMode::Lasso {
+                        // Add points to the lasso path (with some distance threshold to avoid too many points)
+                        if let Some(last) = self.lasso_points.last() {
+                            let dist = ((pos.x - last.x).powi(2) + (pos.y - last.y).powi(2)).sqrt();
+                            if dist > 3.0 {
+                                self.lasso_points.push(pos);
+                            }
+                        }
                     }
                 }
             }
@@ -1037,6 +1057,25 @@ impl eframe::App for JmtApp {
                         egui::Color32::from_rgba_unmultiplied(100, 150, 255, 50),
                         egui::Stroke::new(1.0, egui::Color32::from_rgb(100, 150, 255)),
                     );
+                }
+            }
+
+            // Draw lasso path if active
+            if self.lasso_points.len() > 1 {
+                // Draw the lasso line
+                painter.add(egui::Shape::line(
+                    self.lasso_points.clone(),
+                    egui::Stroke::new(2.0, egui::Color32::from_rgb(100, 150, 255)),
+                ));
+
+                // Draw closing line (dashed effect using dotted line to start point)
+                if self.lasso_points.len() > 2 {
+                    if let (Some(first), Some(last)) = (self.lasso_points.first(), self.lasso_points.last()) {
+                        painter.line_segment(
+                            [*last, *first],
+                            egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(100, 150, 255, 128)),
+                        );
+                    }
                 }
             }
 
@@ -1063,6 +1102,26 @@ impl eframe::App for JmtApp {
                             }
                         }
                     }
+                } else if self.edit_mode == EditMode::Lasso {
+                    // Complete lasso selection
+                    if self.lasso_points.len() >= 3 {
+                        // Convert lasso points to core Points
+                        let polygon: Vec<Point> = self.lasso_points
+                            .iter()
+                            .map(|p| Point::new(p.x, p.y))
+                            .collect();
+
+                        if let Some(state) = self.current_diagram_mut() {
+                            state.diagram.select_elements_in_polygon(&polygon);
+                            let count = state.diagram.selected_elements_in_order().len();
+                            if count > 0 {
+                                self.status_message = format!("Selected {} element(s)", count);
+                            } else {
+                                self.status_message = "Ready".to_string();
+                            }
+                        }
+                    }
+                    self.lasso_points.clear();
                 }
 
                 // Clear selection rect and reset state

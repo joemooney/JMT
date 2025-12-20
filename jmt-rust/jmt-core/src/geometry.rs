@@ -227,6 +227,34 @@ impl Default for Color {
     }
 }
 
+/// Check if a point is inside a polygon using the ray casting algorithm
+/// Returns true if the point is inside the polygon
+pub fn point_in_polygon(point: Point, polygon: &[Point]) -> bool {
+    if polygon.len() < 3 {
+        return false;
+    }
+
+    let mut inside = false;
+    let n = polygon.len();
+
+    let mut j = n - 1;
+    for i in 0..n {
+        let pi = polygon[i];
+        let pj = polygon[j];
+
+        // Check if the ray from point going right intersects this edge
+        if ((pi.y > point.y) != (pj.y > point.y))
+            && (point.x < (pj.x - pi.x) * (point.y - pi.y) / (pj.y - pi.y) + pi.x)
+        {
+            inside = !inside;
+        }
+
+        j = i;
+    }
+
+    inside
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

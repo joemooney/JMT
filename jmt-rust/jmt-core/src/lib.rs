@@ -15,7 +15,7 @@ pub mod usecase;
 // Activity diagram specific
 pub mod activity;
 
-pub use geometry::{Point, Rect, Color};
+pub use geometry::{Point, Rect, Color, point_in_polygon};
 pub use node::{NodeType, Side, Corner, Node, NodeId};
 pub use connection::{Connection, ConnectionId, LineSegment};
 pub use diagram::Diagram;
