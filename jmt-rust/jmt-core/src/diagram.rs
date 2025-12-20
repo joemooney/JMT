@@ -206,21 +206,26 @@ impl Diagram {
 
     /// Add a new state at the given position
     pub fn add_state(&mut self, name: &str, x: f32, y: f32) -> NodeId {
+        // Center the state on the given position
+        let width = self.settings.default_state_width;
+        let height = self.settings.default_state_height;
         let state = State::new(
             name,
-            x,
-            y,
-            self.settings.default_state_width,
-            self.settings.default_state_height,
+            x - width / 2.0,
+            y - height / 2.0,
+            width,
+            height,
         );
         let id = state.id;
         self.nodes.push(Node::State(state));
         id
     }
 
-    /// Add a new pseudo-state at the given position
+    /// Add a new pseudo-state at the given position (centered on the position)
     pub fn add_pseudo_state(&mut self, kind: PseudoStateKind, x: f32, y: f32) -> NodeId {
-        let pseudo = PseudoState::new(kind, x, y);
+        let (width, height) = kind.default_size();
+        // Center on the given position
+        let pseudo = PseudoState::new(kind, x - width / 2.0, y - height / 2.0);
         let id = pseudo.id;
         self.nodes.push(Node::Pseudo(pseudo));
         id
@@ -470,9 +475,11 @@ impl Diagram {
 
     // ===== Sequence Diagram Methods =====
 
-    /// Add a lifeline to the sequence diagram
+    /// Add a lifeline to the sequence diagram (centered on x position)
     pub fn add_lifeline(&mut self, name: &str, x: f32, y: f32) -> Uuid {
-        let lifeline = Lifeline::new(name, x, y);
+        // Lifeline x is already centered, y is top of head
+        // Adjust y so cursor is at center of head
+        let lifeline = Lifeline::new(name, x, y - 20.0);
         let id = lifeline.id;
         self.lifelines.push(lifeline);
         id
@@ -505,25 +512,30 @@ impl Diagram {
 
     // ===== Use Case Diagram Methods =====
 
-    /// Add an actor to the use case diagram
+    /// Add an actor to the use case diagram (centered on position)
     pub fn add_actor(&mut self, name: &str, x: f32, y: f32) -> Uuid {
-        let actor = Actor::new(name, x, y);
+        // Actor: x is center, y is top, height is ~70
+        // Center vertically on cursor
+        let actor = Actor::new(name, x, y - 35.0);
         let id = actor.id;
         self.actors.push(actor);
         id
     }
 
-    /// Add a use case to the diagram
+    /// Add a use case to the diagram (centered on position)
     pub fn add_use_case(&mut self, name: &str, x: f32, y: f32) -> Uuid {
-        let use_case = UseCase::new(name, x, y);
+        // UseCase: x, y is top-left, default size 120x60
+        // Center on cursor position
+        let use_case = UseCase::new(name, x - 60.0, y - 30.0);
         let id = use_case.id;
         self.use_cases.push(use_case);
         id
     }
 
-    /// Add a system boundary
+    /// Add a system boundary (centered on position)
     pub fn add_system_boundary(&mut self, name: &str, x: f32, y: f32, w: f32, h: f32) -> Uuid {
-        let boundary = SystemBoundary::new(name, x, y, w, h);
+        // Center on cursor position
+        let boundary = SystemBoundary::new(name, x - w / 2.0, y - h / 2.0, w, h);
         let id = boundary.id;
         self.system_boundaries.push(boundary);
         id
@@ -545,17 +557,20 @@ impl Diagram {
 
     // ===== Activity Diagram Methods =====
 
-    /// Add an action to the activity diagram
+    /// Add an action to the activity diagram (centered on position)
     pub fn add_action(&mut self, name: &str, x: f32, y: f32) -> Uuid {
-        let action = Action::new(name, x, y);
+        // Action: x, y is top-left, default size 100x50
+        // Center on cursor position
+        let action = Action::new(name, x - 50.0, y - 25.0);
         let id = action.id;
         self.actions.push(action);
         id
     }
 
-    /// Add a swimlane to the activity diagram
+    /// Add a swimlane to the activity diagram (centered on position)
     pub fn add_swimlane(&mut self, name: &str, x: f32, y: f32, w: f32, h: f32) -> Uuid {
-        let swimlane = Swimlane::new(name, x, y, w, h);
+        // Center on cursor position
+        let swimlane = Swimlane::new(name, x - w / 2.0, y - h / 2.0, w, h);
         let id = swimlane.id;
         self.swimlanes.push(swimlane);
         id
@@ -569,10 +584,10 @@ impl Diagram {
         id
     }
 
-    /// Add a decision/merge node
+    /// Add a decision/merge node (centered on position)
     pub fn add_decision_node(&mut self, x: f32, y: f32) -> Uuid {
         use crate::activity::ActionKind;
-        let mut action = Action::new("", x, y);
+        let mut action = Action::new("", x - 15.0, y - 15.0);
         action.kind = ActionKind::Action; // We'll use a pseudo-state for this
         action.bounds = crate::geometry::Rect::from_pos_size(x - 15.0, y - 15.0, 30.0, 30.0);
         let id = action.id;
@@ -580,58 +595,67 @@ impl Diagram {
         id
     }
 
-    /// Add a send signal action
+    /// Add a send signal action (centered on position)
     pub fn add_send_signal(&mut self, name: &str, x: f32, y: f32) -> Uuid {
         use crate::activity::ActionKind;
-        let mut action = Action::new(name, x, y);
+        // Default size is 100x40
+        let mut action = Action::new(name, x - 50.0, y - 20.0);
         action.kind = ActionKind::SendSignal;
+        action.bounds = crate::geometry::Rect::from_pos_size(x - 50.0, y - 20.0, 100.0, 40.0);
         let id = action.id;
         self.actions.push(action);
         id
     }
 
-    /// Add an accept event action
+    /// Add an accept event action (centered on position)
     pub fn add_accept_event(&mut self, name: &str, x: f32, y: f32) -> Uuid {
         use crate::activity::ActionKind;
-        let mut action = Action::new(name, x, y);
+        // Default size is 100x40
+        let mut action = Action::new(name, x - 50.0, y - 20.0);
         action.kind = ActionKind::AcceptEvent;
+        action.bounds = crate::geometry::Rect::from_pos_size(x - 50.0, y - 20.0, 100.0, 40.0);
         let id = action.id;
         self.actions.push(action);
         id
     }
 
-    /// Add a time event action
+    /// Add a time event action (centered on position)
     pub fn add_time_event(&mut self, name: &str, x: f32, y: f32) -> Uuid {
         use crate::activity::ActionKind;
-        let mut action = Action::new(name, x, y);
+        // Default size is 30x40
+        let mut action = Action::new(name, x - 15.0, y - 20.0);
         action.kind = ActionKind::AcceptTimeEvent;
+        action.bounds = crate::geometry::Rect::from_pos_size(x - 15.0, y - 20.0, 30.0, 40.0);
         let id = action.id;
         self.actions.push(action);
         id
     }
 
-    /// Add an object node
+    /// Add an object node (centered on position)
     pub fn add_object_node(&mut self, name: &str, x: f32, y: f32) -> Uuid {
         use crate::activity::{ObjectNode, ObjectNodeKind};
-        let node = ObjectNode::new(name, ObjectNodeKind::CentralBuffer, x, y);
+        // Default size is 80x40
+        let node = ObjectNode::new(name, ObjectNodeKind::CentralBuffer, x - 40.0, y - 20.0);
         let id = node.id;
         self.object_nodes.push(node);
         id
     }
 
-    /// Add a data store
+    /// Add a data store (centered on position)
     pub fn add_data_store(&mut self, name: &str, x: f32, y: f32) -> Uuid {
         use crate::activity::ObjectNode;
-        let node = ObjectNode::new_data_store(name, x, y);
+        // Default size is 80x40
+        let node = ObjectNode::new_data_store(name, x - 40.0, y - 20.0);
         let id = node.id;
         self.object_nodes.push(node);
         id
     }
 
-    /// Add a combined fragment to a sequence diagram
+    /// Add a combined fragment to a sequence diagram (centered on position)
     pub fn add_combined_fragment(&mut self, x: f32, y: f32, w: f32, h: f32) -> Uuid {
         use crate::sequence::{CombinedFragment, FragmentKind};
-        let fragment = CombinedFragment::new(FragmentKind::Alt, x, y, w, h);
+        // Center on cursor position
+        let fragment = CombinedFragment::new(FragmentKind::Alt, x - w / 2.0, y - h / 2.0, w, h);
         let id = fragment.id;
         self.fragments.push(fragment);
         id
