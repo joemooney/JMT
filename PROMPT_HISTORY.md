@@ -994,4 +994,29 @@ User showed screenshots of connections overlapping, looking like bidirectional c
 **Build Status:**
 - Successfully compiles with `cargo build`
 
+**Git Operations:**
+- Committed: `4aa0fee`
+
+---
+
+## Session 5 (continued) - Right-Click to Exit Add Mode (2025-12-20)
+
+### Prompt: Exit add mode with right-click
+
+**User Request:**
+"If you are in add mode and you right click it will exit back to arrow mode"
+
+**Actions Taken:**
+1. Added right-click (secondary_clicked) handler in canvas
+2. When in any add mode or Connect mode, right-click:
+   - Clears any pending connection source
+   - Switches to Arrow mode
+   - Shows status message "Switched to Arrow mode"
+
+**Files Modified:**
+- `jmt-client/src/app.rs` - Added secondary_clicked handler
+
+**Build Status:**
+- Successfully compiles with `cargo build`
+
 ---

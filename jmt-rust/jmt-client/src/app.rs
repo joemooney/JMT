@@ -980,6 +980,15 @@ impl eframe::App for JmtApp {
                 self.render_cursor_preview(&painter, pos, zoom);
             }
 
+            // Handle right-click to exit add/connect mode
+            if response.secondary_clicked() {
+                if self.edit_mode.is_add_node() || self.edit_mode == EditMode::Connect {
+                    self.pending_connection_source = None; // Clear any pending connection
+                    self.set_edit_mode(EditMode::Arrow);
+                    self.status_message = "Switched to Arrow mode".to_string();
+                }
+            }
+
             // Handle mouse clicks with custom double-click detection (500ms window)
             // Double-click in add mode will add element AND switch back to arrow mode
             let ctrl_held = ui.input(|i| i.modifiers.ctrl);
