@@ -189,6 +189,8 @@ impl JmtApp {
                 state.diagram.select_node(id);
                 state.modified = true;
                 self.status_message = "Added initial pseudo-state".to_string();
+                // Auto-switch back to Arrow mode (typically only one initial state)
+                self.edit_mode = EditMode::Arrow;
             }
             EditMode::AddFinal => {
                 state.diagram.push_undo();
@@ -196,6 +198,8 @@ impl JmtApp {
                 state.diagram.select_node(id);
                 state.modified = true;
                 self.status_message = "Added final pseudo-state".to_string();
+                // Auto-switch back to Arrow mode (typically only one final state)
+                self.edit_mode = EditMode::Arrow;
             }
             EditMode::AddChoice => {
                 state.diagram.push_undo();
@@ -244,8 +248,10 @@ impl JmtApp {
                         self.status_message = "Click target node to complete connection".to_string();
                     }
                 } else {
+                    // Clicked outside any node - switch back to Arrow mode
                     self.pending_connection_source = None;
-                    self.status_message = "Click a node to start connection".to_string();
+                    self.edit_mode = EditMode::Arrow;
+                    self.status_message = "Ready".to_string();
                 }
             }
             _ => {}

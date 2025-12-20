@@ -312,6 +312,26 @@ Select a transition and show its properties.
 **Git Operations:**
 - Committed and pushed connection selection fix
 
+---
+
+## Session 3 (continued) - Auto-switch to Arrow Mode (2025-12-19)
+
+### Prompt: Auto-switch back to Arrow mode after adding Initial/Final or clicking outside node in Connect mode
+
+**User Request:**
+After adding Initial or Final, auto-switch to Arrow. In Connect mode, clicking outside any node should switch to Arrow.
+
+**Actions Taken:**
+1. After adding Initial pseudo-state → auto-switch to Arrow mode
+2. After adding Final pseudo-state → auto-switch to Arrow mode
+3. In Connect mode, clicking outside any node → switch to Arrow mode
+
+**Files Modified:**
+- `jmt-client/src/app.rs` - Auto-switch logic in handle_canvas_click
+
+**Git Operations:**
+- Committed and pushed auto-switch behavior
+
 **Next Steps (Future Sessions):**
 - Phase 3: Node resize from corners
 - Phase 4: Improve pseudo-state rendering
