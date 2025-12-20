@@ -164,9 +164,20 @@ requirements:
   status: Completed
   priority: Low
   owner: joe
-  feature: Diagram Editing
+  feature: 13-Diagram Editing
   created_at: 2025-12-20T20:00:56.469114743Z
   modified_at: 2025-12-20T20:00:56.469114743Z
+  req_type: Functional
+- id: a626c557-26d4-4c30-9e86-ea9b5a6d76f7
+  spec_id: FR-016
+  title: Aligned nodes get centered connection slots
+  description: When nodes are vertically or horizontally aligned (centers within 20px tolerance), connections between them get the center slot position for straight lines. Non-aligned connections are distributed to left/right based on the other node's position.
+  status: Completed
+  priority: Medium
+  owner: joe
+  feature: Diagram Editing
+  created_at: 2025-12-20T20:07:07.144831565Z
+  modified_at: 2025-12-20T20:07:07.144831565Z
   req_type: Functional
 id_config:
   format: SingleLevel
@@ -210,8 +221,8 @@ id_config:
     prefix: FOLDER
     description: Organizational folders
 features: []
-next_feature_number: 13
-next_spec_number: 16
+next_feature_number: 14
+next_spec_number: 17
 prefix_counters: {}
 relationship_definitions:
 - name: parent

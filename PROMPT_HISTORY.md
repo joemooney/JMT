@@ -1019,4 +1019,47 @@ User showed screenshots of connections overlapping, looking like bidirectional c
 **Build Status:**
 - Successfully compiles with `cargo build`
 
+**Git Operations:**
+- Committed: `3350893`
+
+---
+
+## Session 6 - Aligned Connections Get Center Slots (2025-12-20)
+
+### Prompt: Prioritize aligned nodes for center connection slots
+
+**User Request:**
+"if nodes are aligned vertically then their connectors should get the center position if a straight line can be drawn and other connectors terminate shifted left or right. Same applies to horizontally aligned nodes"
+
+**Actions Taken:**
+1. Rewrote `recalculate_connection_slots()` to prioritize aligned connections:
+   - Added ALIGNMENT_TOLERANCE constant (20px)
+   - For each connection, check if source and target nodes are aligned:
+     - For top/bottom sides: check if x-centers are within tolerance
+     - For left/right sides: check if y-centers are within tolerance
+2. New slot assignment algorithm:
+   - Aligned connections get center slot(s) (offset 0 or distributed around 0)
+   - Non-aligned connections distributed to left/right (or above/below) based on other node position
+   - If no aligned connections, non-aligned centered as before
+3. Result: Vertically stacked states have straight vertical connections, diagonal connections are offset
+
+**Files Modified:**
+- `jmt-core/src/diagram.rs` - New alignment-aware slot calculation
+
+**Features Implemented:**
+- Vertically aligned nodes get straight vertical connections
+- Horizontally aligned nodes get straight horizontal connections
+- Non-aligned connections offset to avoid the center slot
+- Cleaner diagrams with less visual noise
+
+**Build Status:**
+- Successfully compiles with `cargo build`
+- All jmt-core tests pass
+
+**Git Operations:**
+- Committed: `5cc9d49`
+
+**Requirements Captured:**
+- FR-016: Aligned nodes get centered connection slots
+
 ---
