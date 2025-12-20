@@ -853,7 +853,10 @@ impl JmtApp {
 
     /// Handle keyboard input
     fn handle_keyboard(&mut self, ctx: &egui::Context) {
-        if ctx.input(|i| i.key_pressed(egui::Key::Delete) || i.key_pressed(egui::Key::Backspace)) {
+        // Don't handle Delete/Backspace if a text field has focus (e.g., properties panel)
+        let text_edit_has_focus = ctx.memory(|m| m.focused().is_some()) && ctx.wants_keyboard_input();
+
+        if !text_edit_has_focus && ctx.input(|i| i.key_pressed(egui::Key::Delete) || i.key_pressed(egui::Key::Backspace)) {
             if let Some(state) = self.current_diagram_mut() {
                 state.diagram.push_undo();
                 state.diagram.delete_selected();
