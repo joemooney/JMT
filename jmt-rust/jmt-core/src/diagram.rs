@@ -970,10 +970,94 @@ impl Diagram {
         self.explicit_selection_order = false;
     }
 
-    /// Select all nodes within a rectangle
+    /// Select all nodes within a rectangle (state machine only)
     pub fn select_nodes_in_rect(&mut self, rect: &Rect) {
         let ids = self.find_nodes_in_rect(rect);
         self.select_nodes(&ids);
+    }
+
+    /// Select all elements whose center is inside a rectangle (for marquee selection)
+    /// Works for all diagram types
+    pub fn select_elements_in_rect(&mut self, rect: &Rect) {
+        self.clear_selection();
+
+        match self.diagram_type {
+            DiagramType::StateMachine => {
+                // Select nodes whose center is in the rect
+                let mut ids = Vec::new();
+                for node in &self.nodes {
+                    let center = node.bounds().center();
+                    if rect.contains_point(center) {
+                        ids.push(node.id());
+                    }
+                }
+                self.select_nodes(&ids);
+            }
+            DiagramType::Sequence => {
+                // Select lifelines
+                for lifeline in &mut self.lifelines {
+                    let center = lifeline.head_bounds().center();
+                    if rect.contains_point(center) {
+                        lifeline.has_focus = true;
+                        self.selection_order.push(lifeline.id);
+                    }
+                }
+            }
+            DiagramType::UseCase => {
+                // Select actors
+                for actor in &mut self.actors {
+                    let center = actor.center();
+                    if rect.contains_point(center) {
+                        actor.has_focus = true;
+                        self.selection_order.push(actor.id);
+                    }
+                }
+                // Select use cases
+                for uc in &mut self.use_cases {
+                    let center = uc.center();
+                    if rect.contains_point(center) {
+                        uc.has_focus = true;
+                        self.selection_order.push(uc.id);
+                    }
+                }
+                // Select system boundaries
+                for sb in &mut self.system_boundaries {
+                    let center = sb.bounds.center();
+                    if rect.contains_point(center) {
+                        sb.has_focus = true;
+                        self.selection_order.push(sb.id);
+                    }
+                }
+            }
+            DiagramType::Activity => {
+                // Select actions
+                for action in &mut self.actions {
+                    let center = action.center();
+                    if rect.contains_point(center) {
+                        action.has_focus = true;
+                        self.selection_order.push(action.id);
+                    }
+                }
+                // Select swimlanes
+                for swimlane in &mut self.swimlanes {
+                    let center = swimlane.bounds.center();
+                    if rect.contains_point(center) {
+                        swimlane.has_focus = true;
+                        self.selection_order.push(swimlane.id);
+                    }
+                }
+                // Select object nodes
+                for obj in &mut self.object_nodes {
+                    let center = obj.bounds.center();
+                    if rect.contains_point(center) {
+                        obj.has_focus = true;
+                        self.selection_order.push(obj.id);
+                    }
+                }
+            }
+        }
+        // Marquee selection is not explicit ordering
+        self.explicit_selection_order = false;
     }
 
     /// Select all elements whose center is inside a polygon (for lasso selection)

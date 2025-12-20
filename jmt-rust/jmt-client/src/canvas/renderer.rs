@@ -10,21 +10,27 @@ use jmt_core::activity::{Action, ActionKind, Swimlane, ControlFlow};
 
 /// Canvas for rendering diagrams
 pub struct DiagramCanvas {
-    // Future: scroll offset, etc.
+    /// Offset for screen coordinates (top-left of the canvas in screen space)
+    offset: Pos2,
 }
 
 impl DiagramCanvas {
     pub fn new() -> Self {
-        Self {}
+        Self {
+            offset: Pos2::ZERO,
+        }
     }
 
     /// Render the diagram to the canvas with optional zoom
-    pub fn render(&self, diagram: &Diagram, painter: &egui::Painter, _rect: Rect) {
-        self.render_with_zoom(diagram, painter, _rect, 1.0);
+    pub fn render(&mut self, diagram: &Diagram, painter: &egui::Painter, rect: Rect) {
+        self.render_with_zoom(diagram, painter, rect, 1.0);
     }
 
     /// Render the diagram to the canvas with zoom level
-    pub fn render_with_zoom(&self, diagram: &Diagram, painter: &egui::Painter, _rect: Rect, zoom: f32) {
+    pub fn render_with_zoom(&mut self, diagram: &Diagram, painter: &egui::Painter, rect: Rect, zoom: f32) {
+        // Store offset for use by scale_pos and scale_rect
+        self.offset = rect.min;
+
         match diagram.diagram_type {
             DiagramType::StateMachine => self.render_state_machine(diagram, painter, zoom),
             DiagramType::Sequence => self.render_sequence_diagram(diagram, painter, zoom),
@@ -33,18 +39,18 @@ impl DiagramCanvas {
         }
     }
 
-    /// Scale a position by zoom factor
+    /// Scale a position by zoom factor and add screen offset
     #[inline]
     fn scale_pos(&self, x: f32, y: f32, zoom: f32) -> Pos2 {
-        Pos2::new(x * zoom, y * zoom)
+        Pos2::new(x * zoom + self.offset.x, y * zoom + self.offset.y)
     }
 
-    /// Scale a rect by zoom factor
+    /// Scale a rect by zoom factor and add screen offset
     #[inline]
     fn scale_rect(&self, rect: &jmt_core::geometry::Rect, zoom: f32) -> Rect {
         Rect::from_min_max(
-            Pos2::new(rect.x1 * zoom, rect.y1 * zoom),
-            Pos2::new(rect.x2 * zoom, rect.y2 * zoom),
+            Pos2::new(rect.x1 * zoom + self.offset.x, rect.y1 * zoom + self.offset.y),
+            Pos2::new(rect.x2 * zoom + self.offset.x, rect.y2 * zoom + self.offset.y),
         )
     }
 

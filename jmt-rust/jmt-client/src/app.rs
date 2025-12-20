@@ -1535,7 +1535,7 @@ impl eframe::App for JmtApp {
             self.cursor_pos = response.hover_pos();
 
             // Draw the diagram with zoom
-            if let Some(state) = self.current_diagram() {
+            if let Some(state) = self.current_diagram_mut() {
                 state.canvas.render_with_zoom(&state.diagram, &painter, response.rect, zoom);
             }
 
@@ -1553,13 +1553,19 @@ impl eframe::App for JmtApp {
                 }
             }
 
+            // Canvas origin in screen space (for coordinate transformation)
+            let canvas_origin = response.rect.min;
+
             // Handle mouse clicks with custom double-click detection (500ms window)
             // Double-click in add mode will add element AND switch back to arrow mode
             let ctrl_held = ui.input(|i| i.modifiers.ctrl);
             if response.clicked() {
                 if let Some(pos) = response.interact_pointer_pos() {
                     // Transform screen coordinates to diagram coordinates
-                    let diagram_pos = egui::Pos2::new(pos.x / zoom, pos.y / zoom);
+                    let diagram_pos = egui::Pos2::new(
+                        (pos.x - canvas_origin.x) / zoom,
+                        (pos.y - canvas_origin.y) / zoom
+                    );
                     let now = Instant::now();
 
                     // Check if this is a double-click (within time and distance threshold)
@@ -1596,7 +1602,10 @@ impl eframe::App for JmtApp {
             if response.drag_started() {
                 if let Some(pos) = response.interact_pointer_pos() {
                     // Transform screen coordinates to diagram coordinates
-                    let diagram_pos = egui::Pos2::new(pos.x / zoom, pos.y / zoom);
+                    let diagram_pos = egui::Pos2::new(
+                        (pos.x - canvas_origin.x) / zoom,
+                        (pos.y - canvas_origin.y) / zoom
+                    );
                     let point = Point::new(diagram_pos.x, diagram_pos.y);
                     let corner_margin = 10.0; // Size of corner hit area
 
@@ -1679,7 +1688,10 @@ impl eframe::App for JmtApp {
             if response.dragged() {
                 if let Some(pos) = response.interact_pointer_pos() {
                     // Transform screen coordinates to diagram coordinates
-                    let diagram_pos = egui::Pos2::new(pos.x / zoom, pos.y / zoom);
+                    let diagram_pos = egui::Pos2::new(
+                        (pos.x - canvas_origin.x) / zoom,
+                        (pos.y - canvas_origin.y) / zoom
+                    );
                     let delta = response.drag_delta();
                     // Scale delta to diagram space
                     let diagram_delta_x = delta.x / zoom;
@@ -1731,10 +1743,10 @@ impl eframe::App for JmtApp {
             // Draw selection rectangle if active (scale to screen space)
             if self.selection_rect.is_active() {
                 if let Some(rect) = self.selection_rect.to_egui_rect() {
-                    // Scale the rectangle to screen space
+                    // Scale the rectangle to screen space and add canvas offset
                     let screen_rect = egui::Rect::from_min_max(
-                        egui::Pos2::new(rect.min.x * zoom, rect.min.y * zoom),
-                        egui::Pos2::new(rect.max.x * zoom, rect.max.y * zoom),
+                        egui::Pos2::new(rect.min.x * zoom + canvas_origin.x, rect.min.y * zoom + canvas_origin.y),
+                        egui::Pos2::new(rect.max.x * zoom + canvas_origin.x, rect.max.y * zoom + canvas_origin.y),
                     );
                     // Draw selection rectangle with semi-transparent fill
                     painter.rect(
@@ -1748,9 +1760,9 @@ impl eframe::App for JmtApp {
 
             // Draw lasso path if active (scale to screen space)
             if self.lasso_points.len() > 1 {
-                // Scale lasso points to screen space
+                // Scale lasso points to screen space and add canvas offset
                 let screen_points: Vec<egui::Pos2> = self.lasso_points.iter()
-                    .map(|p| egui::Pos2::new(p.x * zoom, p.y * zoom))
+                    .map(|p| egui::Pos2::new(p.x * zoom + canvas_origin.x, p.y * zoom + canvas_origin.y))
                     .collect();
 
                 // Draw the lasso line
@@ -1783,8 +1795,8 @@ impl eframe::App for JmtApp {
                         // Complete marquee selection
                         if let Some(rect) = self.selection_rect.to_core_rect() {
                             if let Some(state) = self.current_diagram_mut() {
-                                state.diagram.select_nodes_in_rect(&rect);
-                                let count = state.diagram.selected_nodes().len();
+                                state.diagram.select_elements_in_rect(&rect);
+                                let count = state.diagram.selected_elements_in_order().len();
                                 if count > 0 {
                                     self.status_message = format!("Selected {} node(s)", count);
                                 } else {
