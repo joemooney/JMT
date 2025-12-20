@@ -355,6 +355,21 @@ impl Diagram {
         self.select_nodes(&ids);
     }
 
+    /// Toggle a node's selection (add if not selected, remove if selected)
+    pub fn toggle_node_selection(&mut self, id: NodeId) {
+        if let Some(node) = self.find_node_mut(id) {
+            let currently_selected = node.has_focus();
+            node.set_focus(!currently_selected);
+        }
+    }
+
+    /// Add a node to the current selection without clearing existing selection
+    pub fn add_to_selection(&mut self, id: NodeId) {
+        if let Some(node) = self.find_node_mut(id) {
+            node.set_focus(true);
+        }
+    }
+
     /// Select a single connection
     pub fn select_connection(&mut self, id: ConnectionId) {
         self.clear_selection();

@@ -191,7 +191,8 @@ impl JmtApp {
 
     /// Handle canvas click
     /// If `switch_to_arrow` is true, switch back to Arrow mode after adding element
-    fn handle_canvas_click(&mut self, pos: egui::Pos2, switch_to_arrow: bool) {
+    /// If `ctrl_held` is true, toggle selection instead of replacing it
+    fn handle_canvas_click(&mut self, pos: egui::Pos2, switch_to_arrow: bool, ctrl_held: bool) {
         let point = Point::new(pos.x, pos.y);
         let edit_mode = self.edit_mode;
         let pending_source = self.pending_connection_source;
@@ -207,14 +208,26 @@ impl JmtApp {
                     let name = state.diagram.find_node(node_id)
                         .map(|n| n.name().to_string())
                         .unwrap_or_default();
-                    state.diagram.select_node(node_id);
-                    self.status_message = format!("Selected: {}", name);
+
+                    if ctrl_held {
+                        // Ctrl+Click: Toggle selection
+                        state.diagram.toggle_node_selection(node_id);
+                        let selected_count = state.diagram.selected_nodes().len();
+                        self.status_message = format!("Selected {} nodes", selected_count);
+                    } else {
+                        // Regular click: Select only this node
+                        state.diagram.select_node(node_id);
+                        self.status_message = format!("Selected: {}", name);
+                    }
                 } else if let Some(conn_id) = state.diagram.find_connection_at(point, 10.0) {
                     state.diagram.select_connection(conn_id);
                     self.status_message = "Selected connection".to_string();
                 } else {
-                    state.diagram.clear_selection();
-                    self.status_message = "Ready".to_string();
+                    // Only clear selection if Ctrl is not held
+                    if !ctrl_held {
+                        state.diagram.clear_selection();
+                        self.status_message = "Ready".to_string();
+                    }
                 }
             }
             EditMode::AddState => {
@@ -867,9 +880,10 @@ impl eframe::App for JmtApp {
             // Handle mouse clicks
             // Double-click in add mode will add element AND switch back to arrow mode
             let is_double_click = response.double_clicked();
+            let ctrl_held = ui.input(|i| i.modifiers.ctrl);
             if response.clicked() || is_double_click {
                 if let Some(pos) = response.interact_pointer_pos() {
-                    self.handle_canvas_click(pos, is_double_click);
+                    self.handle_canvas_click(pos, is_double_click, ctrl_held);
                 }
             }
 
