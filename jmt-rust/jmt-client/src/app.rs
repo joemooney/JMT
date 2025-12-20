@@ -216,23 +216,45 @@ impl JmtApp {
             if let Some(state) = self.current_diagram_mut() {
                 let selected = state.diagram.selected_nodes_in_order();
                 if selected.len() >= 2 {
-                    // Connect nodes in sequence: 1->2, 2->3, 3->4, etc.
-                    state.diagram.push_undo();
-                    let mut connections_made = 0;
-                    for i in 0..selected.len() - 1 {
-                        let source = selected[i];
-                        let target = selected[i + 1];
-                        if state.diagram.add_connection(source, target).is_some() {
-                            connections_made += 1;
-                        }
+                    // Determine ordering: explicit (Ctrl+Click) or position-based (marquee)
+                    let use_selection_order = state.diagram.has_explicit_selection_order();
+
+                    // Get nodes with positions for sorting
+                    let mut nodes_with_pos: Vec<_> = selected.iter()
+                        .filter_map(|id| {
+                            state.diagram.find_node(*id).map(|n| {
+                                let center = n.bounds().center();
+                                (*id, center.x)
+                            })
+                        })
+                        .collect();
+
+                    // Sort by x position if marquee selection (not explicit order)
+                    if !use_selection_order {
+                        nodes_with_pos.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
                     }
-                    if connections_made > 0 {
-                        state.modified = true;
-                        self.status_message = format!("Created {} connection(s)", connections_made);
-                        // Stay in Arrow mode after auto-connecting
-                        self.edit_mode = EditMode::Arrow;
-                        self.pending_connection_source = None;
-                        return;
+
+                    let ordered_ids: Vec<_> = nodes_with_pos.iter().map(|(id, _)| *id).collect();
+
+                    if ordered_ids.len() >= 2 {
+                        // Connect nodes in sequence: 1->2, 2->3, 3->4, etc.
+                        state.diagram.push_undo();
+                        let mut connections_made = 0;
+                        for i in 0..ordered_ids.len() - 1 {
+                            let source = ordered_ids[i];
+                            let target = ordered_ids[i + 1];
+                            if state.diagram.add_connection(source, target).is_some() {
+                                connections_made += 1;
+                            }
+                        }
+                        if connections_made > 0 {
+                            state.modified = true;
+                            self.status_message = format!("Created {} connection(s)", connections_made);
+                            // Stay in Arrow mode after auto-connecting
+                            self.edit_mode = EditMode::Arrow;
+                            self.pending_connection_source = None;
+                            return;
+                        }
                     }
                 }
             }
