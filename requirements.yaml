@@ -87,7 +87,7 @@ requirements:
   status: Completed
   priority: Medium
   owner: joe
-  feature: Diagram Editing
+  feature: 8-Diagram Editing
   created_at: 2025-12-20T18:18:54.429505680Z
   modified_at: 2025-12-20T18:18:54.429505680Z
   req_type: Functional
@@ -98,9 +98,9 @@ requirements:
   status: Completed
   priority: High
   owner: joe
-  feature: Diagram Editing
-  created_at: 2025-12-20T20:00:00.000000000Z
-  modified_at: 2025-12-20T20:00:00.000000000Z
+  feature: 8-Diagram Editing
+  created_at: 2025-12-20T20:00:00Z
+  modified_at: 2025-12-20T20:00:00Z
   req_type: Functional
 - id: 3b9c5d6e-7f8a-9b0c-1d2e-3f4a5b6c7d8e
   spec_id: FR-010
@@ -109,9 +109,64 @@ requirements:
   status: Completed
   priority: Medium
   owner: joe
+  feature: 8-Diagram Editing
+  created_at: 2025-12-20T21:00:00Z
+  modified_at: 2025-12-20T21:00:00Z
+  req_type: Functional
+- id: 13115003-b8cc-4bb1-926d-faf7ec2e2dd6
+  spec_id: FR-011
+  title: Zoom controls with toolbar and Ctrl+MouseWheel
+  description: Add zoom in/out controls to toolbar (−, %, +) and support Ctrl+MouseWheel for zooming. Zoom range 25%-400% with proper coordinate transformation for mouse interactions.
+  status: Completed
+  priority: Medium
+  owner: joe
+  feature: 9-Diagram Editing
+  created_at: 2025-12-20T20:00:27.821284877Z
+  modified_at: 2025-12-20T20:00:27.821284877Z
+  req_type: Functional
+- id: c11f610c-1ffa-41a9-98e9-640b63ed81ad
+  spec_id: FR-012
+  title: Canvas scrollbars with visible styling
+  description: Add always-visible scrollbars to the diagram canvas. Scrollbars properly scroll the canvas view. Canvas background uses light gray (252) to distinguish from white scrollbars.
+  status: Completed
+  priority: Medium
+  owner: joe
+  feature: 10-User Interface
+  created_at: 2025-12-20T20:00:33.124515410Z
+  modified_at: 2025-12-20T20:00:33.124515410Z
+  req_type: Functional
+- id: b1f4700b-a4c4-4ad2-8998-4974a1287ff2
+  spec_id: FR-013
+  title: Connection slot ordering to minimize crossings
+  description: Order connection attachment slots on nodes based on the position of the connected node. Sort by x-coordinate for horizontal sides (Top/Bottom) and y-coordinate for vertical sides (Left/Right) to minimize line crossings.
+  status: Completed
+  priority: Medium
+  owner: joe
+  feature: 11-Diagram Editing
+  created_at: 2025-12-20T20:00:40.070801911Z
+  modified_at: 2025-12-20T20:00:40.070801911Z
+  req_type: Functional
+- id: 6f8a9986-8eef-47e4-a53d-4d1926c5eeca
+  spec_id: FR-014
+  title: Right-click exits add/connect mode
+  description: When in any add mode (Add State, Add Initial, etc.) or Connect mode, right-clicking exits back to Arrow mode and clears any pending connection source.
+  status: Completed
+  priority: Low
+  owner: joe
+  feature: 12-Diagram Editing
+  created_at: 2025-12-20T20:00:49.857399722Z
+  modified_at: 2025-12-20T20:00:49.857399722Z
+  req_type: Functional
+- id: f632490c-b588-479c-adaf-03539ba61166
+  spec_id: FR-015
+  title: Double-click timing with proper detection
+  description: Custom double-click detection with 500ms time window and 10px distance threshold. Previous single-click actions are not triggered when a double-click is detected.
+  status: Completed
+  priority: Low
+  owner: joe
   feature: Diagram Editing
-  created_at: 2025-12-20T21:00:00.000000000Z
-  modified_at: 2025-12-20T21:00:00.000000000Z
+  created_at: 2025-12-20T20:00:56.469114743Z
+  modified_at: 2025-12-20T20:00:56.469114743Z
   req_type: Functional
 id_config:
   format: SingleLevel
@@ -155,8 +210,8 @@ id_config:
     prefix: FOLDER
     description: Organizational folders
 features: []
-next_feature_number: 8
-next_spec_number: 11
+next_feature_number: 13
+next_spec_number: 16
 prefix_counters: {}
 relationship_definitions:
 - name: parent
