@@ -184,6 +184,34 @@ impl JmtApp {
 
     /// Set the edit mode
     pub fn set_edit_mode(&mut self, mode: EditMode) {
+        // Special handling: If switching to Connect mode with multiple nodes selected,
+        // connect them in sequence automatically
+        if mode == EditMode::Connect {
+            if let Some(state) = self.current_diagram_mut() {
+                let selected = state.diagram.selected_nodes_in_order();
+                if selected.len() >= 2 {
+                    // Connect nodes in sequence: 1->2, 2->3, 3->4, etc.
+                    state.diagram.push_undo();
+                    let mut connections_made = 0;
+                    for i in 0..selected.len() - 1 {
+                        let source = selected[i];
+                        let target = selected[i + 1];
+                        if state.diagram.add_connection(source, target).is_some() {
+                            connections_made += 1;
+                        }
+                    }
+                    if connections_made > 0 {
+                        state.modified = true;
+                        self.status_message = format!("Created {} connection(s)", connections_made);
+                        // Stay in Arrow mode after auto-connecting
+                        self.edit_mode = EditMode::Arrow;
+                        self.pending_connection_source = None;
+                        return;
+                    }
+                }
+            }
+        }
+
         self.edit_mode = mode;
         self.pending_connection_source = None;
         self.status_message = format!("Mode: {}", mode.display_name());

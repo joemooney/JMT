@@ -88,6 +88,9 @@ pub struct Diagram {
     /// Maximum undo levels
     #[serde(skip)]
     max_undo_levels: usize,
+    /// Selection order - tracks the order in which nodes were selected
+    #[serde(skip)]
+    selection_order: Vec<NodeId>,
 }
 
 impl Diagram {
@@ -128,6 +131,8 @@ impl Diagram {
             undo_stack: Vec::new(),
             redo_stack: Vec::new(),
             max_undo_levels: 50,
+            // Selection tracking
+            selection_order: Vec::new(),
         }
     }
 
@@ -329,6 +334,7 @@ impl Diagram {
         for conn in &mut self.connections {
             conn.selected = false;
         }
+        self.selection_order.clear();
     }
 
     /// Select a single node
@@ -336,15 +342,17 @@ impl Diagram {
         self.clear_selection();
         if let Some(node) = self.find_node_mut(id) {
             node.set_focus(true);
+            self.selection_order.push(id);
         }
     }
 
-    /// Select multiple nodes by their IDs
+    /// Select multiple nodes by their IDs (preserves order of ids slice)
     pub fn select_nodes(&mut self, ids: &[NodeId]) {
         self.clear_selection();
         for id in ids {
             if let Some(node) = self.find_node_mut(*id) {
                 node.set_focus(true);
+                self.selection_order.push(*id);
             }
         }
     }
@@ -359,14 +367,25 @@ impl Diagram {
     pub fn toggle_node_selection(&mut self, id: NodeId) {
         if let Some(node) = self.find_node_mut(id) {
             let currently_selected = node.has_focus();
-            node.set_focus(!currently_selected);
+            if currently_selected {
+                // Remove from selection
+                node.set_focus(false);
+                self.selection_order.retain(|&x| x != id);
+            } else {
+                // Add to selection (at end of order)
+                node.set_focus(true);
+                self.selection_order.push(id);
+            }
         }
     }
 
     /// Add a node to the current selection without clearing existing selection
     pub fn add_to_selection(&mut self, id: NodeId) {
         if let Some(node) = self.find_node_mut(id) {
-            node.set_focus(true);
+            if !node.has_focus() {
+                node.set_focus(true);
+                self.selection_order.push(id);
+            }
         }
     }
 
@@ -378,12 +397,22 @@ impl Diagram {
         }
     }
 
-    /// Get all selected node IDs
+    /// Get all selected node IDs (unordered)
     pub fn selected_nodes(&self) -> Vec<NodeId> {
         self.nodes
             .iter()
             .filter(|n| n.has_focus())
             .map(|n| n.id())
+            .collect()
+    }
+
+    /// Get selected node IDs in the order they were selected
+    pub fn selected_nodes_in_order(&self) -> Vec<NodeId> {
+        // Filter to only include nodes that are still selected (in case of desync)
+        self.selection_order
+            .iter()
+            .filter(|id| self.find_node(**id).map(|n| n.has_focus()).unwrap_or(false))
+            .copied()
             .collect()
     }
 
