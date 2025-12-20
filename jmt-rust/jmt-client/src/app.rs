@@ -363,12 +363,20 @@ impl eframe::App for JmtApp {
                         let point = Point::new(pos.x, pos.y);
 
                         // Check if we clicked on a node
-                        let clicked_on_node = self.current_diagram()
-                            .and_then(|state| state.diagram.find_node_at(point))
-                            .is_some();
+                        let clicked_node_id = self.current_diagram()
+                            .and_then(|state| state.diagram.find_node_at(point));
 
-                        if clicked_on_node {
-                            // We're dragging nodes
+                        if let Some(node_id) = clicked_node_id {
+                            // We're dragging a node - select it if not already selected
+                            if let Some(state) = self.current_diagram_mut() {
+                                let already_selected = state.diagram.selected_nodes().contains(&node_id);
+                                if !already_selected {
+                                    // Select this node (this allows click-and-drag in one motion)
+                                    state.diagram.select_node(node_id);
+                                }
+                                // Push undo before we start moving
+                                state.diagram.push_undo();
+                            }
                             self.dragging_nodes = true;
                             self.selection_rect.clear();
                         } else {
@@ -429,12 +437,7 @@ impl eframe::App for JmtApp {
             if response.drag_stopped() {
                 if self.edit_mode == EditMode::Arrow {
                     if self.dragging_nodes {
-                        // Push undo for node movement
-                        if let Some(state) = self.current_diagram_mut() {
-                            if !state.diagram.selected_nodes().is_empty() {
-                                state.diagram.push_undo();
-                            }
-                        }
+                        // Undo was already pushed at drag start, nothing to do here
                     } else {
                         // Complete marquee selection
                         if let Some(rect) = self.selection_rect.to_core_rect() {

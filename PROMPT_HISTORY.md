@@ -161,6 +161,26 @@ Add undo and redo buttons for undoing/redoing the last action.
 **Git Operations:**
 - Committed and pushed undo/redo buttons
 
+---
+
+## Session 3 (continued) - Click-and-Drag Fix (2025-12-19)
+
+### Prompt: Fix click-and-drag behavior
+
+**User Request:**
+Clicking and dragging should immediately drag the element, not require click-release-drag.
+
+**Actions Taken:**
+1. Modified drag_started handler to select the node under cursor if not already selected
+2. Push undo at drag start (before movement) instead of drag end
+3. Now click-and-drag works in a single motion
+
+**Files Modified:**
+- `jmt-client/src/app.rs` - Fixed drag handling to select on drag start
+
+**Git Operations:**
+- Committed and pushed click-and-drag fix
+
 **Next Steps (Future Sessions):**
 - Phase 2: Improve state rendering (corner rounding, activities display)
 - Phase 3: Node resize from corners
