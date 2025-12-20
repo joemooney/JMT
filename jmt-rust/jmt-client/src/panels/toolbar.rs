@@ -624,6 +624,8 @@ impl Toolbar {
     }
 
     fn align_nodes(app: &mut JmtApp, mode: AlignMode) {
+        const MIN_SEPARATION: f32 = 20.0; // Minimum gap between nodes
+
         if let Some(state) = app.current_diagram_mut() {
             let selected_ids = state.diagram.selected_nodes();
             if selected_ids.len() < 2 {
@@ -661,7 +663,7 @@ impl Toolbar {
             };
 
             // Apply alignment
-            for id in selected_ids {
+            for id in selected_ids.clone() {
                 if let Some(node) = state.diagram.find_node_mut(id) {
                     let bounds = node.bounds();
                     let offset = match mode {
@@ -684,12 +686,75 @@ impl Toolbar {
                 }
             }
 
+            // Prevent overlapping: spread nodes along the perpendicular axis
+            // For horizontal alignment (Left/Right/CenterH), spread vertically
+            // For vertical alignment (Top/Bottom/CenterV), spread horizontally
+            let is_horizontal_align = matches!(mode, AlignMode::Left | AlignMode::Right | AlignMode::CenterH);
+
+            // Collect updated positions with node IDs
+            let mut nodes_with_bounds: Vec<_> = selected_ids.iter()
+                .filter_map(|id| {
+                    state.diagram.find_node(*id).map(|n| (*id, n.bounds().clone()))
+                })
+                .collect();
+
+            if nodes_with_bounds.len() < 2 {
+                state.diagram.recalculate_connections();
+                state.modified = true;
+                return;
+            }
+
+            // Sort by position along the perpendicular axis
+            if is_horizontal_align {
+                // Sort by Y (top to bottom)
+                nodes_with_bounds.sort_by(|a, b| a.1.y1.partial_cmp(&b.1.y1).unwrap());
+            } else {
+                // Sort by X (left to right)
+                nodes_with_bounds.sort_by(|a, b| a.1.x1.partial_cmp(&b.1.x1).unwrap());
+            }
+
+            // Check for overlaps and spread if needed
+            for i in 1..nodes_with_bounds.len() {
+                let (_prev_id, prev_bounds) = nodes_with_bounds[i - 1].clone();
+                let (curr_id, curr_bounds) = nodes_with_bounds[i].clone();
+
+                if is_horizontal_align {
+                    // Check vertical overlap
+                    let min_y = prev_bounds.y2 + MIN_SEPARATION;
+                    if curr_bounds.y1 < min_y {
+                        // Need to push this node down
+                        let offset = min_y - curr_bounds.y1;
+                        if let Some(node) = state.diagram.find_node_mut(curr_id) {
+                            node.translate(0.0, offset);
+                        }
+                        // Update the bounds in our list for subsequent comparisons
+                        nodes_with_bounds[i].1.y1 += offset;
+                        nodes_with_bounds[i].1.y2 += offset;
+                    }
+                } else {
+                    // Check horizontal overlap
+                    let min_x = prev_bounds.x2 + MIN_SEPARATION;
+                    if curr_bounds.x1 < min_x {
+                        // Need to push this node right
+                        let offset = min_x - curr_bounds.x1;
+                        if let Some(node) = state.diagram.find_node_mut(curr_id) {
+                            node.translate(offset, 0.0);
+                        }
+                        // Update the bounds in our list for subsequent comparisons
+                        nodes_with_bounds[i].1.x1 += offset;
+                        nodes_with_bounds[i].1.x2 += offset;
+                    }
+                }
+            }
+
             state.diagram.recalculate_connections();
             state.modified = true;
         }
     }
 
     fn distribute_nodes(app: &mut JmtApp, mode: DistributeMode) {
+        const MIN_SEPARATION: f32 = 20.0; // Minimum gap between nodes
+
         if let Some(state) = app.current_diagram_mut() {
             let selected_ids = state.diagram.selected_nodes();
             if selected_ids.len() < 3 {
@@ -698,32 +763,53 @@ impl Toolbar {
 
             state.diagram.push_undo();
 
-            // Collect node IDs with their center positions
-            let mut nodes_with_pos: Vec<_> = selected_ids.iter()
+            // Collect node IDs with their bounds and center positions
+            let mut nodes_with_info: Vec<_> = selected_ids.iter()
                 .filter_map(|id| {
                     state.diagram.find_node(*id).map(|n| {
-                        let center = n.bounds().center();
-                        (*id, center.x, center.y)
+                        let bounds = n.bounds().clone();
+                        let center = bounds.center();
+                        (*id, bounds, center.x, center.y)
                     })
                 })
                 .collect();
 
-            if nodes_with_pos.len() < 3 {
+            if nodes_with_info.len() < 3 {
                 return;
             }
 
             match mode {
                 DistributeMode::Horizontal => {
                     // Sort by x position
-                    nodes_with_pos.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+                    nodes_with_info.sort_by(|a, b| a.2.partial_cmp(&b.2).unwrap());
 
-                    let first_x = nodes_with_pos.first().unwrap().1;
-                    let last_x = nodes_with_pos.last().unwrap().1;
-                    let count = nodes_with_pos.len();
-                    let spacing = (last_x - first_x) / (count - 1) as f32;
+                    // Calculate the minimum required spacing based on node widths
+                    let total_node_width: f32 = nodes_with_info.iter()
+                        .map(|(_, b, _, _)| b.width())
+                        .sum();
+                    let total_min_gaps = MIN_SEPARATION * (nodes_with_info.len() - 1) as f32;
 
-                    for (i, (id, current_x, _)) in nodes_with_pos.iter().enumerate() {
-                        let target_x = first_x + spacing * i as f32;
+                    let first_center = nodes_with_info.first().unwrap().2;
+                    let last_center = nodes_with_info.last().unwrap().2;
+                    let available_space = last_center - first_center;
+
+                    // If nodes would overlap, expand the distribution range
+                    let min_required_space = total_node_width + total_min_gaps
+                        - nodes_with_info.first().unwrap().1.width() / 2.0
+                        - nodes_with_info.last().unwrap().1.width() / 2.0;
+
+                    let (actual_first, actual_last) = if available_space < min_required_space {
+                        // Need to expand - keep first node, adjust last
+                        (first_center, first_center + min_required_space)
+                    } else {
+                        (first_center, last_center)
+                    };
+
+                    let count = nodes_with_info.len();
+                    let spacing = (actual_last - actual_first) / (count - 1) as f32;
+
+                    for (i, (id, _, current_x, _)) in nodes_with_info.iter().enumerate() {
+                        let target_x = actual_first + spacing * i as f32;
                         let offset = target_x - current_x;
                         if let Some(node) = state.diagram.find_node_mut(*id) {
                             node.translate(offset, 0.0);
@@ -732,15 +818,35 @@ impl Toolbar {
                 }
                 DistributeMode::Vertical => {
                     // Sort by y position
-                    nodes_with_pos.sort_by(|a, b| a.2.partial_cmp(&b.2).unwrap());
+                    nodes_with_info.sort_by(|a, b| a.3.partial_cmp(&b.3).unwrap());
 
-                    let first_y = nodes_with_pos.first().unwrap().2;
-                    let last_y = nodes_with_pos.last().unwrap().2;
-                    let count = nodes_with_pos.len();
-                    let spacing = (last_y - first_y) / (count - 1) as f32;
+                    // Calculate the minimum required spacing based on node heights
+                    let total_node_height: f32 = nodes_with_info.iter()
+                        .map(|(_, b, _, _)| b.height())
+                        .sum();
+                    let total_min_gaps = MIN_SEPARATION * (nodes_with_info.len() - 1) as f32;
 
-                    for (i, (id, _, current_y)) in nodes_with_pos.iter().enumerate() {
-                        let target_y = first_y + spacing * i as f32;
+                    let first_center = nodes_with_info.first().unwrap().3;
+                    let last_center = nodes_with_info.last().unwrap().3;
+                    let available_space = last_center - first_center;
+
+                    // If nodes would overlap, expand the distribution range
+                    let min_required_space = total_node_height + total_min_gaps
+                        - nodes_with_info.first().unwrap().1.height() / 2.0
+                        - nodes_with_info.last().unwrap().1.height() / 2.0;
+
+                    let (actual_first, actual_last) = if available_space < min_required_space {
+                        // Need to expand - keep first node, adjust last
+                        (first_center, first_center + min_required_space)
+                    } else {
+                        (first_center, last_center)
+                    };
+
+                    let count = nodes_with_info.len();
+                    let spacing = (actual_last - actual_first) / (count - 1) as f32;
+
+                    for (i, (id, _, _, current_y)) in nodes_with_info.iter().enumerate() {
+                        let target_y = actual_first + spacing * i as f32;
                         let offset = target_y - current_y;
                         if let Some(node) = state.diagram.find_node_mut(*id) {
                             node.translate(0.0, offset);
