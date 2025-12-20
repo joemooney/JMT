@@ -729,14 +729,15 @@ impl Diagram {
     }
 
     /// Calculate slot offsets for all connections to prevent overlap
-    /// Uses a distance-based heuristic: sort connections by the position of the other node
-    /// along the connection side to minimize total connection length and crossings.
+    /// Prioritizes aligned connections (where nodes are vertically/horizontally aligned)
+    /// to get the center slot for straight lines. Non-aligned connections are distributed around.
     fn recalculate_connection_slots(&mut self) {
         use crate::node::Side;
 
         const SLOT_SPACING: f32 = 15.0;
+        const ALIGNMENT_TOLERANCE: f32 = 20.0; // How close centers need to be considered "aligned"
 
-        // Collect node centers for sorting
+        // Collect node centers for sorting and alignment checks
         let node_centers: std::collections::HashMap<NodeId, (f32, f32)> = self.nodes
             .iter()
             .map(|n| (n.id(), (n.bounds().center().x, n.bounds().center().y)))
@@ -747,83 +748,149 @@ impl Diagram {
 
         // For each node, calculate offsets for connections on each side
         for node_id in node_ids {
+            let this_center = match node_centers.get(&node_id) {
+                Some(c) => *c,
+                None => continue,
+            };
+
             for side in [Side::Top, Side::Bottom, Side::Left, Side::Right] {
-                // Collect all connections on this node/side with their "other node" position
-                // For source connections, other node is target; for target connections, other node is source
-                let mut source_conns: Vec<(usize, f32)> = self.connections
-                    .iter()
-                    .enumerate()
-                    .filter(|(_, c)| c.source_id == node_id && c.source_side == side)
-                    .map(|(i, c)| {
-                        // Get position of target node
-                        let pos = node_centers.get(&c.target_id)
-                            .map(|&(x, y)| match side {
-                                Side::Top | Side::Bottom => x,  // Sort by x for horizontal sides
-                                Side::Left | Side::Right => y,  // Sort by y for vertical sides
-                                Side::None => 0.0,
-                            })
-                            .unwrap_or(0.0);
-                        (i, pos)
-                    })
-                    .collect();
+                // Collect all connections on this node/side with position and alignment info
+                // (index, other_node_position, is_source, is_aligned)
+                let mut all_conns: Vec<(usize, f32, bool, bool)> = Vec::new();
 
-                let mut target_conns: Vec<(usize, f32)> = self.connections
-                    .iter()
-                    .enumerate()
-                    .filter(|(_, c)| c.target_id == node_id && c.target_side == side)
-                    .map(|(i, c)| {
-                        // Get position of source node
-                        let pos = node_centers.get(&c.source_id)
-                            .map(|&(x, y)| match side {
-                                Side::Top | Side::Bottom => x,  // Sort by x for horizontal sides
-                                Side::Left | Side::Right => y,  // Sort by y for vertical sides
-                                Side::None => 0.0,
-                            })
-                            .unwrap_or(0.0);
-                        (i, pos)
-                    })
-                    .collect();
+                // Source connections (this node is source)
+                for (i, c) in self.connections.iter().enumerate() {
+                    if c.source_id == node_id && c.source_side == side {
+                        if let Some(&(other_x, other_y)) = node_centers.get(&c.target_id) {
+                            let (pos, is_aligned) = match side {
+                                Side::Top | Side::Bottom => {
+                                    // For top/bottom sides, check if x-centers are aligned
+                                    let is_aligned = (other_x - this_center.0).abs() < ALIGNMENT_TOLERANCE;
+                                    (other_x, is_aligned)
+                                }
+                                Side::Left | Side::Right => {
+                                    // For left/right sides, check if y-centers are aligned
+                                    let is_aligned = (other_y - this_center.1).abs() < ALIGNMENT_TOLERANCE;
+                                    (other_y, is_aligned)
+                                }
+                                Side::None => (0.0, false),
+                            };
+                            all_conns.push((i, pos, true, is_aligned));
+                        }
+                    }
+                }
 
-                // Sort by position to minimize crossings
-                source_conns.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
-                target_conns.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+                // Target connections (this node is target)
+                for (i, c) in self.connections.iter().enumerate() {
+                    if c.target_id == node_id && c.target_side == side {
+                        if let Some(&(other_x, other_y)) = node_centers.get(&c.source_id) {
+                            let (pos, is_aligned) = match side {
+                                Side::Top | Side::Bottom => {
+                                    let is_aligned = (other_x - this_center.0).abs() < ALIGNMENT_TOLERANCE;
+                                    (other_x, is_aligned)
+                                }
+                                Side::Left | Side::Right => {
+                                    let is_aligned = (other_y - this_center.1).abs() < ALIGNMENT_TOLERANCE;
+                                    (other_y, is_aligned)
+                                }
+                                Side::None => (0.0, false),
+                            };
+                            all_conns.push((i, pos, false, is_aligned));
+                        }
+                    }
+                }
 
-                let num_source = source_conns.len();
-                let num_target = target_conns.len();
-                let total = num_source + num_target;
-
+                let total = all_conns.len();
                 if total == 0 {
                     continue;
                 }
 
-                // Interleave source and target connections based on their sorted positions
-                // This minimizes crossings when connections come from/go to different directions
-                let mut all_conns: Vec<(usize, f32, bool)> = Vec::new(); // (index, position, is_source)
-                for (idx, pos) in source_conns {
-                    all_conns.push((idx, pos, true));
+                // Separate aligned and non-aligned connections
+                let mut aligned: Vec<_> = all_conns.iter().filter(|(_, _, _, a)| *a).cloned().collect();
+                let mut non_aligned: Vec<_> = all_conns.iter().filter(|(_, _, _, a)| !*a).cloned().collect();
+
+                // Sort non-aligned by position
+                non_aligned.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+
+                let num_aligned = aligned.len();
+                let num_non_aligned = non_aligned.len();
+
+                // Assign slots: aligned get center, non-aligned distributed around
+                if num_aligned > 0 {
+                    // Distribute aligned connections in center region
+                    let aligned_width = (num_aligned as f32 - 1.0) * SLOT_SPACING;
+                    let aligned_start = -aligned_width / 2.0;
+
+                    // Sort aligned by position too for consistency
+                    aligned.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+
+                    for (slot, (idx, _, is_source, _)) in aligned.iter().enumerate() {
+                        let offset = if num_aligned == 1 {
+                            0.0
+                        } else {
+                            aligned_start + (slot as f32) * SLOT_SPACING
+                        };
+
+                        if *is_source {
+                            self.connections[*idx].source_offset = offset;
+                        } else {
+                            self.connections[*idx].target_offset = offset;
+                        }
+                    }
                 }
-                for (idx, pos) in target_conns {
-                    all_conns.push((idx, pos, false));
-                }
 
-                // Sort all connections by their other-node position
-                all_conns.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
-
-                // Assign slots centered around 0
-                let group_width = (total as f32 - 1.0) * SLOT_SPACING;
-                let start_offset = -group_width / 2.0;
-
-                for (slot, (idx, _, is_source)) in all_conns.iter().enumerate() {
-                    let offset = if total == 1 {
-                        0.0
+                // Distribute non-aligned around the aligned ones
+                if num_non_aligned > 0 {
+                    // Calculate the edge of the aligned region
+                    let aligned_edge = if num_aligned > 0 {
+                        ((num_aligned as f32 - 1.0) * SLOT_SPACING) / 2.0 + SLOT_SPACING
                     } else {
-                        start_offset + (slot as f32) * SLOT_SPACING
+                        // No aligned connections - center the non-aligned ones
+                        let width = (num_non_aligned as f32 - 1.0) * SLOT_SPACING;
+                        let start = -width / 2.0;
+                        for (slot, (idx, _, is_source, _)) in non_aligned.iter().enumerate() {
+                            let offset = if num_non_aligned == 1 {
+                                0.0
+                            } else {
+                                start + (slot as f32) * SLOT_SPACING
+                            };
+                            if *is_source {
+                                self.connections[*idx].source_offset = offset;
+                            } else {
+                                self.connections[*idx].target_offset = offset;
+                            }
+                        }
+                        continue;
                     };
 
-                    if *is_source {
-                        self.connections[*idx].source_offset = offset;
-                    } else {
-                        self.connections[*idx].target_offset = offset;
+                    // Split non-aligned: those with position < center go left, others go right
+                    let center_ref = match side {
+                        Side::Top | Side::Bottom => this_center.0,
+                        Side::Left | Side::Right => this_center.1,
+                        Side::None => 0.0,
+                    };
+
+                    let left: Vec<_> = non_aligned.iter().filter(|(_, pos, _, _)| *pos < center_ref).cloned().collect();
+                    let right: Vec<_> = non_aligned.iter().filter(|(_, pos, _, _)| *pos >= center_ref).cloned().collect();
+
+                    // Assign left connections (negative offsets, going outward from aligned)
+                    for (i, (idx, _, is_source, _)) in left.iter().rev().enumerate() {
+                        let offset = -aligned_edge - (i as f32) * SLOT_SPACING;
+                        if *is_source {
+                            self.connections[*idx].source_offset = offset;
+                        } else {
+                            self.connections[*idx].target_offset = offset;
+                        }
+                    }
+
+                    // Assign right connections (positive offsets, going outward from aligned)
+                    for (i, (idx, _, is_source, _)) in right.iter().enumerate() {
+                        let offset = aligned_edge + (i as f32) * SLOT_SPACING;
+                        if *is_source {
+                            self.connections[*idx].source_offset = offset;
+                        } else {
+                            self.connections[*idx].target_offset = offset;
+                        }
                     }
                 }
             }
