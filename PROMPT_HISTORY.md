@@ -598,3 +598,196 @@ Continue development with the next planned phase: adding the ability to resize n
 
 **Git Operations:**
 - Committed and pushed node centering fix
+
+---
+
+## Session 4 (continued) - Alignment Label Rename (2025-12-20)
+
+### Prompt: Rename align buttons for clarity
+
+**User Request:**
+"Instead of 'Align Center' rename that to 'Align Vertically' and instead of 'Align Middle' rename that to 'Align Horizontally'"
+
+**Actions Taken:**
+1. Renamed "Align Center" → "Align Vertically" (aligns nodes on vertical axis)
+2. Renamed "Align Middle" → "Align Horizontally" (aligns nodes on horizontal axis)
+
+**Files Modified:**
+- `jmt-client/src/panels/toolbar.rs` - Updated alignment label text
+
+**Git Operations:**
+- Committed and pushed label rename
+
+---
+
+## Session 4 (continued) - Theme-Aware Toolbar Icons (2025-12-20)
+
+### Prompt: Make icons visible in dark mode
+
+**User Request:**
+"In the theme we have the node icons are difficult to see black on dark grey"
+
+**Actions Taken:**
+1. Modified `icon_tool_button()` to pass theme-aware `stroke_color` to all icon drawing closures
+2. Detects `ui.visuals().dark_mode` to determine theme
+3. Uses light strokes (rgb 220,220,220) on dark backgrounds in dark mode
+4. Uses black strokes on light backgrounds in light mode
+5. Updated all icon drawing closures in all diagram type tools
+
+**Files Modified:**
+- `jmt-client/src/panels/toolbar.rs` - Theme-aware icon colors
+
+**Git Operations:**
+- Committed and pushed theme-aware icons
+
+---
+
+## Session 4 (continued) - Minimum Separation on Align/Distribute (2025-12-20)
+
+### Prompt: Prevent node overlap during alignment
+
+**User Request:**
+"Using Align we should have a heuristic that nodes are never positioned on top of one another (unless they already were) and there is a minimum separation or connection length."
+
+**Actions Taken:**
+1. Added `MIN_SEPARATION` constant (20px) in toolbar.rs
+2. Modified `align_nodes()`:
+   - After alignment, checks for overlapping nodes
+   - Spreads nodes along perpendicular axis if they would overlap
+   - Maintains minimum 20px separation
+3. Modified `distribute_nodes()`:
+   - Expands the distribution range if needed to maintain minimum separation
+   - Ensures even spacing with at least 20px between adjacent nodes
+
+**Files Modified:**
+- `jmt-client/src/panels/toolbar.rs` - Overlap prevention logic
+
+**Git Operations:**
+- Committed and pushed minimum separation feature
+
+---
+
+## Session 4 (continued) - Ctrl+Click Toggle Selection (2025-12-20)
+
+### Prompt: Add Ctrl+Click for multi-select
+
+**User Request:**
+"Ctrl+LeftMouseClick should add to list of selected nodes, currently it becomes the only selected node which is the behaviour of single click"
+
+**Actions Taken:**
+1. Added `toggle_node_selection()` method to Diagram
+2. Added `add_to_selection()` method to Diagram
+3. Added `selection_order: Vec<NodeId>` field to Diagram to track selection order
+4. Modified `handle_canvas_click()` to accept `ctrl_held` parameter
+5. In Arrow mode with Ctrl held:
+   - Clicking on a node toggles its selection
+   - Clicking on empty canvas preserves current selection
+6. Updated all selection methods to maintain `selection_order`
+
+**Files Modified:**
+- `jmt-core/src/diagram.rs` - Selection order tracking and toggle methods
+- `jmt-client/src/app.rs` - Ctrl key detection and toggle selection
+
+**Git Operations:**
+- Committed and pushed Ctrl+Click toggle selection
+
+---
+
+## Session 4 (continued) - Connect Selected Nodes in Sequence (2025-12-20)
+
+### Prompt: Auto-connect multi-selected nodes
+
+**User Request:**
+"If I multi-select and then click connect, then the selected nodes will be connected to each other in order of selection in a sequence."
+
+**Actions Taken:**
+1. Added `selected_nodes_in_order()` method to Diagram
+2. Modified `set_edit_mode()` in app.rs:
+   - When switching to Connect mode with 2+ nodes selected
+   - Automatically creates connections between them in sequence (1→2, 2→3, 3→4, etc.)
+   - Returns to Arrow mode after auto-connecting
+3. Selection order is preserved so Ctrl+Click order determines connection sequence
+
+**Files Modified:**
+- `jmt-core/src/diagram.rs` - Added selected_nodes_in_order()
+- `jmt-client/src/app.rs` - Auto-connect logic in set_edit_mode()
+
+**Git Operations:**
+- Committed and pushed auto-connect feature
+
+---
+
+## Session 4 (continued) - Fix Double-Click Adding Two Nodes (2025-12-20)
+
+### Prompt: Fix double-click bug
+
+**User Request:**
+"Double click to add and switch back to arrow mode, is adding two nodes instead of one"
+
+**Actions Taken:**
+1. Found issue: Both `clicked()` and `double_clicked()` return true on double-click
+2. Fixed by checking: `is_single_click = response.clicked() && !is_double_click`
+3. Now double-click only triggers the double-click handler, not both
+
+**Files Modified:**
+- `jmt-client/src/app.rs` - Fixed click detection logic
+
+**Git Operations:**
+- Committed and pushed double-click fix
+
+---
+
+## Session 5 - Unified Element Selection (2025-12-20)
+
+### Prompt: Enable selection in all diagram types
+
+**User Request:**
+"The nodes in the diagrams other than state machine cannot be selected with a mouse click. We should add that ability"
+
+**Actions Taken:**
+1. Added missing `find_*_at()` methods to Diagram:
+   - `find_system_boundary_at(pos)` - finds system boundaries at position
+   - `find_swimlane_at(pos)` - finds swimlanes at position
+   - `find_object_node_at(pos)` - finds object nodes at position
+
+2. Added unified element methods to Diagram:
+   - `find_element_at(pos)` - finds any element based on diagram type
+   - `select_element(id)` - selects any element by UUID
+   - `toggle_element_selection(id)` - toggles any element's selection
+   - `translate_element(id, dx, dy)` - moves any element by offset
+   - `selected_elements_in_order()` - returns selected element IDs in order
+   - `get_element_name(id)` - gets element name by ID
+
+3. Updated `clear_selection()` to clear all element types:
+   - State machine: nodes, connections
+   - Sequence: lifelines
+   - Use case: actors, use cases, system boundaries
+   - Activity: actions, swimlanes, object nodes
+
+4. Updated Arrow mode click handler in app.rs:
+   - Uses `find_element_at()` instead of `find_node_at()`
+   - Uses `select_element()` instead of `select_node()`
+   - Uses `toggle_element_selection()` for Ctrl+Click
+
+5. Updated drag handling in app.rs:
+   - Uses `find_element_at()` to detect element under cursor
+   - Uses `translate_element()` for dragging any element type
+   - Uses `selected_elements_in_order()` for multi-element drag
+
+**Files Modified:**
+- `jmt-core/src/diagram.rs` - All unified element methods and find methods
+- `jmt-client/src/app.rs` - Unified click and drag handling
+
+**Features Implemented:**
+- Click to select any element in any diagram type
+- Ctrl+Click to toggle selection works for all elements
+- Drag to move works for all element types
+- Multi-select and drag works for all elements
+
+**Build Status:**
+- Successfully compiles with `cargo build`
+
+**Git Operations:**
+- To be committed
+
+---

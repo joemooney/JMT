@@ -231,20 +231,19 @@ impl JmtApp {
 
         match edit_mode {
             EditMode::Arrow => {
-                // Try to select a node or connection
-                if let Some(node_id) = state.diagram.find_node_at(point) {
-                    let name = state.diagram.find_node(node_id)
-                        .map(|n| n.name().to_string())
+                // Try to select any element (node, lifeline, actor, use case, action, etc.)
+                if let Some(element_id) = state.diagram.find_element_at(point) {
+                    let name = state.diagram.get_element_name(element_id)
                         .unwrap_or_default();
 
                     if ctrl_held {
                         // Ctrl+Click: Toggle selection
-                        state.diagram.toggle_node_selection(node_id);
+                        state.diagram.toggle_element_selection(element_id);
                         let selected_count = state.diagram.selected_nodes().len();
-                        self.status_message = format!("Selected {} nodes", selected_count);
+                        self.status_message = format!("Selected {} element(s)", selected_count);
                     } else {
-                        // Regular click: Select only this node
-                        state.diagram.select_node(node_id);
+                        // Regular click: Select only this element
+                        state.diagram.select_element(element_id);
                         self.status_message = format!("Selected: {}", name);
                     }
                 } else if let Some(conn_id) = state.diagram.find_connection_at(point, 10.0) {
@@ -952,22 +951,22 @@ impl eframe::App for JmtApp {
                         self.selection_rect.clear();
                         self.status_message = "Resizing...".to_string();
                     } else {
-                        // Check if we clicked on a node (for dragging)
-                        let clicked_node_id = self.current_diagram()
-                            .and_then(|state| state.diagram.find_node_at(point));
+                        // Check if we clicked on any element (for dragging)
+                        let clicked_element_id = self.current_diagram()
+                            .and_then(|state| state.diagram.find_element_at(point));
 
-                        if let Some(node_id) = clicked_node_id {
-                            // Dragging on a node - switch to Arrow mode and start dragging
+                        if let Some(element_id) = clicked_element_id {
+                            // Dragging on an element - switch to Arrow mode and start dragging
                             if self.edit_mode != EditMode::Arrow {
                                 self.set_edit_mode(EditMode::Arrow);
                             }
 
-                            // Select the node if not already selected
+                            // Select the element if not already selected
                             if let Some(state) = self.current_diagram_mut() {
-                                let already_selected = state.diagram.selected_nodes().contains(&node_id);
+                                let already_selected = state.diagram.selected_elements_in_order().contains(&element_id);
                                 if !already_selected {
-                                    // Select this node (this allows click-and-drag in one motion)
-                                    state.diagram.select_node(node_id);
+                                    // Select this element (this allows click-and-drag in one motion)
+                                    state.diagram.select_element(element_id);
                                 }
                                 // Push undo before we start moving
                                 state.diagram.push_undo();
@@ -1009,14 +1008,12 @@ impl eframe::App for JmtApp {
                         }
                     } else if self.edit_mode == EditMode::Arrow {
                         if self.dragging_nodes {
-                            // Move selected nodes
+                            // Move selected elements (nodes, lifelines, actors, etc.)
                             if let Some(state) = self.current_diagram_mut() {
-                                let selected = state.diagram.selected_nodes();
+                                let selected = state.diagram.selected_elements_in_order();
                                 if !selected.is_empty() {
                                     for id in selected {
-                                        if let Some(node) = state.diagram.find_node_mut(id) {
-                                            node.translate(delta.x, delta.y);
-                                        }
+                                        state.diagram.translate_element(id, delta.x, delta.y);
                                     }
                                     state.diagram.recalculate_connections();
                                     state.modified = true;

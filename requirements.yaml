@@ -91,6 +91,17 @@ requirements:
   created_at: 2025-12-20T18:18:54.429505680Z
   modified_at: 2025-12-20T18:18:54.429505680Z
   req_type: Functional
+- id: 2a8b4c5d-6e7f-8a9b-0c1d-2e3f4a5b6c7d
+  spec_id: FR-009
+  title: Unified element selection across all diagram types
+  description: Elements in all diagram types (State Machine, Sequence, Use Case, Activity) can be selected and dragged with mouse click. Includes lifelines, actors, use cases, system boundaries, actions, swimlanes, and object nodes. Ctrl+Click works for multi-select across all types.
+  status: Completed
+  priority: High
+  owner: joe
+  feature: Diagram Editing
+  created_at: 2025-12-20T20:00:00.000000000Z
+  modified_at: 2025-12-20T20:00:00.000000000Z
+  req_type: Functional
 id_config:
   format: SingleLevel
   numbering: Global
@@ -134,7 +145,7 @@ id_config:
     description: Organizational folders
 features: []
 next_feature_number: 8
-next_spec_number: 9
+next_spec_number: 10
 prefix_counters: {}
 relationship_definitions:
 - name: parent

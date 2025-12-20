@@ -209,6 +209,279 @@ impl Diagram {
             .collect()
     }
 
+    /// Find any selectable element at the given position based on diagram type
+    /// Returns the element ID if found
+    pub fn find_element_at(&self, pos: Point) -> Option<Uuid> {
+        match self.diagram_type {
+            DiagramType::StateMachine => {
+                self.find_node_at(pos)
+            }
+            DiagramType::Sequence => {
+                // Check lifelines
+                if let Some(id) = self.find_lifeline_at(pos) {
+                    return Some(id);
+                }
+                // TODO: Check fragments, activations
+                None
+            }
+            DiagramType::UseCase => {
+                // Check actors
+                if let Some(id) = self.find_actor_at(pos) {
+                    return Some(id);
+                }
+                // Check use cases
+                if let Some(id) = self.find_use_case_at(pos) {
+                    return Some(id);
+                }
+                // Check system boundaries
+                if let Some(id) = self.find_system_boundary_at(pos) {
+                    return Some(id);
+                }
+                None
+            }
+            DiagramType::Activity => {
+                // Check actions
+                if let Some(id) = self.find_action_at(pos) {
+                    return Some(id);
+                }
+                // Check swimlanes
+                if let Some(id) = self.find_swimlane_at(pos) {
+                    return Some(id);
+                }
+                // Check object nodes
+                if let Some(id) = self.find_object_node_at(pos) {
+                    return Some(id);
+                }
+                None
+            }
+        }
+    }
+
+    /// Select any element by ID (works across all diagram types)
+    pub fn select_element(&mut self, id: Uuid) {
+        self.clear_selection();
+
+        // Try state machine nodes
+        if let Some(node) = self.find_node_mut(id) {
+            node.set_focus(true);
+            self.selection_order.push(id);
+            return;
+        }
+
+        // Try sequence elements
+        if let Some(lifeline) = self.lifelines.iter_mut().find(|l| l.id == id) {
+            lifeline.has_focus = true;
+            self.selection_order.push(id);
+            return;
+        }
+
+        // Try use case elements
+        if let Some(actor) = self.actors.iter_mut().find(|a| a.id == id) {
+            actor.has_focus = true;
+            self.selection_order.push(id);
+            return;
+        }
+        if let Some(uc) = self.use_cases.iter_mut().find(|u| u.id == id) {
+            uc.has_focus = true;
+            self.selection_order.push(id);
+            return;
+        }
+        if let Some(sb) = self.system_boundaries.iter_mut().find(|s| s.id == id) {
+            sb.has_focus = true;
+            self.selection_order.push(id);
+            return;
+        }
+
+        // Try activity elements
+        if let Some(action) = self.actions.iter_mut().find(|a| a.id == id) {
+            action.has_focus = true;
+            self.selection_order.push(id);
+            return;
+        }
+        if let Some(swimlane) = self.swimlanes.iter_mut().find(|s| s.id == id) {
+            swimlane.has_focus = true;
+            self.selection_order.push(id);
+            return;
+        }
+        if let Some(obj) = self.object_nodes.iter_mut().find(|o| o.id == id) {
+            obj.has_focus = true;
+            self.selection_order.push(id);
+            return;
+        }
+    }
+
+    /// Toggle element selection by ID (works across all diagram types)
+    pub fn toggle_element_selection(&mut self, id: Uuid) {
+        // Try state machine nodes
+        if let Some(node) = self.find_node_mut(id) {
+            let selected = node.has_focus();
+            if selected {
+                node.set_focus(false);
+                self.selection_order.retain(|&x| x != id);
+            } else {
+                node.set_focus(true);
+                self.selection_order.push(id);
+            }
+            return;
+        }
+
+        // Try sequence elements
+        if let Some(lifeline) = self.lifelines.iter_mut().find(|l| l.id == id) {
+            if lifeline.has_focus {
+                lifeline.has_focus = false;
+                self.selection_order.retain(|&x| x != id);
+            } else {
+                lifeline.has_focus = true;
+                self.selection_order.push(id);
+            }
+            return;
+        }
+
+        // Try use case elements
+        if let Some(actor) = self.actors.iter_mut().find(|a| a.id == id) {
+            if actor.has_focus {
+                actor.has_focus = false;
+                self.selection_order.retain(|&x| x != id);
+            } else {
+                actor.has_focus = true;
+                self.selection_order.push(id);
+            }
+            return;
+        }
+        if let Some(uc) = self.use_cases.iter_mut().find(|u| u.id == id) {
+            if uc.has_focus {
+                uc.has_focus = false;
+                self.selection_order.retain(|&x| x != id);
+            } else {
+                uc.has_focus = true;
+                self.selection_order.push(id);
+            }
+            return;
+        }
+        if let Some(sb) = self.system_boundaries.iter_mut().find(|s| s.id == id) {
+            if sb.has_focus {
+                sb.has_focus = false;
+                self.selection_order.retain(|&x| x != id);
+            } else {
+                sb.has_focus = true;
+                self.selection_order.push(id);
+            }
+            return;
+        }
+
+        // Try activity elements
+        if let Some(action) = self.actions.iter_mut().find(|a| a.id == id) {
+            if action.has_focus {
+                action.has_focus = false;
+                self.selection_order.retain(|&x| x != id);
+            } else {
+                action.has_focus = true;
+                self.selection_order.push(id);
+            }
+            return;
+        }
+        if let Some(swimlane) = self.swimlanes.iter_mut().find(|s| s.id == id) {
+            if swimlane.has_focus {
+                swimlane.has_focus = false;
+                self.selection_order.retain(|&x| x != id);
+            } else {
+                swimlane.has_focus = true;
+                self.selection_order.push(id);
+            }
+            return;
+        }
+        if let Some(obj) = self.object_nodes.iter_mut().find(|o| o.id == id) {
+            if obj.has_focus {
+                obj.has_focus = false;
+                self.selection_order.retain(|&x| x != id);
+            } else {
+                obj.has_focus = true;
+                self.selection_order.push(id);
+            }
+            return;
+        }
+    }
+
+    /// Translate an element by ID (works across all diagram types)
+    /// Returns true if element was found and translated
+    pub fn translate_element(&mut self, id: Uuid, dx: f32, dy: f32) -> bool {
+        // State machine nodes
+        if let Some(node) = self.find_node_mut(id) {
+            node.translate(dx, dy);
+            return true;
+        }
+        // Sequence
+        if let Some(l) = self.lifelines.iter_mut().find(|l| l.id == id) {
+            l.translate(dx, dy);
+            return true;
+        }
+        // Use case
+        if let Some(a) = self.actors.iter_mut().find(|a| a.id == id) {
+            a.translate(dx, dy);
+            return true;
+        }
+        if let Some(u) = self.use_cases.iter_mut().find(|u| u.id == id) {
+            u.translate(dx, dy);
+            return true;
+        }
+        if let Some(s) = self.system_boundaries.iter_mut().find(|s| s.id == id) {
+            s.translate(dx, dy);
+            return true;
+        }
+        // Activity
+        if let Some(a) = self.actions.iter_mut().find(|a| a.id == id) {
+            a.translate(dx, dy);
+            return true;
+        }
+        if let Some(s) = self.swimlanes.iter_mut().find(|s| s.id == id) {
+            s.translate(dx, dy);
+            return true;
+        }
+        if let Some(o) = self.object_nodes.iter_mut().find(|o| o.id == id) {
+            o.translate(dx, dy);
+            return true;
+        }
+        false
+    }
+
+    /// Get selected elements in order (across all diagram types)
+    pub fn selected_elements_in_order(&self) -> Vec<Uuid> {
+        self.selection_order.clone()
+    }
+
+    /// Get element name by ID (works across all diagram types)
+    pub fn get_element_name(&self, id: Uuid) -> Option<String> {
+        // State machine nodes
+        if let Some(node) = self.find_node(id) {
+            return Some(node.name().to_string());
+        }
+        // Sequence
+        if let Some(l) = self.lifelines.iter().find(|l| l.id == id) {
+            return Some(l.name.clone());
+        }
+        // Use case
+        if let Some(a) = self.actors.iter().find(|a| a.id == id) {
+            return Some(a.name.clone());
+        }
+        if let Some(u) = self.use_cases.iter().find(|u| u.id == id) {
+            return Some(u.name.clone());
+        }
+        if let Some(s) = self.system_boundaries.iter().find(|s| s.id == id) {
+            return Some(s.name.clone());
+        }
+        // Activity
+        if let Some(a) = self.actions.iter().find(|a| a.id == id) {
+            return Some(a.name.clone());
+        }
+        if let Some(s) = self.swimlanes.iter().find(|s| s.id == id) {
+            return Some(s.name.clone());
+        }
+        if let Some(o) = self.object_nodes.iter().find(|o| o.id == id) {
+            return Some(o.name.clone());
+        }
+        None
+    }
+
     /// Add a new state at the given position
     pub fn add_state(&mut self, name: &str, x: f32, y: f32) -> NodeId {
         // Center the state on the given position
@@ -328,11 +601,36 @@ impl Diagram {
 
     /// Clear all selections
     pub fn clear_selection(&mut self) {
+        // State machine elements
         for node in &mut self.nodes {
             node.set_focus(false);
         }
         for conn in &mut self.connections {
             conn.selected = false;
+        }
+        // Sequence elements
+        for lifeline in &mut self.lifelines {
+            lifeline.has_focus = false;
+        }
+        // Use case elements
+        for actor in &mut self.actors {
+            actor.has_focus = false;
+        }
+        for uc in &mut self.use_cases {
+            uc.has_focus = false;
+        }
+        for sb in &mut self.system_boundaries {
+            sb.has_focus = false;
+        }
+        // Activity elements
+        for action in &mut self.actions {
+            action.has_focus = false;
+        }
+        for swimlane in &mut self.swimlanes {
+            swimlane.has_focus = false;
+        }
+        for obj in &mut self.object_nodes {
+            obj.has_focus = false;
         }
         self.selection_order.clear();
     }
@@ -599,6 +897,13 @@ impl Diagram {
             .map(|u| u.id)
     }
 
+    /// Find a system boundary at a given point
+    pub fn find_system_boundary_at(&self, pos: Point) -> Option<Uuid> {
+        self.system_boundaries.iter()
+            .find(|s| s.contains_point(pos))
+            .map(|s| s.id)
+    }
+
     // ===== Activity Diagram Methods =====
 
     /// Add an action to the activity diagram (centered on position)
@@ -710,6 +1015,20 @@ impl Diagram {
         self.actions.iter()
             .find(|a| a.contains_point(pos))
             .map(|a| a.id)
+    }
+
+    /// Find a swimlane at a given point
+    pub fn find_swimlane_at(&self, pos: Point) -> Option<Uuid> {
+        self.swimlanes.iter()
+            .find(|s| s.contains_point(pos))
+            .map(|s| s.id)
+    }
+
+    /// Find an object node at a given point
+    pub fn find_object_node_at(&self, pos: Point) -> Option<Uuid> {
+        self.object_nodes.iter()
+            .find(|o| o.contains_point(pos))
+            .map(|o| o.id)
     }
 
     /// Find an action by ID
