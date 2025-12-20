@@ -126,32 +126,50 @@ impl Toolbar {
     }
 
     /// Create a tool button with a custom graphical icon
+    /// The draw_icon closure receives (painter, rect, stroke_color) where stroke_color
+    /// is theme-aware (dark in light mode, light in dark mode)
     fn icon_tool_button(
         ui: &mut egui::Ui,
         app: &mut JmtApp,
         mode: EditMode,
         tooltip: &str,
-        draw_icon: impl FnOnce(&egui::Painter, egui::Rect),
+        draw_icon: impl FnOnce(&egui::Painter, egui::Rect, Color32),
     ) {
         let current_mode = app.edit_mode == mode;
+
+        // Get theme-aware colors
+        let is_dark_mode = ui.visuals().dark_mode;
+        let stroke_color = if is_dark_mode {
+            Color32::from_rgb(220, 220, 220) // Light color for dark mode
+        } else {
+            Color32::BLACK // Dark color for light mode
+        };
 
         let size = Vec2::splat(ICON_SIZE + 8.0);
         let (rect, response) = ui.allocate_exact_size(size, egui::Sense::click());
 
-        // Draw button background
+        // Draw button background (theme-aware)
         let bg_color = if current_mode {
-            Color32::from_rgb(200, 220, 255)
+            if is_dark_mode {
+                Color32::from_rgb(60, 80, 120) // Darker blue for dark mode
+            } else {
+                Color32::from_rgb(200, 220, 255) // Light blue for light mode
+            }
         } else if response.hovered() {
-            Color32::from_rgb(230, 230, 230)
+            if is_dark_mode {
+                Color32::from_rgb(70, 70, 70) // Dark grey for dark mode hover
+            } else {
+                Color32::from_rgb(230, 230, 230) // Light grey for light mode hover
+            }
         } else {
             Color32::TRANSPARENT
         };
 
         ui.painter().rect(rect, Rounding::same(4.0), bg_color, Stroke::NONE);
 
-        // Draw the icon
+        // Draw the icon with theme-aware color
         let icon_rect = rect.shrink(4.0);
-        draw_icon(ui.painter(), icon_rect);
+        draw_icon(ui.painter(), icon_rect, stroke_color);
 
         // Handle click
         if response.on_hover_text(tooltip).clicked() {
@@ -163,26 +181,26 @@ impl Toolbar {
         ui.label("Add:");
 
         // State - rounded rectangle
-        Self::icon_tool_button(ui, app, EditMode::AddState, "Add a state", |painter, rect| {
+        Self::icon_tool_button(ui, app, EditMode::AddState, "Add a state", |painter, rect, stroke_color| {
             let inner = rect.shrink(2.0);
-            painter.rect(inner, Rounding::same(4.0), Color32::from_rgb(255, 255, 204), Stroke::new(1.0, Color32::BLACK));
+            painter.rect(inner, Rounding::same(4.0), Color32::from_rgb(255, 255, 204), Stroke::new(1.0, stroke_color));
         });
 
         // Initial - filled circle
-        Self::icon_tool_button(ui, app, EditMode::AddInitial, "Add initial pseudo-state", |painter, rect| {
-            painter.circle_filled(rect.center(), rect.width() / 3.0, Color32::BLACK);
+        Self::icon_tool_button(ui, app, EditMode::AddInitial, "Add initial pseudo-state", |painter, rect, stroke_color| {
+            painter.circle_filled(rect.center(), rect.width() / 3.0, stroke_color);
         });
 
         // Final - double circle
-        Self::icon_tool_button(ui, app, EditMode::AddFinal, "Add final pseudo-state", |painter, rect| {
+        Self::icon_tool_button(ui, app, EditMode::AddFinal, "Add final pseudo-state", |painter, rect, stroke_color| {
             let center = rect.center();
             let r = rect.width() / 3.0;
-            painter.circle_stroke(center, r, Stroke::new(1.0, Color32::BLACK));
-            painter.circle_filled(center, r * 0.6, Color32::BLACK);
+            painter.circle_stroke(center, r, Stroke::new(1.0, stroke_color));
+            painter.circle_filled(center, r * 0.6, stroke_color);
         });
 
         // Choice - diamond
-        Self::icon_tool_button(ui, app, EditMode::AddChoice, "Add choice pseudo-state", |painter, rect| {
+        Self::icon_tool_button(ui, app, EditMode::AddChoice, "Add choice pseudo-state", |painter, rect, stroke_color| {
             let center = rect.center();
             let s = rect.width() / 3.0;
             let points = vec![
@@ -191,11 +209,11 @@ impl Toolbar {
                 Pos2::new(center.x, center.y + s),
                 Pos2::new(center.x - s, center.y),
             ];
-            painter.add(egui::Shape::convex_polygon(points, Color32::WHITE, Stroke::new(1.0, Color32::BLACK)));
+            painter.add(egui::Shape::convex_polygon(points, Color32::TRANSPARENT, Stroke::new(1.0, stroke_color)));
         });
 
         // Junction - filled diamond
-        Self::icon_tool_button(ui, app, EditMode::AddJunction, "Add junction pseudo-state", |painter, rect| {
+        Self::icon_tool_button(ui, app, EditMode::AddJunction, "Add junction pseudo-state", |painter, rect, stroke_color| {
             let center = rect.center();
             let s = rect.width() / 3.5;
             let points = vec![
@@ -204,39 +222,39 @@ impl Toolbar {
                 Pos2::new(center.x, center.y + s),
                 Pos2::new(center.x - s, center.y),
             ];
-            painter.add(egui::Shape::convex_polygon(points, Color32::BLACK, Stroke::new(1.0, Color32::BLACK)));
+            painter.add(egui::Shape::convex_polygon(points, stroke_color, Stroke::new(1.0, stroke_color)));
         });
 
         // Fork - horizontal bar
-        Self::icon_tool_button(ui, app, EditMode::AddFork, "Add fork pseudo-state", |painter, rect| {
+        Self::icon_tool_button(ui, app, EditMode::AddFork, "Add fork pseudo-state", |painter, rect, stroke_color| {
             let center = rect.center();
             let w = rect.width() * 0.7;
             let h = 4.0;
             let bar = egui::Rect::from_center_size(center, Vec2::new(w, h));
-            painter.rect_filled(bar, Rounding::ZERO, Color32::BLACK);
+            painter.rect_filled(bar, Rounding::ZERO, stroke_color);
         });
 
         // Join - horizontal bar (same as fork)
-        Self::icon_tool_button(ui, app, EditMode::AddJoin, "Add join pseudo-state", |painter, rect| {
+        Self::icon_tool_button(ui, app, EditMode::AddJoin, "Add join pseudo-state", |painter, rect, stroke_color| {
             let center = rect.center();
             let w = rect.width() * 0.7;
             let h = 4.0;
             let bar = egui::Rect::from_center_size(center, Vec2::new(w, h));
-            painter.rect_filled(bar, Rounding::ZERO, Color32::BLACK);
+            painter.rect_filled(bar, Rounding::ZERO, stroke_color);
         });
 
         ui.separator();
         ui.label("Connect:");
 
         // Transition - arrow
-        Self::icon_tool_button(ui, app, EditMode::Connect, "Create a transition", |painter, rect| {
+        Self::icon_tool_button(ui, app, EditMode::Connect, "Create a transition", |painter, rect, stroke_color| {
             let left = Pos2::new(rect.left() + 4.0, rect.center().y);
             let right = Pos2::new(rect.right() - 4.0, rect.center().y);
-            painter.line_segment([left, right], Stroke::new(1.5, Color32::BLACK));
+            painter.line_segment([left, right], Stroke::new(1.5, stroke_color));
             // Arrowhead
             let arrow_size = 5.0;
-            painter.line_segment([right, Pos2::new(right.x - arrow_size, right.y - arrow_size)], Stroke::new(1.5, Color32::BLACK));
-            painter.line_segment([right, Pos2::new(right.x - arrow_size, right.y + arrow_size)], Stroke::new(1.5, Color32::BLACK));
+            painter.line_segment([right, Pos2::new(right.x - arrow_size, right.y - arrow_size)], Stroke::new(1.5, stroke_color));
+            painter.line_segment([right, Pos2::new(right.x - arrow_size, right.y + arrow_size)], Stroke::new(1.5, stroke_color));
         });
     }
 
@@ -244,12 +262,12 @@ impl Toolbar {
         ui.label("Add:");
 
         // Lifeline - rectangle head with dashed line
-        Self::icon_tool_button(ui, app, EditMode::AddLifeline, "Add a lifeline", |painter, rect| {
+        Self::icon_tool_button(ui, app, EditMode::AddLifeline, "Add a lifeline", |painter, rect, stroke_color| {
             let head_rect = egui::Rect::from_min_size(
                 Pos2::new(rect.center().x - 6.0, rect.top() + 2.0),
                 Vec2::new(12.0, 8.0),
             );
-            painter.rect(head_rect, Rounding::same(1.0), Color32::WHITE, Stroke::new(1.0, Color32::BLACK));
+            painter.rect(head_rect, Rounding::same(1.0), Color32::from_rgb(255, 255, 240), Stroke::new(1.0, stroke_color));
             // Dashed line
             let line_top = head_rect.bottom();
             let line_bottom = rect.bottom() - 2.0;
@@ -258,22 +276,22 @@ impl Toolbar {
                 let end_y = (y + 3.0).min(line_bottom);
                 painter.line_segment(
                     [Pos2::new(rect.center().x, y), Pos2::new(rect.center().x, end_y)],
-                    Stroke::new(1.0, Color32::BLACK),
+                    Stroke::new(1.0, stroke_color),
                 );
                 y += 5.0;
             }
         });
 
         // Activation - filled rectangle
-        Self::icon_tool_button(ui, app, EditMode::AddActivation, "Add an activation box", |painter, rect| {
+        Self::icon_tool_button(ui, app, EditMode::AddActivation, "Add an activation box", |painter, rect, stroke_color| {
             let act_rect = egui::Rect::from_center_size(rect.center(), Vec2::new(8.0, 14.0));
-            painter.rect(act_rect, Rounding::ZERO, Color32::WHITE, Stroke::new(1.0, Color32::BLACK));
+            painter.rect(act_rect, Rounding::ZERO, Color32::from_rgb(255, 255, 240), Stroke::new(1.0, stroke_color));
         });
 
         // Fragment - box with pentagon
-        Self::icon_tool_button(ui, app, EditMode::AddFragment, "Add a combined fragment", |painter, rect| {
+        Self::icon_tool_button(ui, app, EditMode::AddFragment, "Add a combined fragment", |painter, rect, stroke_color| {
             let inner = rect.shrink(3.0);
-            painter.rect(inner, Rounding::ZERO, Color32::from_rgba_unmultiplied(240, 240, 255, 200), Stroke::new(1.0, Color32::BLACK));
+            painter.rect(inner, Rounding::ZERO, Color32::from_rgba_unmultiplied(240, 240, 255, 200), Stroke::new(1.0, stroke_color));
             // Pentagon tag
             let tag = vec![
                 Pos2::new(inner.left(), inner.top()),
@@ -282,38 +300,38 @@ impl Toolbar {
                 Pos2::new(inner.left() + 10.0, inner.top() + 8.0),
                 Pos2::new(inner.left(), inner.top() + 8.0),
             ];
-            painter.add(egui::Shape::convex_polygon(tag, Color32::WHITE, Stroke::new(1.0, Color32::BLACK)));
+            painter.add(egui::Shape::convex_polygon(tag, Color32::from_rgb(255, 255, 240), Stroke::new(1.0, stroke_color)));
         });
 
         ui.separator();
         ui.label("Messages:");
 
         // Sync message - solid arrow
-        Self::icon_tool_button(ui, app, EditMode::AddSyncMessage, "Add synchronous message", |painter, rect| {
+        Self::icon_tool_button(ui, app, EditMode::AddSyncMessage, "Add synchronous message", |painter, rect, stroke_color| {
             let left = Pos2::new(rect.left() + 3.0, rect.center().y);
             let right = Pos2::new(rect.right() - 3.0, rect.center().y);
-            painter.line_segment([left, right], Stroke::new(1.5, Color32::BLACK));
+            painter.line_segment([left, right], Stroke::new(1.5, stroke_color));
             // Filled arrowhead
             let arrow = vec![
                 right,
                 Pos2::new(right.x - 6.0, right.y - 4.0),
                 Pos2::new(right.x - 6.0, right.y + 4.0),
             ];
-            painter.add(egui::Shape::convex_polygon(arrow, Color32::BLACK, Stroke::NONE));
+            painter.add(egui::Shape::convex_polygon(arrow, stroke_color, Stroke::NONE));
         });
 
         // Async message - open arrow
-        Self::icon_tool_button(ui, app, EditMode::AddAsyncMessage, "Add asynchronous message", |painter, rect| {
+        Self::icon_tool_button(ui, app, EditMode::AddAsyncMessage, "Add asynchronous message", |painter, rect, stroke_color| {
             let left = Pos2::new(rect.left() + 3.0, rect.center().y);
             let right = Pos2::new(rect.right() - 3.0, rect.center().y);
-            painter.line_segment([left, right], Stroke::new(1.5, Color32::BLACK));
+            painter.line_segment([left, right], Stroke::new(1.5, stroke_color));
             // Open arrowhead
-            painter.line_segment([right, Pos2::new(right.x - 5.0, right.y - 4.0)], Stroke::new(1.5, Color32::BLACK));
-            painter.line_segment([right, Pos2::new(right.x - 5.0, right.y + 4.0)], Stroke::new(1.5, Color32::BLACK));
+            painter.line_segment([right, Pos2::new(right.x - 5.0, right.y - 4.0)], Stroke::new(1.5, stroke_color));
+            painter.line_segment([right, Pos2::new(right.x - 5.0, right.y + 4.0)], Stroke::new(1.5, stroke_color));
         });
 
         // Return message - dashed with open arrow
-        Self::icon_tool_button(ui, app, EditMode::AddReturnMessage, "Add return message", |painter, rect| {
+        Self::icon_tool_button(ui, app, EditMode::AddReturnMessage, "Add return message", |painter, rect, stroke_color| {
             let left = Pos2::new(rect.left() + 3.0, rect.center().y);
             let right = Pos2::new(rect.right() - 3.0, rect.center().y);
             // Dashed line
@@ -322,22 +340,22 @@ impl Toolbar {
                 let end_x = (x + 4.0).min(right.x - 6.0);
                 painter.line_segment(
                     [Pos2::new(x, rect.center().y), Pos2::new(end_x, rect.center().y)],
-                    Stroke::new(1.0, Color32::BLACK),
+                    Stroke::new(1.0, stroke_color),
                 );
                 x += 6.0;
             }
             // Arrow pointing left
-            painter.line_segment([left, Pos2::new(left.x + 5.0, left.y - 4.0)], Stroke::new(1.5, Color32::BLACK));
-            painter.line_segment([left, Pos2::new(left.x + 5.0, left.y + 4.0)], Stroke::new(1.5, Color32::BLACK));
+            painter.line_segment([left, Pos2::new(left.x + 5.0, left.y - 4.0)], Stroke::new(1.5, stroke_color));
+            painter.line_segment([left, Pos2::new(left.x + 5.0, left.y + 4.0)], Stroke::new(1.5, stroke_color));
         });
 
         // Self message - loop back arrow
-        Self::icon_tool_button(ui, app, EditMode::AddSelfMessage, "Add self message", |painter, rect| {
+        Self::icon_tool_button(ui, app, EditMode::AddSelfMessage, "Add self message", |painter, rect, stroke_color| {
             let start = Pos2::new(rect.center().x, rect.top() + 4.0);
             let mid_right = Pos2::new(rect.right() - 4.0, rect.top() + 4.0);
             let mid_right_bottom = Pos2::new(rect.right() - 4.0, rect.bottom() - 4.0);
             let end = Pos2::new(rect.center().x, rect.bottom() - 4.0);
-            let stroke = Stroke::new(1.0, Color32::BLACK);
+            let stroke = Stroke::new(1.0, stroke_color);
             painter.line_segment([start, mid_right], stroke);
             painter.line_segment([mid_right, mid_right_bottom], stroke);
             painter.line_segment([mid_right_bottom, end], stroke);
@@ -351,7 +369,7 @@ impl Toolbar {
         ui.label("Add:");
 
         // Actor - stick figure
-        Self::icon_tool_button(ui, app, EditMode::AddActor, "Add an actor", |painter, rect| {
+        Self::icon_tool_button(ui, app, EditMode::AddActor, "Add an actor", |painter, rect, stroke_color| {
             let center_x = rect.center().x;
             let head_y = rect.top() + 4.0;
             let head_r = 3.0;
@@ -360,7 +378,7 @@ impl Toolbar {
             let arm_y = body_top + 2.0;
             let leg_bottom = rect.bottom() - 2.0;
 
-            let stroke = Stroke::new(1.0, Color32::BLACK);
+            let stroke = Stroke::new(1.0, stroke_color);
             // Head
             painter.circle_stroke(Pos2::new(center_x, head_y), head_r, stroke);
             // Body
@@ -373,17 +391,17 @@ impl Toolbar {
         });
 
         // Use Case - ellipse
-        Self::icon_tool_button(ui, app, EditMode::AddUseCase, "Add a use case", |painter, rect| {
+        Self::icon_tool_button(ui, app, EditMode::AddUseCase, "Add a use case", |painter, rect, stroke_color| {
             let center = rect.center();
             let radius = Vec2::new(rect.width() / 2.5, rect.height() / 3.0);
             painter.add(egui::Shape::ellipse_filled(center, radius, Color32::from_rgb(255, 255, 220)));
-            painter.add(egui::Shape::ellipse_stroke(center, radius, Stroke::new(1.0, Color32::BLACK)));
+            painter.add(egui::Shape::ellipse_stroke(center, radius, Stroke::new(1.0, stroke_color)));
         });
 
         // System Boundary - rectangle with header
-        Self::icon_tool_button(ui, app, EditMode::AddSystemBoundary, "Add system boundary", |painter, rect| {
+        Self::icon_tool_button(ui, app, EditMode::AddSystemBoundary, "Add system boundary", |painter, rect, stroke_color| {
             let inner = rect.shrink(3.0);
-            painter.rect(inner, Rounding::same(2.0), Color32::from_rgba_unmultiplied(245, 245, 245, 200), Stroke::new(1.0, Color32::BLACK));
+            painter.rect(inner, Rounding::same(2.0), Color32::from_rgba_unmultiplied(245, 245, 245, 200), Stroke::new(1.0, stroke_color));
             // Header line
             painter.line_segment(
                 [Pos2::new(inner.left(), inner.top() + 6.0), Pos2::new(inner.right(), inner.top() + 6.0)],
@@ -395,14 +413,14 @@ impl Toolbar {
         ui.label("Connect:");
 
         // Association - solid line
-        Self::icon_tool_button(ui, app, EditMode::AddAssociation, "Add association", |painter, rect| {
+        Self::icon_tool_button(ui, app, EditMode::AddAssociation, "Add association", |painter, rect, stroke_color| {
             let left = Pos2::new(rect.left() + 4.0, rect.center().y);
             let right = Pos2::new(rect.right() - 4.0, rect.center().y);
-            painter.line_segment([left, right], Stroke::new(1.5, Color32::BLACK));
+            painter.line_segment([left, right], Stroke::new(1.5, stroke_color));
         });
 
         // Include - dashed arrow with <<include>>
-        Self::icon_tool_button(ui, app, EditMode::AddInclude, "Add include relationship", |painter, rect| {
+        Self::icon_tool_button(ui, app, EditMode::AddInclude, "Add include relationship", |painter, rect, stroke_color| {
             let left = Pos2::new(rect.left() + 3.0, rect.center().y);
             let right = Pos2::new(rect.right() - 3.0, rect.center().y);
             // Dashed line
@@ -411,17 +429,17 @@ impl Toolbar {
                 let end_x = (x + 3.0).min(right.x - 5.0);
                 painter.line_segment(
                     [Pos2::new(x, rect.center().y), Pos2::new(end_x, rect.center().y)],
-                    Stroke::new(1.0, Color32::BLACK),
+                    Stroke::new(1.0, stroke_color),
                 );
                 x += 5.0;
             }
             // Arrow
-            painter.line_segment([right, Pos2::new(right.x - 4.0, right.y - 3.0)], Stroke::new(1.0, Color32::BLACK));
-            painter.line_segment([right, Pos2::new(right.x - 4.0, right.y + 3.0)], Stroke::new(1.0, Color32::BLACK));
+            painter.line_segment([right, Pos2::new(right.x - 4.0, right.y - 3.0)], Stroke::new(1.0, stroke_color));
+            painter.line_segment([right, Pos2::new(right.x - 4.0, right.y + 3.0)], Stroke::new(1.0, stroke_color));
         });
 
         // Extend - dashed arrow (reversed)
-        Self::icon_tool_button(ui, app, EditMode::AddExtend, "Add extend relationship", |painter, rect| {
+        Self::icon_tool_button(ui, app, EditMode::AddExtend, "Add extend relationship", |painter, rect, stroke_color| {
             let left = Pos2::new(rect.left() + 3.0, rect.center().y);
             let right = Pos2::new(rect.right() - 3.0, rect.center().y);
             // Dashed line
@@ -430,27 +448,27 @@ impl Toolbar {
                 let end_x = (x + 3.0).min(right.x);
                 painter.line_segment(
                     [Pos2::new(x, rect.center().y), Pos2::new(end_x, rect.center().y)],
-                    Stroke::new(1.0, Color32::BLACK),
+                    Stroke::new(1.0, stroke_color),
                 );
                 x += 5.0;
             }
             // Arrow pointing left
-            painter.line_segment([left, Pos2::new(left.x + 4.0, left.y - 3.0)], Stroke::new(1.0, Color32::BLACK));
-            painter.line_segment([left, Pos2::new(left.x + 4.0, left.y + 3.0)], Stroke::new(1.0, Color32::BLACK));
+            painter.line_segment([left, Pos2::new(left.x + 4.0, left.y - 3.0)], Stroke::new(1.0, stroke_color));
+            painter.line_segment([left, Pos2::new(left.x + 4.0, left.y + 3.0)], Stroke::new(1.0, stroke_color));
         });
 
         // Generalization - hollow triangle arrow
-        Self::icon_tool_button(ui, app, EditMode::AddGeneralization, "Add generalization", |painter, rect| {
+        Self::icon_tool_button(ui, app, EditMode::AddGeneralization, "Add generalization", |painter, rect, stroke_color| {
             let left = Pos2::new(rect.left() + 3.0, rect.center().y);
             let right = Pos2::new(rect.right() - 3.0, rect.center().y);
-            painter.line_segment([left, Pos2::new(right.x - 6.0, right.y)], Stroke::new(1.5, Color32::BLACK));
+            painter.line_segment([left, Pos2::new(right.x - 6.0, right.y)], Stroke::new(1.5, stroke_color));
             // Hollow triangle
             let triangle = vec![
                 right,
                 Pos2::new(right.x - 6.0, right.y - 4.0),
                 Pos2::new(right.x - 6.0, right.y + 4.0),
             ];
-            painter.add(egui::Shape::convex_polygon(triangle, Color32::WHITE, Stroke::new(1.0, Color32::BLACK)));
+            painter.add(egui::Shape::convex_polygon(triangle, Color32::from_rgb(255, 255, 240), Stroke::new(1.0, stroke_color)));
         });
     }
 
@@ -458,26 +476,26 @@ impl Toolbar {
         ui.label("Add:");
 
         // Action - rounded rectangle
-        Self::icon_tool_button(ui, app, EditMode::AddAction, "Add an action", |painter, rect| {
+        Self::icon_tool_button(ui, app, EditMode::AddAction, "Add an action", |painter, rect, stroke_color| {
             let inner = rect.shrink(3.0);
-            painter.rect(inner, Rounding::same(5.0), Color32::from_rgb(200, 230, 255), Stroke::new(1.0, Color32::BLACK));
+            painter.rect(inner, Rounding::same(5.0), Color32::from_rgb(200, 230, 255), Stroke::new(1.0, stroke_color));
         });
 
         // Initial - filled circle
-        Self::icon_tool_button(ui, app, EditMode::AddInitial, "Add initial node", |painter, rect| {
-            painter.circle_filled(rect.center(), rect.width() / 3.0, Color32::BLACK);
+        Self::icon_tool_button(ui, app, EditMode::AddInitial, "Add initial node", |painter, rect, stroke_color| {
+            painter.circle_filled(rect.center(), rect.width() / 3.0, stroke_color);
         });
 
         // Final - bullseye (double circle)
-        Self::icon_tool_button(ui, app, EditMode::AddFinal, "Add final node", |painter, rect| {
+        Self::icon_tool_button(ui, app, EditMode::AddFinal, "Add final node", |painter, rect, stroke_color| {
             let center = rect.center();
             let r = rect.width() / 3.0;
-            painter.circle_stroke(center, r, Stroke::new(1.5, Color32::BLACK));
-            painter.circle_filled(center, r * 0.5, Color32::BLACK);
+            painter.circle_stroke(center, r, Stroke::new(1.5, stroke_color));
+            painter.circle_filled(center, r * 0.5, stroke_color);
         });
 
         // Decision - diamond
-        Self::icon_tool_button(ui, app, EditMode::AddDecision, "Add decision/merge node", |painter, rect| {
+        Self::icon_tool_button(ui, app, EditMode::AddDecision, "Add decision/merge node", |painter, rect, stroke_color| {
             let center = rect.center();
             let s = rect.width() / 3.0;
             let points = vec![
@@ -486,30 +504,30 @@ impl Toolbar {
                 Pos2::new(center.x, center.y + s),
                 Pos2::new(center.x - s, center.y),
             ];
-            painter.add(egui::Shape::convex_polygon(points, Color32::WHITE, Stroke::new(1.0, Color32::BLACK)));
+            painter.add(egui::Shape::convex_polygon(points, Color32::TRANSPARENT, Stroke::new(1.0, stroke_color)));
         });
 
         // Fork - horizontal bar
-        Self::icon_tool_button(ui, app, EditMode::AddFork, "Add fork bar", |painter, rect| {
+        Self::icon_tool_button(ui, app, EditMode::AddFork, "Add fork bar", |painter, rect, stroke_color| {
             let center = rect.center();
             let w = rect.width() * 0.7;
             let bar = egui::Rect::from_center_size(center, Vec2::new(w, 4.0));
-            painter.rect_filled(bar, Rounding::ZERO, Color32::BLACK);
+            painter.rect_filled(bar, Rounding::ZERO, stroke_color);
         });
 
         // Join - horizontal bar (same as fork)
-        Self::icon_tool_button(ui, app, EditMode::AddJoin, "Add join bar", |painter, rect| {
+        Self::icon_tool_button(ui, app, EditMode::AddJoin, "Add join bar", |painter, rect, stroke_color| {
             let center = rect.center();
             let w = rect.width() * 0.7;
             let bar = egui::Rect::from_center_size(center, Vec2::new(w, 4.0));
-            painter.rect_filled(bar, Rounding::ZERO, Color32::BLACK);
+            painter.rect_filled(bar, Rounding::ZERO, stroke_color);
         });
 
         ui.separator();
         ui.label("Signals:");
 
         // Send Signal - pentagon pointing right
-        Self::icon_tool_button(ui, app, EditMode::AddSendSignal, "Add send signal action", |painter, rect| {
+        Self::icon_tool_button(ui, app, EditMode::AddSendSignal, "Add send signal action", |painter, rect, stroke_color| {
             let inner = rect.shrink(3.0);
             let points = vec![
                 Pos2::new(inner.left(), inner.top()),
@@ -518,11 +536,11 @@ impl Toolbar {
                 Pos2::new(inner.right() - 4.0, inner.bottom()),
                 Pos2::new(inner.left(), inner.bottom()),
             ];
-            painter.add(egui::Shape::convex_polygon(points, Color32::from_rgb(255, 230, 200), Stroke::new(1.0, Color32::BLACK)));
+            painter.add(egui::Shape::convex_polygon(points, Color32::from_rgb(255, 230, 200), Stroke::new(1.0, stroke_color)));
         });
 
         // Accept Event - concave pentagon (notch on left)
-        Self::icon_tool_button(ui, app, EditMode::AddAcceptEvent, "Add accept event action", |painter, rect| {
+        Self::icon_tool_button(ui, app, EditMode::AddAcceptEvent, "Add accept event action", |painter, rect, stroke_color| {
             let inner = rect.shrink(3.0);
             let points = vec![
                 Pos2::new(inner.left(), inner.top()),
@@ -531,11 +549,11 @@ impl Toolbar {
                 Pos2::new(inner.left(), inner.bottom()),
                 Pos2::new(inner.left() + 4.0, inner.center().y),
             ];
-            painter.add(egui::Shape::convex_polygon(points, Color32::from_rgb(200, 255, 200), Stroke::new(1.0, Color32::BLACK)));
+            painter.add(egui::Shape::convex_polygon(points, Color32::from_rgb(200, 255, 200), Stroke::new(1.0, stroke_color)));
         });
 
         // Time Event - hourglass
-        Self::icon_tool_button(ui, app, EditMode::AddTimeEvent, "Add time event action", |painter, rect| {
+        Self::icon_tool_button(ui, app, EditMode::AddTimeEvent, "Add time event action", |painter, rect, stroke_color| {
             let center = rect.center();
             let hw = 5.0;
             let hh = 7.0;
@@ -545,40 +563,40 @@ impl Toolbar {
                 Pos2::new(center.x - hw, center.y + hh),
                 Pos2::new(center.x + hw, center.y + hh),
             ];
-            painter.line_segment([points[0], points[2]], Stroke::new(1.0, Color32::BLACK));
-            painter.line_segment([points[1], points[3]], Stroke::new(1.0, Color32::BLACK));
-            painter.line_segment([points[0], points[1]], Stroke::new(1.0, Color32::BLACK));
-            painter.line_segment([points[2], points[3]], Stroke::new(1.0, Color32::BLACK));
+            painter.line_segment([points[0], points[2]], Stroke::new(1.0, stroke_color));
+            painter.line_segment([points[1], points[3]], Stroke::new(1.0, stroke_color));
+            painter.line_segment([points[0], points[1]], Stroke::new(1.0, stroke_color));
+            painter.line_segment([points[2], points[3]], Stroke::new(1.0, stroke_color));
         });
 
         ui.separator();
         ui.label("Objects:");
 
         // Object Node - rectangle
-        Self::icon_tool_button(ui, app, EditMode::AddObjectNode, "Add object node", |painter, rect| {
+        Self::icon_tool_button(ui, app, EditMode::AddObjectNode, "Add object node", |painter, rect, stroke_color| {
             let inner = rect.shrink(3.0);
-            painter.rect(inner, Rounding::ZERO, Color32::WHITE, Stroke::new(1.0, Color32::BLACK));
+            painter.rect(inner, Rounding::ZERO, Color32::from_rgb(255, 255, 240), Stroke::new(1.0, stroke_color));
         });
 
         // Data Store - rectangle with double lines
-        Self::icon_tool_button(ui, app, EditMode::AddDataStore, "Add data store", |painter, rect| {
+        Self::icon_tool_button(ui, app, EditMode::AddDataStore, "Add data store", |painter, rect, stroke_color| {
             let inner = rect.shrink(3.0);
-            painter.rect(inner, Rounding::ZERO, Color32::WHITE, Stroke::new(1.0, Color32::BLACK));
+            painter.rect(inner, Rounding::ZERO, Color32::from_rgb(255, 255, 240), Stroke::new(1.0, stroke_color));
             // Double lines on sides
             painter.line_segment(
                 [Pos2::new(inner.left() + 2.0, inner.top()), Pos2::new(inner.left() + 2.0, inner.bottom())],
-                Stroke::new(1.0, Color32::BLACK),
+                Stroke::new(1.0, stroke_color),
             );
             painter.line_segment(
                 [Pos2::new(inner.right() - 2.0, inner.top()), Pos2::new(inner.right() - 2.0, inner.bottom())],
-                Stroke::new(1.0, Color32::BLACK),
+                Stroke::new(1.0, stroke_color),
             );
         });
 
         // Swimlane - vertical partition
-        Self::icon_tool_button(ui, app, EditMode::AddSwimlane, "Add swimlane", |painter, rect| {
+        Self::icon_tool_button(ui, app, EditMode::AddSwimlane, "Add swimlane", |painter, rect, stroke_color| {
             let inner = rect.shrink(2.0);
-            painter.rect(inner, Rounding::ZERO, Color32::from_rgba_unmultiplied(230, 230, 255, 200), Stroke::new(1.0, Color32::BLACK));
+            painter.rect(inner, Rounding::ZERO, Color32::from_rgba_unmultiplied(230, 230, 255, 200), Stroke::new(1.0, stroke_color));
             // Vertical divider
             painter.line_segment(
                 [Pos2::new(inner.center().x, inner.top()), Pos2::new(inner.center().x, inner.bottom())],
@@ -595,13 +613,13 @@ impl Toolbar {
         ui.label("Connect:");
 
         // Control Flow - arrow
-        Self::icon_tool_button(ui, app, EditMode::Connect, "Create control flow", |painter, rect| {
+        Self::icon_tool_button(ui, app, EditMode::Connect, "Create control flow", |painter, rect, stroke_color| {
             let left = Pos2::new(rect.left() + 4.0, rect.center().y);
             let right = Pos2::new(rect.right() - 4.0, rect.center().y);
-            painter.line_segment([left, right], Stroke::new(1.5, Color32::BLACK));
+            painter.line_segment([left, right], Stroke::new(1.5, stroke_color));
             // Arrowhead
-            painter.line_segment([right, Pos2::new(right.x - 5.0, right.y - 4.0)], Stroke::new(1.5, Color32::BLACK));
-            painter.line_segment([right, Pos2::new(right.x - 5.0, right.y + 4.0)], Stroke::new(1.5, Color32::BLACK));
+            painter.line_segment([right, Pos2::new(right.x - 5.0, right.y - 4.0)], Stroke::new(1.5, stroke_color));
+            painter.line_segment([right, Pos2::new(right.x - 5.0, right.y + 4.0)], Stroke::new(1.5, stroke_color));
         });
     }
 
