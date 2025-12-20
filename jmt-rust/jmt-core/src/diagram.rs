@@ -728,11 +728,19 @@ impl Diagram {
         }
     }
 
-    /// Calculate slot offsets for all connections to prevent incoming/outgoing overlap
+    /// Calculate slot offsets for all connections to prevent overlap
+    /// Uses a distance-based heuristic: sort connections by the position of the other node
+    /// along the connection side to minimize total connection length and crossings.
     fn recalculate_connection_slots(&mut self) {
         use crate::node::Side;
 
         const SLOT_SPACING: f32 = 15.0;
+
+        // Collect node centers for sorting
+        let node_centers: std::collections::HashMap<NodeId, (f32, f32)> = self.nodes
+            .iter()
+            .map(|n| (n.id(), (n.bounds().center().x, n.bounds().center().y)))
+            .collect();
 
         // Collect all node IDs
         let node_ids: Vec<NodeId> = self.nodes.iter().map(|n| n.id()).collect();
@@ -740,47 +748,83 @@ impl Diagram {
         // For each node, calculate offsets for connections on each side
         for node_id in node_ids {
             for side in [Side::Top, Side::Bottom, Side::Left, Side::Right] {
-                // Find outgoing connections (this node is source, connection uses this side)
-                let outgoing_indices: Vec<usize> = self.connections
+                // Collect all connections on this node/side with their "other node" position
+                // For source connections, other node is target; for target connections, other node is source
+                let mut source_conns: Vec<(usize, f32)> = self.connections
                     .iter()
                     .enumerate()
                     .filter(|(_, c)| c.source_id == node_id && c.source_side == side)
-                    .map(|(i, _)| i)
+                    .map(|(i, c)| {
+                        // Get position of target node
+                        let pos = node_centers.get(&c.target_id)
+                            .map(|&(x, y)| match side {
+                                Side::Top | Side::Bottom => x,  // Sort by x for horizontal sides
+                                Side::Left | Side::Right => y,  // Sort by y for vertical sides
+                                Side::None => 0.0,
+                            })
+                            .unwrap_or(0.0);
+                        (i, pos)
+                    })
                     .collect();
 
-                // Find incoming connections (this node is target, connection uses this side)
-                let incoming_indices: Vec<usize> = self.connections
+                let mut target_conns: Vec<(usize, f32)> = self.connections
                     .iter()
                     .enumerate()
                     .filter(|(_, c)| c.target_id == node_id && c.target_side == side)
-                    .map(|(i, _)| i)
+                    .map(|(i, c)| {
+                        // Get position of source node
+                        let pos = node_centers.get(&c.source_id)
+                            .map(|&(x, y)| match side {
+                                Side::Top | Side::Bottom => x,  // Sort by x for horizontal sides
+                                Side::Left | Side::Right => y,  // Sort by y for vertical sides
+                                Side::None => 0.0,
+                            })
+                            .unwrap_or(0.0);
+                        (i, pos)
+                    })
                     .collect();
 
-                let num_outgoing = outgoing_indices.len();
-                let num_incoming = incoming_indices.len();
+                // Sort by position to minimize crossings
+                source_conns.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+                target_conns.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
 
-                // Assign offsets: outgoing on negative side, incoming on positive side
-                // Center each group around their respective side
-                for (slot, &idx) in outgoing_indices.iter().enumerate() {
-                    let offset = if num_outgoing == 1 && num_incoming == 0 {
-                        0.0 // Single connection, center it
-                    } else {
-                        // Offset to negative side
-                        let group_width = (num_outgoing as f32 - 1.0) * SLOT_SPACING;
-                        -SLOT_SPACING / 2.0 - group_width / 2.0 + (slot as f32) * SLOT_SPACING
-                    };
-                    self.connections[idx].source_offset = offset;
+                let num_source = source_conns.len();
+                let num_target = target_conns.len();
+                let total = num_source + num_target;
+
+                if total == 0 {
+                    continue;
                 }
 
-                for (slot, &idx) in incoming_indices.iter().enumerate() {
-                    let offset = if num_incoming == 1 && num_outgoing == 0 {
-                        0.0 // Single connection, center it
+                // Interleave source and target connections based on their sorted positions
+                // This minimizes crossings when connections come from/go to different directions
+                let mut all_conns: Vec<(usize, f32, bool)> = Vec::new(); // (index, position, is_source)
+                for (idx, pos) in source_conns {
+                    all_conns.push((idx, pos, true));
+                }
+                for (idx, pos) in target_conns {
+                    all_conns.push((idx, pos, false));
+                }
+
+                // Sort all connections by their other-node position
+                all_conns.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+
+                // Assign slots centered around 0
+                let group_width = (total as f32 - 1.0) * SLOT_SPACING;
+                let start_offset = -group_width / 2.0;
+
+                for (slot, (idx, _, is_source)) in all_conns.iter().enumerate() {
+                    let offset = if total == 1 {
+                        0.0
                     } else {
-                        // Offset to positive side
-                        let group_width = (num_incoming as f32 - 1.0) * SLOT_SPACING;
-                        SLOT_SPACING / 2.0 - group_width / 2.0 + (slot as f32) * SLOT_SPACING
+                        start_offset + (slot as f32) * SLOT_SPACING
                     };
-                    self.connections[idx].target_offset = offset;
+
+                    if *is_source {
+                        self.connections[*idx].source_offset = offset;
+                    } else {
+                        self.connections[*idx].target_offset = offset;
+                    }
                 }
             }
         }

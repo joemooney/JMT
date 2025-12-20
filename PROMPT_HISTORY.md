@@ -961,4 +961,37 @@ User showed screenshots of connections overlapping, looking like bidirectional c
 **Build Status:**
 - Successfully compiles with `cargo build`
 
+**Git Operations:**
+- Committed: `9f8deed`
+
+---
+
+## Session 5 (continued) - Connection Slot Ordering Optimization (2025-12-20)
+
+### Prompt: Improve connection slot positioning heuristic
+
+**User Request:**
+"When we draw connections we should order the connections more sensibly. In this image it would be better to have the points we connect to in State2 reversed. Maybe if we consider the sum of the distances compare the the sum of the distances of swapping the order we might arrive at a better heuristic for positioning?"
+
+**Actions Taken:**
+1. Rewrote `recalculate_connection_slots()` with distance-based heuristic
+2. For each node and side, collect all connections (both incoming and outgoing)
+3. For each connection, determine "other node" position:
+   - For horizontal sides (top/bottom): sort by x-coordinate of other node
+   - For vertical sides (left/right): sort by y-coordinate of other node
+4. Sort all connections by other-node position
+5. Assign slots in sorted order, centered around 0
+
+**Algorithm:**
+- Minimizes crossings by placing connections in spatial order
+- Connection to leftmost node gets leftmost slot on bottom side
+- Connection to topmost node gets topmost slot on right side
+- Both incoming and outgoing connections are interleaved based on position
+
+**Files Modified:**
+- `jmt-core/src/diagram.rs` - Improved recalculate_connection_slots()
+
+**Build Status:**
+- Successfully compiles with `cargo build`
+
 ---
