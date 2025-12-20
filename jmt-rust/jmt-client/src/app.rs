@@ -84,6 +84,8 @@ pub struct JmtApp {
     pub selection_rect: SelectionRect,
     /// Whether we're currently dragging nodes (vs marquee selecting)
     dragging_nodes: bool,
+    /// Current cursor position on canvas (for preview rendering)
+    pub cursor_pos: Option<egui::Pos2>,
 }
 
 impl Default for JmtApp {
@@ -100,6 +102,7 @@ impl Default for JmtApp {
             pending_connection_source: None,
             selection_rect: SelectionRect::default(),
             dragging_nodes: false,
+            cursor_pos: None,
         }
     }
 }
@@ -249,6 +252,117 @@ impl JmtApp {
         }
     }
 
+    /// Render cursor preview for add modes
+    fn render_cursor_preview(&self, painter: &egui::Painter, pos: egui::Pos2) {
+        let preview_alpha = 128u8; // Semi-transparent
+
+        match self.edit_mode {
+            EditMode::AddState => {
+                // Draw a ghost state rectangle
+                let width = self.current_diagram()
+                    .map(|s| s.diagram.settings.default_state_width)
+                    .unwrap_or(100.0);
+                let height = self.current_diagram()
+                    .map(|s| s.diagram.settings.default_state_height)
+                    .unwrap_or(60.0);
+                let rect = egui::Rect::from_center_size(pos, egui::Vec2::new(width, height));
+                let rounding = self.current_diagram()
+                    .map(|s| s.diagram.settings.corner_rounding)
+                    .unwrap_or(12.0);
+
+                painter.rect(
+                    rect,
+                    egui::Rounding::same(rounding),
+                    egui::Color32::from_rgba_unmultiplied(255, 255, 204, preview_alpha),
+                    egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(0, 0, 0, preview_alpha)),
+                );
+                painter.text(
+                    rect.center(),
+                    egui::Align2::CENTER_CENTER,
+                    "State",
+                    egui::FontId::proportional(12.0),
+                    egui::Color32::from_rgba_unmultiplied(0, 0, 0, preview_alpha),
+                );
+            }
+            EditMode::AddInitial => {
+                // Draw a ghost initial state (filled circle)
+                let radius = 8.0;
+                painter.circle_filled(
+                    pos,
+                    radius,
+                    egui::Color32::from_rgba_unmultiplied(0, 0, 0, preview_alpha),
+                );
+            }
+            EditMode::AddFinal => {
+                // Draw a ghost final state (double circle)
+                let outer_radius = 10.0;
+                let inner_radius = 6.0;
+                painter.circle_stroke(
+                    pos,
+                    outer_radius,
+                    egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(0, 0, 0, preview_alpha)),
+                );
+                painter.circle_filled(
+                    pos,
+                    inner_radius,
+                    egui::Color32::from_rgba_unmultiplied(0, 0, 0, preview_alpha),
+                );
+            }
+            EditMode::AddChoice | EditMode::AddJunction => {
+                // Draw a ghost diamond
+                let size = 10.0;
+                let points = vec![
+                    egui::Pos2::new(pos.x, pos.y - size),
+                    egui::Pos2::new(pos.x + size, pos.y),
+                    egui::Pos2::new(pos.x, pos.y + size),
+                    egui::Pos2::new(pos.x - size, pos.y),
+                    egui::Pos2::new(pos.x, pos.y - size),
+                ];
+                painter.add(egui::Shape::line(
+                    points,
+                    egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(0, 0, 0, preview_alpha)),
+                ));
+            }
+            EditMode::AddFork | EditMode::AddJoin => {
+                // Draw a ghost bar
+                let width = 60.0;
+                let height = 6.0;
+                let rect = egui::Rect::from_center_size(pos, egui::Vec2::new(width, height));
+                painter.rect_filled(
+                    rect,
+                    egui::Rounding::ZERO,
+                    egui::Color32::from_rgba_unmultiplied(0, 0, 0, preview_alpha),
+                );
+            }
+            EditMode::Connect => {
+                // Draw a small arrow icon at cursor
+                if self.pending_connection_source.is_some() {
+                    // Show we're waiting for target
+                    painter.circle_stroke(
+                        pos,
+                        8.0,
+                        egui::Stroke::new(2.0, egui::Color32::from_rgba_unmultiplied(255, 165, 0, preview_alpha)),
+                    );
+                } else {
+                    // Show connection start indicator
+                    let size = 6.0;
+                    painter.line_segment(
+                        [egui::Pos2::new(pos.x - size, pos.y), egui::Pos2::new(pos.x + size, pos.y)],
+                        egui::Stroke::new(2.0, egui::Color32::from_rgba_unmultiplied(0, 0, 0, preview_alpha)),
+                    );
+                    painter.line_segment(
+                        [egui::Pos2::new(pos.x, pos.y - size), egui::Pos2::new(pos.x, pos.y + size)],
+                        egui::Stroke::new(2.0, egui::Color32::from_rgba_unmultiplied(0, 0, 0, preview_alpha)),
+                    );
+                }
+            }
+            EditMode::Arrow => {
+                // No preview needed for selection mode
+            }
+            _ => {}
+        }
+    }
+
     /// Handle keyboard input
     fn handle_keyboard(&mut self, ctx: &egui::Context) {
         if ctx.input(|i| i.key_pressed(egui::Key::Delete) || i.key_pressed(egui::Key::Backspace)) {
@@ -344,9 +458,17 @@ impl eframe::App for JmtApp {
             // Draw background
             painter.rect_filled(response.rect, 0.0, egui::Color32::WHITE);
 
+            // Track cursor position for preview
+            self.cursor_pos = response.hover_pos();
+
             // Draw the diagram
             if let Some(state) = self.current_diagram() {
                 state.canvas.render(&state.diagram, &painter, response.rect);
+            }
+
+            // Draw cursor preview for add modes
+            if let Some(pos) = self.cursor_pos {
+                self.render_cursor_preview(&painter, pos);
             }
 
             // Handle mouse clicks

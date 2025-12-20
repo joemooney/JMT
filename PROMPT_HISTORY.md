@@ -260,6 +260,33 @@ The size of the state should grow to accommodate the text. Have a checkbox per s
 **Git Operations:**
 - Committed and pushed auto-size and activity visibility
 
+---
+
+## Session 3 (continued) - Cursor Preview for Add Modes (2025-12-19)
+
+### Prompt: Show ghost preview of element being added at cursor
+
+**User Request:**
+When adding a state or pseudo-state, show a dummy preview at the cursor position. ESC returns to Arrow mode.
+
+**Actions Taken:**
+1. Added `cursor_pos` field to JmtApp to track mouse position on canvas
+2. Added `render_cursor_preview()` method to draw ghost elements:
+   - State: Semi-transparent rounded rectangle with "State" label
+   - Initial: Semi-transparent filled circle
+   - Final: Semi-transparent double circle
+   - Choice/Junction: Semi-transparent diamond
+   - Fork/Join: Semi-transparent horizontal bar
+   - Connect: Crosshair or orange circle (when waiting for target)
+3. Preview follows cursor in real-time
+4. ESC already returns to Arrow mode (was already implemented)
+
+**Files Modified:**
+- `jmt-client/src/app.rs` - Added cursor tracking and preview rendering
+
+**Git Operations:**
+- Committed and pushed cursor preview
+
 **Next Steps (Future Sessions):**
 - Phase 3: Node resize from corners
 - Phase 4: Improve pseudo-state rendering
