@@ -1,0 +1,220 @@
+{
+  "id": "8b982f0b-7716-48f6-af71-b976c8b4a610",
+  "diagram_type": "StateMachine",
+  "settings": {
+    "name": "Untitled",
+    "file_path": null,
+    "state_color": {
+      "r": 255,
+      "g": 255,
+      "b": 204,
+      "a": 255
+    },
+    "corner_rounding": 12.0,
+    "stub_length": 10.0,
+    "arrow_width": 3.0,
+    "arrow_height": 8.0,
+    "corner_size": 6.0,
+    "pseudo_corner_size": 3.0,
+    "default_state_width": 100.0,
+    "default_state_height": 60.0,
+    "default_pseudo_size": 20.0,
+    "show_activities": true
+  },
+  "root_state": {
+    "id": "a30bd3ef-aee8-48c2-8dd4-48ab02dcd592",
+    "name": "Root",
+    "bounds": {
+      "x1": 50.0,
+      "y1": 50.0,
+      "x2": 750.0,
+      "y2": 550.0
+    },
+    "fill_color": null,
+    "parent_region_id": null,
+    "entry_activity": "",
+    "exit_activity": "",
+    "do_activity": "",
+    "regions": [
+      {
+        "id": "28f7a7c7-3fef-4816-8bfa-ab3daf9ca434",
+        "name": "default",
+        "bounds": {
+          "x1": 50.0,
+          "y1": 75.0,
+          "x2": 750.0,
+          "y2": 550.0
+        },
+        "children": [],
+        "is_horizontal": false
+      }
+    ],
+    "show_activities": null
+  },
+  "nodes": [
+    {
+      "State": {
+        "id": "aea9ca9c-3c93-423f-ae33-29d57f385103",
+        "name": "State1",
+        "bounds": {
+          "x1": 125.0,
+          "y1": 263.5,
+          "x2": 225.0,
+          "y2": 335.5
+        },
+        "fill_color": null,
+        "parent_region_id": null,
+        "entry_activity": "foo",
+        "exit_activity": "booo",
+        "do_activity": "zoo",
+        "regions": [],
+        "show_activities": null
+      }
+    },
+    {
+      "State": {
+        "id": "c552669c-d585-4fbd-93fd-5cdccf89e34f",
+        "name": "State2",
+        "bounds": {
+          "x1": 245.0,
+          "y1": 263.5,
+          "x2": 345.0,
+          "y2": 323.5
+        },
+        "fill_color": null,
+        "parent_region_id": null,
+        "entry_activity": "",
+        "exit_activity": "",
+        "do_activity": "",
+        "regions": [],
+        "show_activities": null
+      }
+    },
+    {
+      "State": {
+        "id": "faae97a2-7c9f-483c-ade8-d6ebb58dd78a",
+        "name": "State3",
+        "bounds": {
+          "x1": 365.0,
+          "y1": 263.5,
+          "x2": 465.0,
+          "y2": 323.5
+        },
+        "fill_color": null,
+        "parent_region_id": null,
+        "entry_activity": "",
+        "exit_activity": "",
+        "do_activity": "",
+        "regions": [],
+        "show_activities": null
+      }
+    },
+    {
+      "Pseudo": {
+        "id": "9a5b2704-2d24-4c16-9a32-9b125c413b31",
+        "name": "",
+        "kind": "Initial",
+        "bounds": {
+          "x1": 85.0,
+          "y1": 283.5,
+          "x2": 105.0,
+          "y2": 303.5
+        },
+        "fill_color": {
+          "r": 0,
+          "g": 0,
+          "b": 0,
+          "a": 255
+        },
+        "parent_region_id": null
+      }
+    },
+    {
+      "Pseudo": {
+        "id": "2f670996-6042-4f3a-8b77-13707cfe06f4",
+        "name": "",
+        "kind": "Final",
+        "bounds": {
+          "x1": 485.0,
+          "y1": 283.5,
+          "x2": 505.0,
+          "y2": 303.5
+        },
+        "fill_color": {
+          "r": 0,
+          "g": 0,
+          "b": 0,
+          "a": 255
+        },
+        "parent_region_id": null
+      }
+    }
+  ],
+  "connections": [
+    {
+      "id": "e8603817-035a-41cf-bb6b-780109db7a01",
+      "name": "",
+      "source_id": "9a5b2704-2d24-4c16-9a32-9b125c413b31",
+      "target_id": "aea9ca9c-3c93-423f-ae33-29d57f385103",
+      "source_side": "Right",
+      "target_side": "Left",
+      "source_offset": 0.0,
+      "target_offset": 0.0,
+      "event": "",
+      "guard": "",
+      "action": ""
+    },
+    {
+      "id": "09031754-b33f-4aee-8609-0d8814c68b2c",
+      "name": "",
+      "source_id": "aea9ca9c-3c93-423f-ae33-29d57f385103",
+      "target_id": "c552669c-d585-4fbd-93fd-5cdccf89e34f",
+      "source_side": "Right",
+      "target_side": "Left",
+      "source_offset": 0.0,
+      "target_offset": 0.0,
+      "event": "",
+      "guard": "",
+      "action": ""
+    },
+    {
+      "id": "9cc8bedb-3849-4951-ade4-fb13a41e151b",
+      "name": "",
+      "source_id": "c552669c-d585-4fbd-93fd-5cdccf89e34f",
+      "target_id": "faae97a2-7c9f-483c-ade8-d6ebb58dd78a",
+      "source_side": "Right",
+      "target_side": "Left",
+      "source_offset": 0.0,
+      "target_offset": 0.0,
+      "event": "",
+      "guard": "",
+      "action": ""
+    },
+    {
+      "id": "7376ee19-de83-46eb-aa25-45453404d644",
+      "name": "",
+      "source_id": "faae97a2-7c9f-483c-ade8-d6ebb58dd78a",
+      "target_id": "2f670996-6042-4f3a-8b77-13707cfe06f4",
+      "source_side": "Right",
+      "target_side": "Left",
+      "source_offset": 0.0,
+      "target_offset": 0.0,
+      "event": "",
+      "guard": "",
+      "action": ""
+    }
+  ],
+  "lifelines": [],
+  "messages": [],
+  "activations": [],
+  "fragments": [],
+  "actors": [],
+  "use_cases": [],
+  "system_boundaries": [],
+  "uc_relationships": [],
+  "actions": [],
+  "swimlanes": [],
+  "partitions": [],
+  "object_nodes": [],
+  "control_flows": []
+}

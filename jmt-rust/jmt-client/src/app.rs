@@ -312,7 +312,9 @@ impl JmtApp {
             match std::fs::read_to_string(&path) {
                 Ok(content) => {
                     match serde_json::from_str::<Diagram>(&content) {
-                        Ok(diagram) => {
+                        Ok(mut diagram) => {
+                            // Recalculate connection routing (segments are not serialized)
+                            diagram.recalculate_connections();
                             let state = DiagramState::with_path(diagram, path.clone());
                             self.diagrams.push(state);
                             self.active_diagram = self.diagrams.len() - 1;
