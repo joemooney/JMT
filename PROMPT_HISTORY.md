@@ -113,7 +113,8 @@ jmt-rust/
 - All 5 crates building correctly
 
 **Git Operations:**
-- Pending: commit and push Rust implementation
+- Committed: `b15eea8` - Add Rust/egui implementation of JMT state machine editor
+- Pushed to GitHub: master branch
 
 **Next Steps (Future Sessions):**
 - Phase 2: Improve state rendering (corner rounding, activities display)
