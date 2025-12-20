@@ -461,16 +461,51 @@ impl JmtApp {
             let y2 = (bounds.y2 - y_offset) as i32;
 
             match node {
-                jmt_core::node::Node::State(_) => {
-                    // Draw filled rounded rectangle (simplified to rectangle)
-                    Self::draw_filled_rect(img, x1, y1, x2, y2, state_fill);
-                    Self::draw_rect_outline(img, x1, y1, x2, y2, state_stroke);
+                jmt_core::node::Node::State(state) => {
+                    // Draw filled rounded rectangle with proper corners
+                    let corner_radius = 12; // Match the diagram settings
+                    Self::draw_filled_rounded_rect(img, x1, y1, x2, y2, corner_radius, state_fill);
+                    Self::draw_rounded_rect_outline(img, x1, y1, x2, y2, corner_radius, state_stroke);
 
-                    // Draw state name
+                    // Determine if activities should be shown
+                    let show_activities = state.should_show_activities(diagram.settings.show_activities);
+
+                    // Draw state name and activities
                     let name = node.name();
                     let cx = (x1 + x2) / 2;
-                    let cy = (y1 + y2) / 2;
-                    Self::draw_text_centered(img, cx, cy, name, state_stroke);
+
+                    if show_activities {
+                        // Draw name near top
+                        let name_y = y1 + 15;
+                        Self::draw_text_centered(img, cx, name_y, name, state_stroke);
+
+                        // Draw separator line below name
+                        let sep_y = y1 + 22;
+                        Self::draw_line(img, x1 + 5, sep_y, x2 - 5, sep_y, state_stroke);
+
+                        // Draw activities below separator
+                        let mut activity_y = sep_y + 12;
+                        let activity_x = x1 + 8;
+
+                        if !state.entry_activity.is_empty() {
+                            let text = format!("entry / {}", state.entry_activity);
+                            Self::draw_text_left(img, activity_x, activity_y, &text, state_stroke);
+                            activity_y += 12;
+                        }
+                        if !state.exit_activity.is_empty() {
+                            let text = format!("exit / {}", state.exit_activity);
+                            Self::draw_text_left(img, activity_x, activity_y, &text, state_stroke);
+                            activity_y += 12;
+                        }
+                        if !state.do_activity.is_empty() {
+                            let text = format!("do / {}", state.do_activity);
+                            Self::draw_text_left(img, activity_x, activity_y, &text, state_stroke);
+                        }
+                    } else {
+                        // Just center the name
+                        let cy = (y1 + y2) / 2;
+                        Self::draw_text_centered(img, cx, cy, name, state_stroke);
+                    }
                 }
                 jmt_core::node::Node::Pseudo(ps) => {
                     let cx = ((bounds.x1 + bounds.x2) / 2.0 - x_offset) as i32;
@@ -535,6 +570,97 @@ impl JmtApp {
         Self::draw_line(img, x1, y2, x2, y2, color); // Bottom
         Self::draw_line(img, x1, y1, x1, y2, color); // Left
         Self::draw_line(img, x2, y1, x2, y2, color); // Right
+    }
+
+    /// Draw a filled rounded rectangle
+    #[cfg(not(target_arch = "wasm32"))]
+    fn draw_filled_rounded_rect(img: &mut image::ImageBuffer<image::Rgba<u8>, Vec<u8>>, x1: i32, y1: i32, x2: i32, y2: i32, radius: i32, color: image::Rgba<u8>) {
+        let (width, height) = img.dimensions();
+        let r = radius.min((x2 - x1) / 2).min((y2 - y1) / 2);
+
+        for y in y1.max(0)..y2.min(height as i32) {
+            for x in x1.max(0)..x2.min(width as i32) {
+                // Check if point is inside rounded rect
+                let in_rect = if x < x1 + r && y < y1 + r {
+                    // Top-left corner
+                    let dx = x - (x1 + r);
+                    let dy = y - (y1 + r);
+                    dx * dx + dy * dy <= r * r
+                } else if x > x2 - r && y < y1 + r {
+                    // Top-right corner
+                    let dx = x - (x2 - r);
+                    let dy = y - (y1 + r);
+                    dx * dx + dy * dy <= r * r
+                } else if x < x1 + r && y > y2 - r {
+                    // Bottom-left corner
+                    let dx = x - (x1 + r);
+                    let dy = y - (y2 - r);
+                    dx * dx + dy * dy <= r * r
+                } else if x > x2 - r && y > y2 - r {
+                    // Bottom-right corner
+                    let dx = x - (x2 - r);
+                    let dy = y - (y2 - r);
+                    dx * dx + dy * dy <= r * r
+                } else {
+                    true
+                };
+
+                if in_rect {
+                    img.put_pixel(x as u32, y as u32, color);
+                }
+            }
+        }
+    }
+
+    /// Draw a rounded rectangle outline
+    #[cfg(not(target_arch = "wasm32"))]
+    fn draw_rounded_rect_outline(img: &mut image::ImageBuffer<image::Rgba<u8>, Vec<u8>>, x1: i32, y1: i32, x2: i32, y2: i32, radius: i32, color: image::Rgba<u8>) {
+        let r = radius.min((x2 - x1) / 2).min((y2 - y1) / 2);
+
+        // Draw straight edges (excluding corners)
+        Self::draw_line(img, x1 + r, y1, x2 - r, y1, color); // Top
+        Self::draw_line(img, x1 + r, y2, x2 - r, y2, color); // Bottom
+        Self::draw_line(img, x1, y1 + r, x1, y2 - r, color); // Left
+        Self::draw_line(img, x2, y1 + r, x2, y2 - r, color); // Right
+
+        // Draw corner arcs using circle algorithm
+        Self::draw_corner_arc(img, x1 + r, y1 + r, r, 2, color); // Top-left
+        Self::draw_corner_arc(img, x2 - r, y1 + r, r, 1, color); // Top-right
+        Self::draw_corner_arc(img, x1 + r, y2 - r, r, 3, color); // Bottom-left
+        Self::draw_corner_arc(img, x2 - r, y2 - r, r, 0, color); // Bottom-right
+    }
+
+    /// Draw a quarter circle arc (quadrant: 0=BR, 1=TR, 2=TL, 3=BL)
+    #[cfg(not(target_arch = "wasm32"))]
+    fn draw_corner_arc(img: &mut image::ImageBuffer<image::Rgba<u8>, Vec<u8>>, cx: i32, cy: i32, r: i32, quadrant: u8, color: image::Rgba<u8>) {
+        let (width, height) = img.dimensions();
+        let mut x = 0;
+        let mut y = r;
+        let mut d = 3 - 2 * r;
+
+        while x <= y {
+            let points = match quadrant {
+                0 => [(cx + x, cy + y), (cx + y, cy + x)], // Bottom-right
+                1 => [(cx + x, cy - y), (cx + y, cy - x)], // Top-right
+                2 => [(cx - x, cy - y), (cx - y, cy - x)], // Top-left
+                3 => [(cx - x, cy + y), (cx - y, cy + x)], // Bottom-left
+                _ => [(cx, cy), (cx, cy)],
+            };
+
+            for (px, py) in points {
+                if px >= 0 && px < width as i32 && py >= 0 && py < height as i32 {
+                    img.put_pixel(px as u32, py as u32, color);
+                }
+            }
+
+            if d < 0 {
+                d += 4 * x + 6;
+            } else {
+                d += 4 * (x - y) + 10;
+                y -= 1;
+            }
+            x += 1;
+        }
     }
 
     #[cfg(not(target_arch = "wasm32"))]
@@ -645,6 +771,17 @@ impl JmtApp {
     }
 
     #[cfg(not(target_arch = "wasm32"))]
+    fn draw_text_left(img: &mut image::ImageBuffer<image::Rgba<u8>, Vec<u8>>, x: i32, y: i32, text: &str, color: image::Rgba<u8>) {
+        // Left-aligned text rendering
+        let char_width = 6;
+
+        for (i, c) in text.chars().enumerate() {
+            let char_x = x + i as i32 * char_width;
+            Self::draw_simple_char(img, char_x, y, c, color);
+        }
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
     fn draw_simple_char(img: &mut image::ImageBuffer<image::Rgba<u8>, Vec<u8>>, x: i32, y: i32, c: char, color: image::Rgba<u8>) {
         // Very simple bitmap font for basic characters
         let (width, height) = img.dimensions();
@@ -713,6 +850,10 @@ impl JmtApp {
             ('z', &[0b00000, 0b00000, 0b11111, 0b00010, 0b00100, 0b01000, 0b11111]),
             (' ', &[0b00000, 0b00000, 0b00000, 0b00000, 0b00000, 0b00000, 0b00000]),
             ('_', &[0b00000, 0b00000, 0b00000, 0b00000, 0b00000, 0b00000, 0b11111]),
+            ('/', &[0b00001, 0b00010, 0b00010, 0b00100, 0b01000, 0b01000, 0b10000]),
+            ('-', &[0b00000, 0b00000, 0b00000, 0b11111, 0b00000, 0b00000, 0b00000]),
+            ('.', &[0b00000, 0b00000, 0b00000, 0b00000, 0b00000, 0b01100, 0b01100]),
+            (':', &[0b00000, 0b01100, 0b01100, 0b00000, 0b01100, 0b01100, 0b00000]),
         ];
 
         let pattern = patterns.iter().find(|(ch, _)| *ch == c.to_ascii_uppercase() || *ch == c);
