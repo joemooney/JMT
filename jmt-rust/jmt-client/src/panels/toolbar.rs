@@ -135,6 +135,24 @@ impl Toolbar {
                     }
                 });
             });
+
+            ui.separator();
+
+            // Zoom controls
+            ui.label("Zoom:");
+            if ui.button("−").on_hover_text("Zoom out (Ctrl+Scroll down)").clicked() {
+                app.zoom_out();
+            }
+
+            // Show current zoom level as a clickable button to reset
+            let zoom_text = format!("{:.0}%", app.zoom_level * 100.0);
+            if ui.button(&zoom_text).on_hover_text("Reset zoom to 100%").clicked() {
+                app.reset_zoom();
+            }
+
+            if ui.button("+").on_hover_text("Zoom in (Ctrl+Scroll up)").clicked() {
+                app.zoom_in();
+            }
         });
     }
 

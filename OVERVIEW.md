@@ -41,7 +41,10 @@ The original implementation uses Fantom (JVM) with FWT for the GUI. See `fan/` d
 6. **Pseudo-states** - Initial, final, choice, fork, join, junction nodes
 7. **Multi-diagram** - Tab-based interface with diagram type icons
 8. **Undo/Redo** - Full undo/redo support
-9. **Web Support** - WASM build for browser-based editing (planned)
+9. **Selection Tools** - Marquee and lasso selection, Ctrl+Click for multi-select
+10. **Zoom Controls** - Toolbar buttons and Ctrl+MouseWheel for zoom (25%-400%)
+11. **Canvas Scrolling** - Scrollbars when content exceeds view
+12. **Web Support** - WASM build for browser-based editing (planned)
 
 ## Project Structure
 

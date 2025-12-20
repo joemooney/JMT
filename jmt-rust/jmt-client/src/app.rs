@@ -102,6 +102,14 @@ impl DiagramState {
 const DOUBLE_CLICK_TIME_MS: u128 = 500;
 /// Maximum distance (in pixels) between clicks to count as double-click
 const DOUBLE_CLICK_DISTANCE: f32 = 10.0;
+/// Minimum zoom level (25%)
+const MIN_ZOOM: f32 = 0.25;
+/// Maximum zoom level (400%)
+const MAX_ZOOM: f32 = 4.0;
+/// Zoom step for buttons
+const ZOOM_STEP: f32 = 0.1;
+/// Zoom step for mouse wheel
+const ZOOM_WHEEL_STEP: f32 = 0.1;
 
 /// The main JMT application
 pub struct JmtApp {
@@ -129,6 +137,8 @@ pub struct JmtApp {
     last_click_time: Option<Instant>,
     /// Position of last click (for custom double-click detection)
     last_click_pos: Option<egui::Pos2>,
+    /// Current zoom level (1.0 = 100%)
+    pub zoom_level: f32,
 }
 
 impl Default for JmtApp {
@@ -150,6 +160,7 @@ impl Default for JmtApp {
             lasso_points: Vec::new(),
             last_click_time: None,
             last_click_pos: None,
+            zoom_level: 1.0,
         }
     }
 }
@@ -230,6 +241,30 @@ impl JmtApp {
         self.edit_mode = mode;
         self.pending_connection_source = None;
         self.status_message = format!("Mode: {}", mode.display_name());
+    }
+
+    /// Zoom in by one step
+    pub fn zoom_in(&mut self) {
+        self.zoom_level = (self.zoom_level + ZOOM_STEP).min(MAX_ZOOM);
+        self.status_message = format!("Zoom: {:.0}%", self.zoom_level * 100.0);
+    }
+
+    /// Zoom out by one step
+    pub fn zoom_out(&mut self) {
+        self.zoom_level = (self.zoom_level - ZOOM_STEP).max(MIN_ZOOM);
+        self.status_message = format!("Zoom: {:.0}%", self.zoom_level * 100.0);
+    }
+
+    /// Reset zoom to 100%
+    pub fn reset_zoom(&mut self) {
+        self.zoom_level = 1.0;
+        self.status_message = "Zoom: 100%".to_string();
+    }
+
+    /// Zoom by a delta (positive = zoom in, negative = zoom out)
+    pub fn zoom_by(&mut self, delta: f32) {
+        self.zoom_level = (self.zoom_level + delta).clamp(MIN_ZOOM, MAX_ZOOM);
+        self.status_message = format!("Zoom: {:.0}%", self.zoom_level * 100.0);
     }
 
     /// Handle canvas click
@@ -508,7 +543,7 @@ impl JmtApp {
     }
 
     /// Render cursor preview for add modes
-    fn render_cursor_preview(&self, painter: &egui::Painter, pos: egui::Pos2) {
+    fn render_cursor_preview(&self, painter: &egui::Painter, pos: egui::Pos2, zoom: f32) {
         let preview_alpha = 128u8; // Semi-transparent
 
         match self.edit_mode {
@@ -516,32 +551,32 @@ impl JmtApp {
                 // Draw a ghost state rectangle
                 let width = self.current_diagram()
                     .map(|s| s.diagram.settings.default_state_width)
-                    .unwrap_or(100.0);
+                    .unwrap_or(100.0) * zoom;
                 let height = self.current_diagram()
                     .map(|s| s.diagram.settings.default_state_height)
-                    .unwrap_or(60.0);
+                    .unwrap_or(60.0) * zoom;
                 let rect = egui::Rect::from_center_size(pos, egui::Vec2::new(width, height));
                 let rounding = self.current_diagram()
                     .map(|s| s.diagram.settings.corner_rounding)
-                    .unwrap_or(12.0);
+                    .unwrap_or(12.0) * zoom;
 
                 painter.rect(
                     rect,
                     egui::Rounding::same(rounding),
                     egui::Color32::from_rgba_unmultiplied(255, 255, 204, preview_alpha),
-                    egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(0, 0, 0, preview_alpha)),
+                    egui::Stroke::new(zoom, egui::Color32::from_rgba_unmultiplied(0, 0, 0, preview_alpha)),
                 );
                 painter.text(
                     rect.center(),
                     egui::Align2::CENTER_CENTER,
                     "State",
-                    egui::FontId::proportional(12.0),
+                    egui::FontId::proportional(12.0 * zoom),
                     egui::Color32::from_rgba_unmultiplied(0, 0, 0, preview_alpha),
                 );
             }
             EditMode::AddInitial => {
                 // Draw a ghost initial state (filled circle)
-                let radius = 8.0;
+                let radius = 8.0 * zoom;
                 painter.circle_filled(
                     pos,
                     radius,
@@ -550,12 +585,12 @@ impl JmtApp {
             }
             EditMode::AddFinal => {
                 // Draw a ghost final state (double circle)
-                let outer_radius = 10.0;
-                let inner_radius = 6.0;
+                let outer_radius = 10.0 * zoom;
+                let inner_radius = 6.0 * zoom;
                 painter.circle_stroke(
                     pos,
                     outer_radius,
-                    egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(0, 0, 0, preview_alpha)),
+                    egui::Stroke::new(zoom, egui::Color32::from_rgba_unmultiplied(0, 0, 0, preview_alpha)),
                 );
                 painter.circle_filled(
                     pos,
@@ -565,7 +600,7 @@ impl JmtApp {
             }
             EditMode::AddChoice | EditMode::AddJunction => {
                 // Draw a ghost diamond
-                let size = 10.0;
+                let size = 10.0 * zoom;
                 let points = vec![
                     egui::Pos2::new(pos.x, pos.y - size),
                     egui::Pos2::new(pos.x + size, pos.y),
@@ -575,13 +610,13 @@ impl JmtApp {
                 ];
                 painter.add(egui::Shape::line(
                     points,
-                    egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(0, 0, 0, preview_alpha)),
+                    egui::Stroke::new(zoom, egui::Color32::from_rgba_unmultiplied(0, 0, 0, preview_alpha)),
                 ));
             }
             EditMode::AddFork | EditMode::AddJoin => {
                 // Draw a ghost bar
-                let width = 60.0;
-                let height = 6.0;
+                let width = 60.0 * zoom;
+                let height = 6.0 * zoom;
                 let rect = egui::Rect::from_center_size(pos, egui::Vec2::new(width, height));
                 painter.rect_filled(
                     rect,
@@ -595,19 +630,19 @@ impl JmtApp {
                     // Show we're waiting for target
                     painter.circle_stroke(
                         pos,
-                        8.0,
-                        egui::Stroke::new(2.0, egui::Color32::from_rgba_unmultiplied(255, 165, 0, preview_alpha)),
+                        8.0 * zoom,
+                        egui::Stroke::new(2.0 * zoom, egui::Color32::from_rgba_unmultiplied(255, 165, 0, preview_alpha)),
                     );
                 } else {
                     // Show connection start indicator
-                    let size = 6.0;
+                    let size = 6.0 * zoom;
                     painter.line_segment(
                         [egui::Pos2::new(pos.x - size, pos.y), egui::Pos2::new(pos.x + size, pos.y)],
-                        egui::Stroke::new(2.0, egui::Color32::from_rgba_unmultiplied(0, 0, 0, preview_alpha)),
+                        egui::Stroke::new(2.0 * zoom, egui::Color32::from_rgba_unmultiplied(0, 0, 0, preview_alpha)),
                     );
                     painter.line_segment(
                         [egui::Pos2::new(pos.x, pos.y - size), egui::Pos2::new(pos.x, pos.y + size)],
-                        egui::Stroke::new(2.0, egui::Color32::from_rgba_unmultiplied(0, 0, 0, preview_alpha)),
+                        egui::Stroke::new(2.0 * zoom, egui::Color32::from_rgba_unmultiplied(0, 0, 0, preview_alpha)),
                     );
                 }
             }
@@ -899,36 +934,50 @@ impl eframe::App for JmtApp {
 
             ui.separator();
 
+            // Handle Ctrl+MouseWheel for zooming (before ScrollArea consumes the scroll)
+            let ctrl_held_for_zoom = ui.input(|i| i.modifiers.ctrl);
+            if ctrl_held_for_zoom {
+                let scroll_delta = ui.input(|i| i.raw_scroll_delta.y);
+                if scroll_delta != 0.0 {
+                    // Zoom in/out based on scroll direction
+                    let zoom_delta = scroll_delta * ZOOM_WHEEL_STEP / 50.0;
+                    self.zoom_by(zoom_delta);
+                }
+            }
+
             // Calculate content bounds to determine scroll area size
             let content_bounds = self.current_diagram()
                 .map(|s| s.diagram.content_bounds())
                 .unwrap_or(jmt_core::geometry::Rect::new(0.0, 0.0, 800.0, 600.0));
 
+            let zoom = self.zoom_level;
+
             // Canvas with scroll bars
             egui::ScrollArea::both()
                 .auto_shrink([false, false])
+                .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysVisible)
                 .show(ui, |ui| {
-                    // Make the canvas at least as big as content bounds
-                    let canvas_width = content_bounds.x2.max(ui.available_width());
-                    let canvas_height = content_bounds.y2.max(ui.available_height());
+                    // Make the canvas at least as big as content bounds, scaled by zoom
+                    let canvas_width = (content_bounds.x2 * zoom).max(ui.available_width());
+                    let canvas_height = (content_bounds.y2 * zoom).max(ui.available_height());
                     let canvas_size = egui::vec2(canvas_width, canvas_height);
 
                     let (response, painter) = ui.allocate_painter(canvas_size, egui::Sense::click_and_drag());
 
-                    // Draw background
-                    painter.rect_filled(response.rect, 0.0, egui::Color32::WHITE);
+                    // Draw background with light gray to distinguish from scrollbar
+                    painter.rect_filled(response.rect, 0.0, egui::Color32::from_gray(252));
 
             // Track cursor position for preview
             self.cursor_pos = response.hover_pos();
 
-            // Draw the diagram
+            // Draw the diagram with zoom
             if let Some(state) = self.current_diagram() {
-                state.canvas.render(&state.diagram, &painter, response.rect);
+                state.canvas.render_with_zoom(&state.diagram, &painter, response.rect, zoom);
             }
 
             // Draw cursor preview for add modes
             if let Some(pos) = self.cursor_pos {
-                self.render_cursor_preview(&painter, pos);
+                self.render_cursor_preview(&painter, pos, zoom);
             }
 
             // Handle mouse clicks with custom double-click detection (500ms window)
@@ -936,6 +985,8 @@ impl eframe::App for JmtApp {
             let ctrl_held = ui.input(|i| i.modifiers.ctrl);
             if response.clicked() {
                 if let Some(pos) = response.interact_pointer_pos() {
+                    // Transform screen coordinates to diagram coordinates
+                    let diagram_pos = egui::Pos2::new(pos.x / zoom, pos.y / zoom);
                     let now = Instant::now();
 
                     // Check if this is a double-click (within time and distance threshold)
@@ -957,13 +1008,13 @@ impl eframe::App for JmtApp {
                             self.status_message = "Switched to Arrow mode".to_string();
                         } else {
                             // For non-add modes, handle normally (e.g., Arrow mode selection)
-                            self.handle_canvas_click(pos, true, ctrl_held);
+                            self.handle_canvas_click(diagram_pos, true, ctrl_held);
                         }
                     } else {
                         // Single click: record time/pos for potential double-click detection
                         self.last_click_time = Some(now);
                         self.last_click_pos = Some(pos);
-                        self.handle_canvas_click(pos, false, ctrl_held);
+                        self.handle_canvas_click(diagram_pos, false, ctrl_held);
                     }
                 }
             }
@@ -971,7 +1022,9 @@ impl eframe::App for JmtApp {
             // Handle drag start - determine if we're resizing, dragging nodes, or marquee selecting
             if response.drag_started() {
                 if let Some(pos) = response.interact_pointer_pos() {
-                    let point = Point::new(pos.x, pos.y);
+                    // Transform screen coordinates to diagram coordinates
+                    let diagram_pos = egui::Pos2::new(pos.x / zoom, pos.y / zoom);
+                    let point = Point::new(diagram_pos.x, diagram_pos.y);
                     let corner_margin = 10.0; // Size of corner hit area
 
                     // First, check if we clicked on a corner of a selected resizable node
@@ -1027,9 +1080,10 @@ impl eframe::App for JmtApp {
                             self.selection_rect.clear();
                         } else if self.edit_mode == EditMode::Arrow {
                             // We're starting a marquee selection (only in Arrow mode)
+                            // Store screen coordinates for the selection rectangle
                             self.dragging_nodes = false;
-                            self.selection_rect.start = Some(pos);
-                            self.selection_rect.current = Some(pos);
+                            self.selection_rect.start = Some(diagram_pos);
+                            self.selection_rect.current = Some(diagram_pos);
                             // Clear current selection when starting a new marquee
                             if let Some(state) = self.current_diagram_mut() {
                                 state.diagram.clear_selection();
@@ -1038,7 +1092,7 @@ impl eframe::App for JmtApp {
                             // We're starting a lasso selection
                             self.dragging_nodes = false;
                             self.lasso_points.clear();
-                            self.lasso_points.push(pos);
+                            self.lasso_points.push(diagram_pos);
                             // Clear current selection when starting a new lasso
                             if let Some(state) = self.current_diagram_mut() {
                                 state.diagram.clear_selection();
@@ -1051,7 +1105,12 @@ impl eframe::App for JmtApp {
             // Handle dragging
             if response.dragged() {
                 if let Some(pos) = response.interact_pointer_pos() {
+                    // Transform screen coordinates to diagram coordinates
+                    let diagram_pos = egui::Pos2::new(pos.x / zoom, pos.y / zoom);
                     let delta = response.drag_delta();
+                    // Scale delta to diagram space
+                    let diagram_delta_x = delta.x / zoom;
+                    let diagram_delta_y = delta.y / zoom;
 
                     if self.resize_state.is_active() {
                         // Handle resize
@@ -1062,7 +1121,7 @@ impl eframe::App for JmtApp {
 
                         if let Some(state) = self.current_diagram_mut() {
                             if let Some(node) = state.diagram.find_node_mut(node_id) {
-                                node.resize_from_corner(corner, delta.x, delta.y, min_width, min_height);
+                                node.resize_from_corner(corner, diagram_delta_x, diagram_delta_y, min_width, min_height);
                             }
                             state.diagram.recalculate_connections();
                             state.modified = true;
@@ -1074,55 +1133,65 @@ impl eframe::App for JmtApp {
                                 let selected = state.diagram.selected_elements_in_order();
                                 if !selected.is_empty() {
                                     for id in selected {
-                                        state.diagram.translate_element(id, delta.x, delta.y);
+                                        state.diagram.translate_element(id, diagram_delta_x, diagram_delta_y);
                                     }
                                     state.diagram.recalculate_connections();
                                     state.modified = true;
                                 }
                             }
                         } else {
-                            // Update marquee selection rectangle
-                            self.selection_rect.current = Some(pos);
+                            // Update marquee selection rectangle (in diagram space)
+                            self.selection_rect.current = Some(diagram_pos);
                         }
                     } else if self.edit_mode == EditMode::Lasso {
                         // Add points to the lasso path (with some distance threshold to avoid too many points)
                         if let Some(last) = self.lasso_points.last() {
-                            let dist = ((pos.x - last.x).powi(2) + (pos.y - last.y).powi(2)).sqrt();
+                            let dist = ((diagram_pos.x - last.x).powi(2) + (diagram_pos.y - last.y).powi(2)).sqrt();
                             if dist > 3.0 {
-                                self.lasso_points.push(pos);
+                                self.lasso_points.push(diagram_pos);
                             }
                         }
                     }
                 }
             }
 
-            // Draw selection rectangle if active
+            // Draw selection rectangle if active (scale to screen space)
             if self.selection_rect.is_active() {
                 if let Some(rect) = self.selection_rect.to_egui_rect() {
+                    // Scale the rectangle to screen space
+                    let screen_rect = egui::Rect::from_min_max(
+                        egui::Pos2::new(rect.min.x * zoom, rect.min.y * zoom),
+                        egui::Pos2::new(rect.max.x * zoom, rect.max.y * zoom),
+                    );
                     // Draw selection rectangle with semi-transparent fill
                     painter.rect(
-                        rect,
+                        screen_rect,
                         egui::Rounding::ZERO,
                         egui::Color32::from_rgba_unmultiplied(100, 150, 255, 50),
-                        egui::Stroke::new(1.0, egui::Color32::from_rgb(100, 150, 255)),
+                        egui::Stroke::new(zoom, egui::Color32::from_rgb(100, 150, 255)),
                     );
                 }
             }
 
-            // Draw lasso path if active
+            // Draw lasso path if active (scale to screen space)
             if self.lasso_points.len() > 1 {
+                // Scale lasso points to screen space
+                let screen_points: Vec<egui::Pos2> = self.lasso_points.iter()
+                    .map(|p| egui::Pos2::new(p.x * zoom, p.y * zoom))
+                    .collect();
+
                 // Draw the lasso line
                 painter.add(egui::Shape::line(
-                    self.lasso_points.clone(),
-                    egui::Stroke::new(2.0, egui::Color32::from_rgb(100, 150, 255)),
+                    screen_points.clone(),
+                    egui::Stroke::new(2.0 * zoom, egui::Color32::from_rgb(100, 150, 255)),
                 ));
 
                 // Draw closing line (dashed effect using dotted line to start point)
-                if self.lasso_points.len() > 2 {
-                    if let (Some(first), Some(last)) = (self.lasso_points.first(), self.lasso_points.last()) {
+                if screen_points.len() > 2 {
+                    if let (Some(first), Some(last)) = (screen_points.first(), screen_points.last()) {
                         painter.line_segment(
                             [*last, *first],
-                            egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(100, 150, 255, 128)),
+                            egui::Stroke::new(zoom, egui::Color32::from_rgba_unmultiplied(100, 150, 255, 128)),
                         );
                     }
                 }

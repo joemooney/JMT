@@ -833,6 +833,132 @@ Continue development with the next planned phase: adding the ability to resize n
 - Successfully compiles with `cargo build`
 
 **Git Operations:**
-- To be committed
+- Committed: `c460d74`
+
+---
+
+## Session 5 (continued) - Double-Click Timing Fix (2025-12-20)
+
+### Prompt: Fix double-click sensitivity
+
+**User Request:**
+"Double click to add a node and switch back to arrow mode is too sensitive, if you double click within 500ms that is enough, we easily just add two nodes"
+
+**Actions Taken:**
+1. Added custom double-click detection with 500ms window
+2. Added `last_click_time: Option<Instant>` and `last_click_pos: Option<Pos2>` to JmtApp
+3. Replaced egui's `double_clicked()` with custom detection
+4. Set DOUBLE_CLICK_TIME_MS = 500 and DOUBLE_CLICK_DISTANCE = 10.0
+5. Fixed issue where slight mouse movement during double-click added two nodes:
+   - On double-click in add mode, just switch to Arrow mode without adding another node
+
+**Git Operations:**
+- Committed: `5b7b688` and `498dc9c`
+
+---
+
+## Session 5 (continued) - Connection Slot Management (2025-12-20)
+
+### Prompt: Distinguish incoming/outgoing connections
+
+**User Request:**
+User showed screenshots of connections overlapping, looking like bidirectional connections instead of separate unidirectional ones.
+
+**Actions Taken:**
+1. Added `slot_offset: f32` field to Connection struct
+2. Added `recalculate_connection_slots()` method to Diagram:
+   - Groups connections by target node and side
+   - Assigns offsets: outgoing connections go to negative side, incoming to positive
+   - Uses 15px slot spacing
+3. Called slot recalculation when connections are added or recalculated
+
+**Git Operations:**
+- Committed: `67f584b`
+
+---
+
+## Session 5 (continued) - Canvas Scrollbars (2025-12-20)
+
+### Prompt: Add scrollbars when content exceeds view
+
+**User Request:**
+"If nodes are shifted out of view on the canvas we should add scrollbars"
+
+**Actions Taken:**
+1. Added `content_bounds()` method to Diagram:
+   - Calculates bounding box of all elements with 50px padding
+   - Minimum size of 800x600
+   - Works across all diagram types
+2. Wrapped canvas in `egui::ScrollArea::both()`:
+   - Added `auto_shrink([false, false])` for proper sizing
+   - Canvas size is max of content bounds and available space
+3. Fixed field access errors for Lifeline, UseCase, Action
+
+**Git Operations:**
+- Committed: `2ac3101`
+
+---
+
+## Session 5 (continued) - Zoom Controls (2025-12-20)
+
+### Prompt: Add zoom in/out functionality
+
+**User Request:**
+"Add zoom in and zoom out controls (along with Ctrl+MouseWheel)"
+
+**Actions Taken:**
+1. Added zoom constants to app.rs:
+   - MIN_ZOOM = 0.25 (25%)
+   - MAX_ZOOM = 4.0 (400%)
+   - ZOOM_STEP = 0.1 (10% for buttons)
+   - ZOOM_WHEEL_STEP = 0.1 (10% per scroll)
+
+2. Added `zoom_level: f32` field to JmtApp (default 1.0)
+
+3. Added zoom methods:
+   - `zoom_in()`, `zoom_out()`, `reset_zoom()`, `zoom_by(delta)`
+
+4. Added zoom controls to toolbar:
+   - "−" button for zoom out
+   - Percentage button (e.g., "100%") to reset zoom
+   - "+" button for zoom in
+
+5. Added Ctrl+MouseWheel handling:
+   - Intercepts scroll before ScrollArea consumes it
+   - Zooms based on scroll direction
+
+6. Updated renderer for zoom:
+   - Added `render_with_zoom()` method
+   - Added `scale_pos()` and `scale_rect()` helper functions
+   - Updated ALL render methods to accept and apply zoom:
+     - State Machine: render_state_machine, render_node, render_state, render_pseudo_state, render_connection, render_arrowhead
+     - Sequence: render_lifeline, render_message, render_combined_fragment
+     - Use Case: render_actor, render_stick_figure, render_use_case, render_system_boundary, render_uc_relationship
+     - Activity: render_swimlane, render_action, render_control_flow
+
+7. Transformed mouse coordinates by zoom:
+   - Divide screen coordinates by zoom to get diagram coordinates
+   - Updated click handling, drag start, dragging, selection rectangle, lasso
+
+8. Updated cursor preview to scale by zoom
+
+9. Fixed scrollbar visibility:
+   - Added `scroll_bar_visibility(AlwaysVisible)`
+   - Changed canvas background to light gray (252) to distinguish from scrollbar
+
+**Files Modified:**
+- `jmt-client/src/app.rs` - Zoom field, methods, controls, coordinate transforms
+- `jmt-client/src/panels/toolbar.rs` - Zoom buttons
+- `jmt-client/src/canvas/renderer.rs` - All render methods updated with zoom
+
+**Features Implemented:**
+- Toolbar zoom controls (−, %, +)
+- Ctrl+MouseWheel zoom
+- All diagram elements scale properly
+- Mouse coordinates transform correctly at any zoom level
+- Selection rectangle and lasso scale properly
+
+**Build Status:**
+- Successfully compiles with `cargo build`
 
 ---
