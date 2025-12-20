@@ -201,6 +201,34 @@ If in Add: State mode and start dragging a node, should exit Add mode and switch
 **Git Operations:**
 - Committed and pushed mode switch on drag
 
+---
+
+## Session 3 (continued) - Align Dropdown and Distribute (2025-12-19)
+
+### Prompt: Convert Align buttons to dropdown with icons and add distribute
+
+**User Request:**
+Make the Align: buttons a dropdown under align and add an icon for each. Also add a distribute option to evenly space the nodes.
+
+**Actions Taken:**
+1. Converted Align buttons to a dropdown menu
+2. Added Unicode icons to all toolbar buttons:
+   - ⟲ Undo, ⟳ Redo
+   - ↖ Arrow, ▢ State, ● Initial, ◉ Final, ◇ Choice, ◆ Junction, ┳ Fork, ┻ Join
+   - → Transition
+3. Align dropdown contains:
+   - Horizontal: ⫷ Left, ⫿ Center, ⫸ Right
+   - Vertical: ⫠ Top, ⫟ Middle, ⫡ Bottom
+   - Distribute: ↔ Horizontally, ↕ Vertically
+4. Align dropdown is disabled when fewer than 2 nodes selected
+5. Distribute requires at least 3 nodes to work
+
+**Files Modified:**
+- `jmt-client/src/panels/toolbar.rs` - Complete toolbar redesign with icons and dropdown
+
+**Git Operations:**
+- Committed and pushed align dropdown and distribute
+
 **Next Steps (Future Sessions):**
 - Phase 2: Improve state rendering (corner rounding, activities display)
 - Phase 3: Node resize from corners

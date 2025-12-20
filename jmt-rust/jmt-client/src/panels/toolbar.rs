@@ -17,7 +17,7 @@ impl Toolbar {
                 .map(|s| s.diagram.can_redo())
                 .unwrap_or(false);
 
-            if ui.add_enabled(can_undo, egui::Button::new("Undo"))
+            if ui.add_enabled(can_undo, egui::Button::new("⟲ Undo"))
                 .on_hover_text("Undo last action (Ctrl+Z)")
                 .clicked()
             {
@@ -26,7 +26,7 @@ impl Toolbar {
                 }
             }
 
-            if ui.add_enabled(can_redo, egui::Button::new("Redo"))
+            if ui.add_enabled(can_redo, egui::Button::new("⟳ Redo"))
                 .on_hover_text("Redo last undone action (Ctrl+Shift+Z)")
                 .clicked()
             {
@@ -39,48 +39,78 @@ impl Toolbar {
 
             // Selection tools
             ui.label("Select:");
-            Self::tool_button(ui, app, EditMode::Arrow, "Arrow", "Select and move nodes");
+            Self::tool_button(ui, app, EditMode::Arrow, "↖ Arrow", "Select and move nodes");
 
             ui.separator();
 
             // Node creation tools
             ui.label("Add:");
-            Self::tool_button(ui, app, EditMode::AddState, "State", "Add a state");
-            Self::tool_button(ui, app, EditMode::AddInitial, "Initial", "Add initial pseudo-state");
-            Self::tool_button(ui, app, EditMode::AddFinal, "Final", "Add final pseudo-state");
-            Self::tool_button(ui, app, EditMode::AddChoice, "Choice", "Add choice pseudo-state");
-            Self::tool_button(ui, app, EditMode::AddJunction, "Junction", "Add junction pseudo-state");
-            Self::tool_button(ui, app, EditMode::AddFork, "Fork", "Add fork pseudo-state");
-            Self::tool_button(ui, app, EditMode::AddJoin, "Join", "Add join pseudo-state");
+            Self::tool_button(ui, app, EditMode::AddState, "▢ State", "Add a state");
+            Self::tool_button(ui, app, EditMode::AddInitial, "● Initial", "Add initial pseudo-state");
+            Self::tool_button(ui, app, EditMode::AddFinal, "◉ Final", "Add final pseudo-state");
+            Self::tool_button(ui, app, EditMode::AddChoice, "◇ Choice", "Add choice pseudo-state");
+            Self::tool_button(ui, app, EditMode::AddJunction, "◆ Junction", "Add junction pseudo-state");
+            Self::tool_button(ui, app, EditMode::AddFork, "┳ Fork", "Add fork pseudo-state");
+            Self::tool_button(ui, app, EditMode::AddJoin, "┻ Join", "Add join pseudo-state");
 
             ui.separator();
 
             // Connection tool
             ui.label("Connect:");
-            Self::tool_button(ui, app, EditMode::Connect, "Transition", "Create a transition between nodes");
+            Self::tool_button(ui, app, EditMode::Connect, "→ Transition", "Create a transition between nodes");
 
             ui.separator();
 
-            // Alignment tools
-            ui.label("Align:");
-            if ui.button("Left").on_hover_text("Align selected nodes to the left").clicked() {
-                Self::align_nodes(app, AlignMode::Left);
-            }
-            if ui.button("Center").on_hover_text("Center selected nodes horizontally").clicked() {
-                Self::align_nodes(app, AlignMode::CenterH);
-            }
-            if ui.button("Right").on_hover_text("Align selected nodes to the right").clicked() {
-                Self::align_nodes(app, AlignMode::Right);
-            }
-            if ui.button("Top").on_hover_text("Align selected nodes to the top").clicked() {
-                Self::align_nodes(app, AlignMode::Top);
-            }
-            if ui.button("Middle").on_hover_text("Center selected nodes vertically").clicked() {
-                Self::align_nodes(app, AlignMode::CenterV);
-            }
-            if ui.button("Bottom").on_hover_text("Align selected nodes to the bottom").clicked() {
-                Self::align_nodes(app, AlignMode::Bottom);
-            }
+            // Align dropdown
+            let has_multiple_selected = app.current_diagram()
+                .map(|s| s.diagram.selected_nodes().len() >= 2)
+                .unwrap_or(false);
+
+            ui.add_enabled_ui(has_multiple_selected, |ui| {
+                egui::menu::menu_button(ui, "⬚ Align", |ui| {
+                    ui.set_min_width(150.0);
+
+                    ui.label("Horizontal");
+                    if ui.button("⫷ Align Left").clicked() {
+                        Self::align_nodes(app, AlignMode::Left);
+                        ui.close_menu();
+                    }
+                    if ui.button("⫿ Align Center").clicked() {
+                        Self::align_nodes(app, AlignMode::CenterH);
+                        ui.close_menu();
+                    }
+                    if ui.button("⫸ Align Right").clicked() {
+                        Self::align_nodes(app, AlignMode::Right);
+                        ui.close_menu();
+                    }
+
+                    ui.separator();
+                    ui.label("Vertical");
+                    if ui.button("⫠ Align Top").clicked() {
+                        Self::align_nodes(app, AlignMode::Top);
+                        ui.close_menu();
+                    }
+                    if ui.button("⫟ Align Middle").clicked() {
+                        Self::align_nodes(app, AlignMode::CenterV);
+                        ui.close_menu();
+                    }
+                    if ui.button("⫡ Align Bottom").clicked() {
+                        Self::align_nodes(app, AlignMode::Bottom);
+                        ui.close_menu();
+                    }
+
+                    ui.separator();
+                    ui.label("Distribute");
+                    if ui.button("↔ Distribute Horizontally").clicked() {
+                        Self::distribute_nodes(app, DistributeMode::Horizontal);
+                        ui.close_menu();
+                    }
+                    if ui.button("↕ Distribute Vertically").clicked() {
+                        Self::distribute_nodes(app, DistributeMode::Vertical);
+                        ui.close_menu();
+                    }
+                });
+            });
         });
     }
 
@@ -160,6 +190,71 @@ impl Toolbar {
             state.modified = true;
         }
     }
+
+    fn distribute_nodes(app: &mut JmtApp, mode: DistributeMode) {
+        if let Some(state) = app.current_diagram_mut() {
+            let selected_ids = state.diagram.selected_nodes();
+            if selected_ids.len() < 3 {
+                return; // Need at least 3 nodes to distribute
+            }
+
+            state.diagram.push_undo();
+
+            // Collect node IDs with their center positions
+            let mut nodes_with_pos: Vec<_> = selected_ids.iter()
+                .filter_map(|id| {
+                    state.diagram.find_node(*id).map(|n| {
+                        let center = n.bounds().center();
+                        (*id, center.x, center.y)
+                    })
+                })
+                .collect();
+
+            if nodes_with_pos.len() < 3 {
+                return;
+            }
+
+            match mode {
+                DistributeMode::Horizontal => {
+                    // Sort by x position
+                    nodes_with_pos.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+
+                    let first_x = nodes_with_pos.first().unwrap().1;
+                    let last_x = nodes_with_pos.last().unwrap().1;
+                    let count = nodes_with_pos.len();
+                    let spacing = (last_x - first_x) / (count - 1) as f32;
+
+                    for (i, (id, current_x, _)) in nodes_with_pos.iter().enumerate() {
+                        let target_x = first_x + spacing * i as f32;
+                        let offset = target_x - current_x;
+                        if let Some(node) = state.diagram.find_node_mut(*id) {
+                            node.translate(offset, 0.0);
+                        }
+                    }
+                }
+                DistributeMode::Vertical => {
+                    // Sort by y position
+                    nodes_with_pos.sort_by(|a, b| a.2.partial_cmp(&b.2).unwrap());
+
+                    let first_y = nodes_with_pos.first().unwrap().2;
+                    let last_y = nodes_with_pos.last().unwrap().2;
+                    let count = nodes_with_pos.len();
+                    let spacing = (last_y - first_y) / (count - 1) as f32;
+
+                    for (i, (id, _, current_y)) in nodes_with_pos.iter().enumerate() {
+                        let target_y = first_y + spacing * i as f32;
+                        let offset = target_y - current_y;
+                        if let Some(node) = state.diagram.find_node_mut(*id) {
+                            node.translate(0.0, offset);
+                        }
+                    }
+                }
+            }
+
+            state.diagram.recalculate_connections();
+            state.modified = true;
+        }
+    }
 }
 
 #[derive(Copy, Clone)]
@@ -170,4 +265,10 @@ enum AlignMode {
     Top,
     Bottom,
     CenterV,
+}
+
+#[derive(Copy, Clone)]
+enum DistributeMode {
+    Horizontal,
+    Vertical,
 }
