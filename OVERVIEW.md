@@ -44,7 +44,9 @@ The original implementation uses Fantom (JVM) with FWT for the GUI. See `fan/` d
 9. **Selection Tools** - Marquee and lasso selection, Ctrl+Click for multi-select
 10. **Zoom Controls** - Toolbar buttons and Ctrl+MouseWheel for zoom (25%-400%)
 11. **Canvas Scrolling** - Scrollbars when content exceeds view
-12. **Web Support** - WASM build for browser-based editing (planned)
+12. **PNG Export** - Export diagrams as PNG images with optional autocrop
+13. **File Operations** - Open, Save, Save As with .jmt file format
+14. **Web Support** - WASM build for browser-based editing (planned)
 
 ## Project Structure
 

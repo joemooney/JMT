@@ -1063,3 +1063,143 @@ User showed screenshots of connections overlapping, looking like bidirectional c
 - FR-016: Aligned nodes get centered connection slots
 
 ---
+
+## Session 6 (continued) - Selection Order for Align/Distribute (2025-12-20)
+
+### Prompt: Respect selection order for alignment
+
+**User Request:**
+When using Ctrl+Click to select nodes in a specific order, align/distribute should respect that order. But for marquee selection, use position-based order.
+
+**Actions Taken:**
+1. Added `explicit_selection_order: bool` flag to Diagram struct
+2. Set to `true` when using Ctrl+Click, `false` for marquee/lasso selection
+3. Updated `align_nodes()` and `distribute_nodes()` to check this flag:
+   - If explicit: use selection order
+   - If not explicit: sort by position (x for horizontal, y for vertical)
+4. Updated auto-connect to use position order for marquee selection
+
+**Files Modified:**
+- `jmt-core/src/diagram.rs` - Added explicit_selection_order flag
+- `jmt-client/src/panels/toolbar.rs` - Updated align/distribute logic
+- `jmt-client/src/app.rs` - Updated set_edit_mode for connect
+
+**Git Operations:**
+- Multiple commits pushed
+
+---
+
+## Session 6 (continued) - Distribute Minimum Separation Fix (2025-12-20)
+
+### Prompt: Fix distribute overlapping nodes
+
+**User Request:**
+"Distribute Horizontally" was squishing nodes together instead of maintaining separation.
+
+**Actions Taken:**
+1. Rewrote distribute logic to use edge-to-edge spacing
+2. Each node placed with MIN_SEPARATION (20px) gap from previous node's edge
+3. Works properly for nodes of varying sizes
+
+**Files Modified:**
+- `jmt-client/src/panels/toolbar.rs` - Rewrote distribute algorithm
+
+---
+
+## Session 6 (continued) - Text Field Focus Fix (2025-12-20)
+
+### Prompt: Prevent backspace from deleting nodes while editing text
+
+**User Request:**
+"when editing the properties textboxes the backspace key is deleting the node from the diagram"
+
+**Actions Taken:**
+1. Added `text_edit_has_focus` tracking in properties panel
+2. Check this flag before handling Delete/Backspace keys
+3. Only delete nodes if no text edit has focus
+
+**Files Modified:**
+- `jmt-client/src/panels/properties.rs` - Track text field focus
+- `jmt-client/src/app.rs` - Check focus before delete handling
+
+---
+
+## Session 6 (continued) - Save and Save As Implementation (2025-12-20)
+
+### Prompt: Add file save functionality
+
+**User Request:**
+"I would like to be able to Save and Save As..."
+
+**Actions Taken:**
+1. Added `rfd` crate for native file dialogs
+2. Added `file_path: Option<PathBuf>` to DiagramState
+3. Implemented methods:
+   - `save()` - Saves to current path or prompts for new path
+   - `save_as()` - Always prompts for new path
+   - `open()` - Opens file dialog to load diagram
+4. Added menu items: File > Open, Save, Save As
+5. Uses `.jmt` file extension
+
+**Files Modified:**
+- `Cargo.toml` - Added rfd dependency
+- `jmt-client/src/app.rs` - Added save/open methods
+- `jmt-client/src/panels/menu_bar.rs` - Added menu items
+
+---
+
+## Session 6 (continued) - Fix Connections After Open (2025-12-20)
+
+### Prompt: Connections not drawn after loading file
+
+**User Request:**
+"When I open an existing diagram the connections are not drawn"
+
+**Actions Taken:**
+1. Issue: `segments` field has `#[serde(skip)]` so it's empty after load
+2. Added `recalculate_connections()` call after deserializing diagram
+3. Connections now render correctly after opening saved files
+
+**Files Modified:**
+- `jmt-client/src/app.rs` - Call recalculate_connections after load
+
+---
+
+## Session 6 (continued) - PNG Export Implementation (2025-12-20)
+
+### Prompt: Add PNG export with autocrop
+
+**User Request:**
+"I want a convert menu option. The first conversion is to export the image as a png file, with an option for autocrop cropping the excess whitespace around the margins"
+
+**Actions Taken:**
+1. Added `image` crate (v0.24) with PNG support
+2. Created Convert menu with options:
+   - "Export as PNG..." - Full canvas export
+   - "Export as PNG (Autocrop)..." - Crops to diagram bounds
+3. Implemented software renderer with:
+   - `draw_filled_rect()`, `draw_rect_outline()` with rounded corners
+   - `draw_filled_circle()`, `draw_circle_outline()`
+   - `draw_line()` using Bresenham's algorithm
+   - `draw_diamond()` for choice/junction nodes
+   - `draw_arrowhead()` for connection arrows
+   - `draw_text_centered()` with simple bitmap font
+4. Renders all element types:
+   - States with names
+   - Pseudo-states (initial, final, choice, fork, join, junction)
+   - Connections with arrowheads
+5. Autocrop calculates diagram bounds with 20px margin
+
+**Files Modified:**
+- `Cargo.toml` - Added image = { version = "0.24", features = ["png"] }
+- `jmt-client/Cargo.toml` - Added image workspace dependency
+- `jmt-client/src/app.rs` - Added export_png() and drawing primitives
+- `jmt-client/src/panels/menu_bar.rs` - Added Convert menu
+
+**Build Status:**
+- Successfully compiles with `cargo build`
+
+**Git Operations:**
+- Committed: `9cd8d68` - Add PNG export functionality with autocrop option
+
+---

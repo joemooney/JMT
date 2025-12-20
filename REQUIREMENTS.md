@@ -107,9 +107,15 @@
 - Input/output pins
 
 ### File Operations
-- Save diagrams to JSON format
+- Save diagrams to JSON format (.jmt extension)
 - Load diagrams from JSON files
+- Save and Save As with file dialog
 - Auto-save support (planned)
+
+### Export
+- Export diagrams as PNG images
+- Optional autocrop to remove excess whitespace
+- Convert menu for export options
 
 ## Non-Functional Requirements
 
