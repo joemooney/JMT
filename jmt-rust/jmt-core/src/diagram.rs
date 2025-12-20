@@ -151,6 +151,108 @@ impl Diagram {
         Self::new_with_type(name, DiagramType::Activity)
     }
 
+    /// Calculate the bounding rectangle of all content in the diagram
+    /// Returns (min_x, min_y, max_x, max_y) with some padding
+    pub fn content_bounds(&self) -> Rect {
+        const PADDING: f32 = 50.0;
+        const MIN_SIZE: f32 = 800.0;
+
+        let mut min_x = f32::MAX;
+        let mut min_y = f32::MAX;
+        let mut max_x = f32::MIN;
+        let mut max_y = f32::MIN;
+
+        let mut has_content = false;
+
+        // State machine nodes
+        for node in &self.nodes {
+            let bounds = node.bounds();
+            min_x = min_x.min(bounds.x1);
+            min_y = min_y.min(bounds.y1);
+            max_x = max_x.max(bounds.x2);
+            max_y = max_y.max(bounds.y2);
+            has_content = true;
+        }
+
+        // Sequence diagram lifelines
+        for lifeline in &self.lifelines {
+            let bounds = lifeline.head_bounds();
+            min_x = min_x.min(bounds.x1);
+            min_y = min_y.min(bounds.y1);
+            max_x = max_x.max(bounds.x2);
+            // Lifelines extend downward
+            max_y = max_y.max(lifeline.y + lifeline.head_height + lifeline.line_length);
+            has_content = true;
+        }
+
+        // Use case actors
+        for actor in &self.actors {
+            min_x = min_x.min(actor.x - 20.0);
+            min_y = min_y.min(actor.y);
+            max_x = max_x.max(actor.x + 20.0);
+            max_y = max_y.max(actor.y + actor.height);
+            has_content = true;
+        }
+
+        // Use cases
+        for uc in &self.use_cases {
+            min_x = min_x.min(uc.bounds.x1);
+            min_y = min_y.min(uc.bounds.y1);
+            max_x = max_x.max(uc.bounds.x2);
+            max_y = max_y.max(uc.bounds.y2);
+            has_content = true;
+        }
+
+        // System boundaries
+        for sb in &self.system_boundaries {
+            min_x = min_x.min(sb.bounds.x1);
+            min_y = min_y.min(sb.bounds.y1);
+            max_x = max_x.max(sb.bounds.x2);
+            max_y = max_y.max(sb.bounds.y2);
+            has_content = true;
+        }
+
+        // Activity actions
+        for action in &self.actions {
+            min_x = min_x.min(action.bounds.x1);
+            min_y = min_y.min(action.bounds.y1);
+            max_x = max_x.max(action.bounds.x2);
+            max_y = max_y.max(action.bounds.y2);
+            has_content = true;
+        }
+
+        // Swimlanes
+        for swimlane in &self.swimlanes {
+            min_x = min_x.min(swimlane.bounds.x1);
+            min_y = min_y.min(swimlane.bounds.y1);
+            max_x = max_x.max(swimlane.bounds.x2);
+            max_y = max_y.max(swimlane.bounds.y2);
+            has_content = true;
+        }
+
+        // Object nodes
+        for obj in &self.object_nodes {
+            min_x = min_x.min(obj.bounds.x1);
+            min_y = min_y.min(obj.bounds.y1);
+            max_x = max_x.max(obj.bounds.x2);
+            max_y = max_y.max(obj.bounds.y2);
+            has_content = true;
+        }
+
+        if !has_content {
+            // Default bounds if no content
+            return Rect::new(0.0, 0.0, MIN_SIZE, MIN_SIZE);
+        }
+
+        // Add padding and ensure minimum size
+        Rect::new(
+            (min_x - PADDING).min(0.0),
+            (min_y - PADDING).min(0.0),
+            (max_x + PADDING).max(MIN_SIZE),
+            (max_y + PADDING).max(MIN_SIZE),
+        )
+    }
+
     /// Get all nodes
     pub fn nodes(&self) -> &[Node] {
         &self.nodes

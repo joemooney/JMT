@@ -899,12 +899,24 @@ impl eframe::App for JmtApp {
 
             ui.separator();
 
-            // Canvas
-            let available_size = ui.available_size();
-            let (response, painter) = ui.allocate_painter(available_size, egui::Sense::click_and_drag());
+            // Calculate content bounds to determine scroll area size
+            let content_bounds = self.current_diagram()
+                .map(|s| s.diagram.content_bounds())
+                .unwrap_or(jmt_core::geometry::Rect::new(0.0, 0.0, 800.0, 600.0));
 
-            // Draw background
-            painter.rect_filled(response.rect, 0.0, egui::Color32::WHITE);
+            // Canvas with scroll bars
+            egui::ScrollArea::both()
+                .auto_shrink([false, false])
+                .show(ui, |ui| {
+                    // Make the canvas at least as big as content bounds
+                    let canvas_width = content_bounds.x2.max(ui.available_width());
+                    let canvas_height = content_bounds.y2.max(ui.available_height());
+                    let canvas_size = egui::vec2(canvas_width, canvas_height);
+
+                    let (response, painter) = ui.allocate_painter(canvas_size, egui::Sense::click_and_drag());
+
+                    // Draw background
+                    painter.rect_filled(response.rect, 0.0, egui::Color32::WHITE);
 
             // Track cursor position for preview
             self.cursor_pos = response.hover_pos();
@@ -1165,6 +1177,7 @@ impl eframe::App for JmtApp {
                 self.selection_rect.clear();
                 self.dragging_nodes = false;
             }
+            }); // End ScrollArea
         });
     }
 }
