@@ -907,9 +907,11 @@ impl eframe::App for JmtApp {
 
             // Handle mouse clicks
             // Double-click in add mode will add element AND switch back to arrow mode
+            // Use double_clicked() exclusively - don't also process as single click
             let is_double_click = response.double_clicked();
+            let is_single_click = response.clicked() && !is_double_click;
             let ctrl_held = ui.input(|i| i.modifiers.ctrl);
-            if response.clicked() || is_double_click {
+            if is_single_click || is_double_click {
                 if let Some(pos) = response.interact_pointer_pos() {
                     self.handle_canvas_click(pos, is_double_click, ctrl_held);
                 }
