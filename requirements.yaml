@@ -175,9 +175,20 @@ requirements:
   status: Completed
   priority: Medium
   owner: joe
-  feature: Diagram Editing
+  feature: 14-Diagram Editing
   created_at: 2025-12-20T20:07:07.144831565Z
   modified_at: 2025-12-20T20:07:07.144831565Z
+  req_type: Functional
+- id: d82f7b38-48d1-4360-a837-72c887a5ab89
+  spec_id: FR-017
+  title: Align and distribute preserve selection order
+  description: When aligning or distributing nodes, they are arranged in the order they were selected (not sorted by position). First selected node anchors the alignment, subsequent nodes follow in selection sequence.
+  status: Completed
+  priority: Medium
+  owner: joe
+  feature: Diagram Editing
+  created_at: 2025-12-20T20:13:58.966840851Z
+  modified_at: 2025-12-20T20:13:58.966840851Z
   req_type: Functional
 id_config:
   format: SingleLevel
@@ -221,8 +232,8 @@ id_config:
     prefix: FOLDER
     description: Organizational folders
 features: []
-next_feature_number: 14
-next_spec_number: 17
+next_feature_number: 15
+next_spec_number: 18
 prefix_counters: {}
 relationship_definitions:
 - name: parent
