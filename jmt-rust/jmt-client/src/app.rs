@@ -1752,15 +1752,29 @@ impl eframe::App for JmtApp {
                     let point = Point::new(diagram_pos.x, diagram_pos.y);
                     let corner_margin = 10.0; // Size of corner hit area
 
-                    // First, check if we clicked on a corner of a selected resizable node
+                    // First, check if we clicked on a corner of ANY resizable node
+                    // (prioritize selected nodes, then check all nodes)
                     let mut corner_info: Option<(NodeId, Corner)> = None;
                     if let Some(state) = self.current_diagram() {
+                        // Check selected nodes first
                         for node_id in state.diagram.selected_nodes() {
                             if let Some(node) = state.diagram.find_node(node_id) {
                                 if node.can_resize() {
                                     let corner = node.get_corner(point, corner_margin);
                                     if corner != Corner::None {
                                         corner_info = Some((node_id, corner));
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                        // If no selected node corner found, check all nodes
+                        if corner_info.is_none() {
+                            for node in state.diagram.nodes() {
+                                if node.can_resize() {
+                                    let corner = node.get_corner(point, corner_margin);
+                                    if corner != Corner::None {
+                                        corner_info = Some((node.id(), corner));
                                         break;
                                     }
                                 }
@@ -1774,6 +1788,11 @@ impl eframe::App for JmtApp {
                             self.set_edit_mode(EditMode::Arrow);
                         }
                         if let Some(state) = self.current_diagram_mut() {
+                            // Select the node if not already selected
+                            if !state.diagram.selected_nodes().contains(&node_id) {
+                                state.diagram.clear_selection();
+                                state.diagram.select_node(node_id);
+                            }
                             state.diagram.push_undo();
                         }
                         self.resize_state.start(node_id, corner);
