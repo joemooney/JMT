@@ -1369,3 +1369,44 @@ This caused the calculated distance to be wildly wrong for diagonal line segment
 - Committed: `3e976ca` - Add toolbar button for adding regions to states
 
 ---
+
+## Session 7 (continued) - Region-State Parent-Child Tracking (2025-12-21)
+
+### Prompt: Implement region-state parent-child relationships
+
+**User Request:**
+"If we place a state in a region then it should become a child of that region. So a state needs to have a reference to its containing region, if there is no containing region then we have a global region representing the diagram itself. So we want in the properties to keep track of the containing region."
+
+**Actions Taken:**
+1. Added region management methods to `Diagram`:
+   - `root_region_id()` - Get the default diagram-level region
+   - `find_region()` / `find_region_mut()` - Find region by ID
+   - `find_region_name()` - Get region name by ID
+   - `find_region_parent_state()` - Find state containing a region
+   - `find_region_at_point()` - Find innermost region containing a point (smallest area wins)
+   - `assign_node_to_region()` - Set up bidirectional parent-child relationship
+   - `remove_node_from_region()` - Remove node from its parent region
+   - `update_node_region()` - Re-parent node based on current position
+
+2. Updated node lifecycle:
+   - `add_state()` and `add_pseudo_state()` now auto-assign nodes to appropriate region
+   - `remove_node()` now removes from parent region before deleting
+   - Drag-and-drop re-parents nodes when moved between regions
+
+3. Updated Properties panel:
+   - Shows "In Region: {name} (in {parent_state})" for each node
+   - Shows "(diagram)" suffix for root state's regions
+   - Shows "(unassigned)" if node has no parent region
+
+**Files Modified:**
+- `jmt-core/src/diagram.rs` - Added region management methods, updated add/remove node
+- `jmt-client/src/app.rs` - Added re-parenting on drag stop
+- `jmt-client/src/panels/properties.rs` - Display containing region
+
+**Build Status:**
+- Successfully compiles with `cargo build`
+
+**Git Operations:**
+- Committed: `61dd017` - Implement region-state parent-child tracking
+
+---
