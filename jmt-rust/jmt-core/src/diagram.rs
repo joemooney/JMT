@@ -263,47 +263,17 @@ impl Diagram {
         &self.nodes
     }
 
-    /// Get nodes in proper render order (parent states before children)
-    /// This ensures child states are drawn on top of parent states
+    /// Get nodes in proper render order (largest first, smallest last)
+    /// This ensures smaller nodes are drawn on top of larger nodes
     pub fn nodes_in_render_order(&self) -> Vec<&Node> {
-        // Build a map of node_id -> depth (0 = top-level, 1 = child of top-level, etc.)
-        let mut depth_map: std::collections::HashMap<Uuid, u32> = std::collections::HashMap::new();
-
-        // Calculate depth for each node
-        for node in &self.nodes {
-            let mut depth = 0u32;
-            let mut current_region_id = node.parent_region_id();
-
-            // Follow parent chain to calculate depth
-            while let Some(region_id) = current_region_id {
-                // Check if this region is in the root state (depth 0)
-                if self.root_state.regions.iter().any(|r| r.id == region_id) {
-                    break;
-                }
-
-                // Find which state owns this region
-                let parent_state = self.nodes.iter().find(|n| {
-                    if let Node::State(s) = n {
-                        s.regions.iter().any(|r| r.id == region_id)
-                    } else {
-                        false
-                    }
-                });
-
-                if let Some(parent) = parent_state {
-                    depth += 1;
-                    current_region_id = parent.parent_region_id();
-                } else {
-                    break;
-                }
-            }
-
-            depth_map.insert(node.id(), depth);
-        }
-
-        // Sort nodes by depth (lower depth first = parents render first)
         let mut sorted_nodes: Vec<&Node> = self.nodes.iter().collect();
-        sorted_nodes.sort_by_key(|n| depth_map.get(&n.id()).copied().unwrap_or(0));
+        // Sort by area descending (largest first = rendered in background)
+        sorted_nodes.sort_by(|a, b| {
+            let area_a = a.bounds().width() * a.bounds().height();
+            let area_b = b.bounds().width() * b.bounds().height();
+            // Descending order: larger nodes first
+            area_b.partial_cmp(&area_a).unwrap_or(std::cmp::Ordering::Equal)
+        });
         sorted_nodes
     }
 
