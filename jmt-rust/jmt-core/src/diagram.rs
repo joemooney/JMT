@@ -707,9 +707,8 @@ impl Diagram {
         self.nodes.push(Node::State(state));
 
         // Assign to appropriate region based on position
-        let region_id = self.find_region_at_point(x, y)
-            .unwrap_or_else(|| self.root_region_id());
-        self.assign_node_to_region(id, region_id);
+        // This auto-creates regions for containing states if needed
+        self.update_node_region(id);
 
         id
     }
@@ -723,9 +722,8 @@ impl Diagram {
         self.nodes.push(Node::Pseudo(pseudo));
 
         // Assign to appropriate region based on position
-        let region_id = self.find_region_at_point(x, y)
-            .unwrap_or_else(|| self.root_region_id());
-        self.assign_node_to_region(id, region_id);
+        // This auto-creates regions for containing states if needed
+        self.update_node_region(id);
 
         id
     }
