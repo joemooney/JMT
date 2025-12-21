@@ -56,8 +56,8 @@ impl DiagramCanvas {
 
     /// Render a state machine diagram
     fn render_state_machine(&self, diagram: &Diagram, painter: &egui::Painter, zoom: f32) {
-        // Render all nodes
-        for node in diagram.nodes() {
+        // Render nodes in proper z-order (parents before children so children appear on top)
+        for node in diagram.nodes_in_render_order() {
             self.render_node(node, painter, &diagram.settings, zoom);
         }
 
@@ -121,7 +121,7 @@ impl DiagramCanvas {
         }
 
         // Render pseudo-states (initial, final, decision, fork, join)
-        for node in diagram.nodes() {
+        for node in diagram.nodes_in_render_order() {
             self.render_node(node, painter, &diagram.settings, zoom);
         }
 

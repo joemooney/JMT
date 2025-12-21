@@ -263,6 +263,50 @@ impl Diagram {
         &self.nodes
     }
 
+    /// Get nodes in proper render order (parent states before children)
+    /// This ensures child states are drawn on top of parent states
+    pub fn nodes_in_render_order(&self) -> Vec<&Node> {
+        // Build a map of node_id -> depth (0 = top-level, 1 = child of top-level, etc.)
+        let mut depth_map: std::collections::HashMap<Uuid, u32> = std::collections::HashMap::new();
+
+        // Calculate depth for each node
+        for node in &self.nodes {
+            let mut depth = 0u32;
+            let mut current_region_id = node.parent_region_id();
+
+            // Follow parent chain to calculate depth
+            while let Some(region_id) = current_region_id {
+                // Check if this region is in the root state (depth 0)
+                if self.root_state.regions.iter().any(|r| r.id == region_id) {
+                    break;
+                }
+
+                // Find which state owns this region
+                let parent_state = self.nodes.iter().find(|n| {
+                    if let Node::State(s) = n {
+                        s.regions.iter().any(|r| r.id == region_id)
+                    } else {
+                        false
+                    }
+                });
+
+                if let Some(parent) = parent_state {
+                    depth += 1;
+                    current_region_id = parent.parent_region_id();
+                } else {
+                    break;
+                }
+            }
+
+            depth_map.insert(node.id(), depth);
+        }
+
+        // Sort nodes by depth (lower depth first = parents render first)
+        let mut sorted_nodes: Vec<&Node> = self.nodes.iter().collect();
+        sorted_nodes.sort_by_key(|n| depth_map.get(&n.id()).copied().unwrap_or(0));
+        sorted_nodes
+    }
+
     /// Get all connections
     pub fn connections(&self) -> &[Connection] {
         &self.connections
@@ -777,13 +821,18 @@ impl Diagram {
 
     /// Find which region contains a point (checks all states' regions, innermost first)
     /// Returns the region_id of the deepest region containing the point
-    pub fn find_region_at_point(&self, x: f32, y: f32) -> Option<Uuid> {
+    /// Find which region contains a point, excluding a specific node's regions
+    pub fn find_region_at_point_excluding(&self, x: f32, y: f32, exclude_id: Option<NodeId>) -> Option<Uuid> {
         // Check state nodes' regions first (inner states before outer)
         // We want the innermost region that contains the point
         let mut best_match: Option<(Uuid, f32)> = None; // (region_id, area)
 
         for node in &self.nodes {
             if let Node::State(state) = node {
+                // Skip the excluded node's regions
+                if Some(state.id) == exclude_id {
+                    continue;
+                }
                 for region in &state.regions {
                     if region.contains_point(x, y) {
                         let area = region.bounds.width() * region.bounds.height();
@@ -809,6 +858,10 @@ impl Diagram {
 
         // Default to root region if point is anywhere
         Some(self.root_region_id())
+    }
+
+    pub fn find_region_at_point(&self, x: f32, y: f32) -> Option<Uuid> {
+        self.find_region_at_point_excluding(x, y, None)
     }
 
     /// Find if a point is on a region separator line within a state
@@ -931,12 +984,17 @@ impl Diagram {
 
     /// Find the innermost state containing a point (by state bounds, not regions)
     /// Returns the state's node ID, or None if only the root state contains it
-    pub fn find_state_at_point(&self, x: f32, y: f32) -> Option<NodeId> {
+    /// `exclude_id` can be used to exclude a specific node (e.g., the node being dragged)
+    pub fn find_state_at_point_excluding(&self, x: f32, y: f32, exclude_id: Option<NodeId>) -> Option<NodeId> {
         let point = Point::new(x, y);
         let mut best_match: Option<(NodeId, f32)> = None; // (state_id, area)
 
         for node in &self.nodes {
             if let Node::State(state) = node {
+                // Skip the excluded node
+                if Some(state.id) == exclude_id {
+                    continue;
+                }
                 if state.bounds.contains_point(point) {
                     let area = state.bounds.width() * state.bounds.height();
                     if best_match.is_none() || area < best_match.unwrap().1 {
@@ -949,6 +1007,12 @@ impl Diagram {
         best_match.map(|(id, _)| id)
     }
 
+    /// Find the innermost state containing a point (by state bounds, not regions)
+    /// Returns the state's node ID, or None if only the root state contains it
+    pub fn find_state_at_point(&self, x: f32, y: f32) -> Option<NodeId> {
+        self.find_state_at_point_excluding(x, y, None)
+    }
+
     /// Re-parent a node to the appropriate region based on its current position
     pub fn update_node_region(&mut self, node_id: NodeId) {
         // Get the node's center position
@@ -958,26 +1022,25 @@ impl Diagram {
         if let Some(pos) = center {
             // First, check if we're inside a state that has no regions
             // If so, create a default region for it
-            if let Some(state_id) = self.find_state_at_point(pos.x, pos.y) {
-                // Don't assign a node to itself
-                if state_id != node_id {
-                    // Check if this state has any regions
-                    let needs_region = self.find_node(state_id)
-                        .and_then(|n| n.as_state())
-                        .map(|s| s.regions.is_empty())
-                        .unwrap_or(false);
+            // IMPORTANT: Exclude the node being moved from the search
+            if let Some(state_id) = self.find_state_at_point_excluding(pos.x, pos.y, Some(node_id)) {
+                // Check if this state has any regions
+                let needs_region = self.find_node(state_id)
+                    .and_then(|n| n.as_state())
+                    .map(|s| s.regions.is_empty())
+                    .unwrap_or(false);
 
-                    if needs_region {
-                        // Create a default region for this state
-                        if let Some(Node::State(state)) = self.find_node_mut(state_id) {
-                            state.add_region("default");
-                        }
+                if needs_region {
+                    // Create a default region for this state
+                    if let Some(Node::State(state)) = self.find_node_mut(state_id) {
+                        state.add_region("default");
                     }
                 }
             }
 
             // Now find which region should contain this node
-            if let Some(region_id) = self.find_region_at_point(pos.x, pos.y) {
+            // Exclude the node being moved from region search
+            if let Some(region_id) = self.find_region_at_point_excluding(pos.x, pos.y, Some(node_id)) {
                 // Get current parent
                 let current_parent = self.find_node(node_id)
                     .and_then(|n| n.parent_region_id());
