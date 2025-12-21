@@ -1410,3 +1410,24 @@ This caused the calculated distance to be wildly wrong for diagonal line segment
 - Committed: `61dd017` - Implement region-state parent-child tracking
 
 ---
+
+## Session 7 (continued) - State Name Position for Container States (2025-12-21)
+
+### Prompt: Position state name at top when containing children
+
+**User Request:**
+"if we add nodes to a state we should place the state name at the top and not in the center"
+
+**Actions Taken:**
+1. Updated `render_state()` to check if state has children:
+   - `has_children = regions.len() > 1 || regions.iter().any(|r| !r.children.is_empty())`
+2. When state has children, name is positioned in 25px header at top
+3. When no children and no activities, name remains centered
+
+**Files Modified:**
+- `jmt-client/src/canvas/renderer.rs` - Updated state name positioning logic
+
+**Git Operations:**
+- Committed: `83a86c0` - Position state name at top when state has children
+
+---
