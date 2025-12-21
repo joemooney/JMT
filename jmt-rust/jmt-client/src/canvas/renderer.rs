@@ -160,9 +160,14 @@ impl DiagramCanvas {
         // Draw activities if they should be shown
         let show_activities = state.should_show_activities(settings.show_activities);
         let header_height = 24.0 * zoom;
+        let is_composite = state.regions.len() > 1;
 
-        // Draw state name - centered in header region when activities shown
-        let text_pos = if show_activities {
+        // Draw state name - centered in header region when composite or showing activities
+        let text_pos = if is_composite {
+            // Composite state: center name in header (25px from top)
+            let composite_header = 25.0 * zoom;
+            Pos2::new(rect.center().x, rect.min.y + composite_header / 2.0)
+        } else if show_activities {
             // Center vertically between top and separator line
             Pos2::new(rect.center().x, rect.min.y + header_height / 2.0)
         } else {
@@ -228,6 +233,36 @@ impl DiagramCanvas {
                     );
                     y += line_height;
                 }
+            }
+        }
+
+        // Draw region separators (dashed lines between regions)
+        if state.regions.len() > 1 {
+            for (i, region) in state.regions.iter().enumerate() {
+                // Skip the first region (no separator above it)
+                if i == 0 {
+                    continue;
+                }
+
+                // Draw dashed line at top of each region (except first)
+                let region_rect = self.scale_rect(&region.bounds, zoom);
+                let y = region_rect.min.y;
+
+                // Use orange color if region is selected, black otherwise
+                let color = if region.has_focus {
+                    Color32::from_rgb(255, 165, 0) // Orange
+                } else {
+                    Color32::BLACK
+                };
+
+                self.draw_dashed_line(
+                    painter,
+                    Pos2::new(rect.min.x, y),
+                    Pos2::new(rect.max.x, y),
+                    Stroke::new(zoom, color),
+                    4.0 * zoom,  // dash length
+                    2.0 * zoom,  // gap length
+                );
             }
         }
 
