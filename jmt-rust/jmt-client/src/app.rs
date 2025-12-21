@@ -1611,8 +1611,30 @@ impl JmtApp {
                         if !selected.is_empty() {
                             // Push undo on first movement
                             state.diagram.push_undo();
+
+                            // Build set of children to avoid double-moving
+                            let mut children_of_selected: std::collections::HashSet<uuid::Uuid> = std::collections::HashSet::new();
+                            for &id in &selected {
+                                if let Some(node) = state.diagram.find_node(id) {
+                                    if let Some(s) = node.as_state() {
+                                        for region in &s.regions {
+                                            for &child_id in &region.children {
+                                                children_of_selected.insert(child_id);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
                             for id in selected {
-                                state.diagram.translate_element(id, dx, dy);
+                                if children_of_selected.contains(&id) {
+                                    continue;
+                                }
+                                if state.diagram.find_node(id).is_some() {
+                                    state.diagram.translate_node_with_children(id, dx, dy);
+                                } else {
+                                    state.diagram.translate_element(id, dx, dy);
+                                }
                             }
                             state.diagram.recalculate_connections();
                             state.modified = true;
@@ -2054,8 +2076,33 @@ impl eframe::App for JmtApp {
                             if let Some(state) = self.current_diagram_mut() {
                                 let selected = state.diagram.selected_elements_in_order();
                                 if !selected.is_empty() {
+                                    // For state machine nodes, move children with parents
+                                    // Build set of all children of selected nodes to avoid double-moving
+                                    let mut children_of_selected: std::collections::HashSet<uuid::Uuid> = std::collections::HashSet::new();
+                                    for &id in &selected {
+                                        if let Some(node) = state.diagram.find_node(id) {
+                                            if let Some(s) = node.as_state() {
+                                                for region in &s.regions {
+                                                    for &child_id in &region.children {
+                                                        children_of_selected.insert(child_id);
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+
                                     for id in selected {
-                                        state.diagram.translate_element(id, diagram_delta_x, diagram_delta_y);
+                                        // Skip if this node is a child of another selected node
+                                        if children_of_selected.contains(&id) {
+                                            continue;
+                                        }
+                                        // For nodes, use translate_node_with_children to move children too
+                                        if state.diagram.find_node(id).is_some() {
+                                            state.diagram.translate_node_with_children(id, diagram_delta_x, diagram_delta_y);
+                                        } else {
+                                            // For other elements (lifelines, actors, etc.)
+                                            state.diagram.translate_element(id, diagram_delta_x, diagram_delta_y);
+                                        }
                                     }
                                     state.diagram.recalculate_connections();
                                     state.modified = true;

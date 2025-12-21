@@ -659,6 +659,30 @@ impl Diagram {
         false
     }
 
+    /// Translate a node and all its children (recursive)
+    /// Used when dragging a parent state - children should move with it
+    pub fn translate_node_with_children(&mut self, node_id: NodeId, dx: f32, dy: f32) {
+        // First, collect all children IDs (from all regions of this node)
+        let child_ids: Vec<NodeId> = self.find_node(node_id)
+            .and_then(|n| n.as_state())
+            .map(|state| {
+                state.regions.iter()
+                    .flat_map(|r| r.children.iter().copied())
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        // Translate the node itself
+        if let Some(node) = self.find_node_mut(node_id) {
+            node.translate(dx, dy);
+        }
+
+        // Recursively translate all children
+        for child_id in child_ids {
+            self.translate_node_with_children(child_id, dx, dy);
+        }
+    }
+
     /// Get selected elements in order (across all diagram types)
     pub fn selected_elements_in_order(&self) -> Vec<Uuid> {
         self.selection_order.clone()
