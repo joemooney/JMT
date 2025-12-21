@@ -157,21 +157,30 @@ impl DiagramCanvas {
         let rounding = Rounding::same(settings.corner_rounding * zoom);
         painter.rect(rect, rounding, fill, Stroke::new(zoom, Color32::BLACK));
 
-        // Draw state name
-        let text_pos = Pos2::new(rect.center().x, rect.min.y + 12.0 * zoom);
+        // Draw activities if they should be shown
+        let show_activities = state.should_show_activities(settings.show_activities);
+        let header_height = 24.0 * zoom;
+
+        // Draw state name - centered in header region when activities shown
+        let text_pos = if show_activities {
+            // Center vertically between top and separator line
+            Pos2::new(rect.center().x, rect.min.y + header_height / 2.0)
+        } else {
+            // Center in the state box when no activities
+            Pos2::new(rect.center().x, rect.center().y)
+        };
+
         painter.text(
             text_pos,
-            egui::Align2::CENTER_TOP,
+            egui::Align2::CENTER_CENTER,
             &state.name,
             egui::FontId::proportional(12.0 * zoom),
             Color32::BLACK,
         );
 
-        // Draw activities if they should be shown
-        let show_activities = state.should_show_activities(settings.show_activities);
         if show_activities {
             // Draw separator line
-            let line_y = rect.min.y + 24.0 * zoom;
+            let line_y = rect.min.y + header_height;
             painter.line_segment(
                 [Pos2::new(rect.min.x, line_y), Pos2::new(rect.max.x, line_y)],
                 Stroke::new(zoom, Color32::BLACK),
