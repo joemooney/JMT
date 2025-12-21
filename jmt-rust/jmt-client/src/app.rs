@@ -2056,7 +2056,14 @@ impl eframe::App for JmtApp {
                     self.status_message = "Ready".to_string();
                 } else if self.edit_mode == EditMode::Arrow {
                     if self.dragging_nodes {
-                        // Undo was already pushed at drag start, nothing to do here
+                        // Update region assignments for all moved nodes
+                        if let Some(state) = self.current_diagram_mut() {
+                            let selected = state.diagram.selected_nodes();
+                            for node_id in selected {
+                                state.diagram.update_node_region(node_id);
+                            }
+                        }
+                        self.dragging_nodes = false;
                     } else {
                         // Complete marquee selection
                         if let Some(rect) = self.selection_rect.to_core_rect() {

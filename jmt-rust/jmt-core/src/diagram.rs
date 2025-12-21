@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use crate::geometry::{Point, Rect};
-use crate::node::{Node, NodeId, NodeType, State, PseudoState, PseudoStateKind};
+use crate::node::{Node, NodeId, NodeType, State, PseudoState, PseudoStateKind, Region};
 use crate::connection::{Connection, ConnectionId};
 use crate::settings::DiagramSettings;
 use crate::diagram_type::DiagramType;
@@ -654,6 +654,12 @@ impl Diagram {
         );
         let id = state.id;
         self.nodes.push(Node::State(state));
+
+        // Assign to appropriate region based on position
+        let region_id = self.find_region_at_point(x, y)
+            .unwrap_or_else(|| self.root_region_id());
+        self.assign_node_to_region(id, region_id);
+
         id
     }
 
@@ -664,6 +670,12 @@ impl Diagram {
         let pseudo = PseudoState::new(kind, x - width / 2.0, y - height / 2.0);
         let id = pseudo.id;
         self.nodes.push(Node::Pseudo(pseudo));
+
+        // Assign to appropriate region based on position
+        let region_id = self.find_region_at_point(x, y)
+            .unwrap_or_else(|| self.root_region_id());
+        self.assign_node_to_region(id, region_id);
+
         id
     }
 
@@ -682,11 +694,177 @@ impl Diagram {
 
     /// Remove a node by ID
     pub fn remove_node(&mut self, id: NodeId) {
+        // Remove from parent region first
+        self.remove_node_from_region(id);
+
         // Remove any connections involving this node
         self.connections.retain(|c| c.source_id != id && c.target_id != id);
 
         // Remove the node
         self.nodes.retain(|n| n.id() != id);
+    }
+
+    // ===== Region Management Methods =====
+
+    /// Get the root/default region ID for top-level nodes
+    pub fn root_region_id(&self) -> Uuid {
+        self.root_state.regions.first()
+            .map(|r| r.id)
+            .expect("Root state should always have a default region")
+    }
+
+    /// Find a region by ID (searches root_state and all state nodes)
+    pub fn find_region(&self, region_id: Uuid) -> Option<&Region> {
+        // Check root state's regions
+        if let Some(region) = self.root_state.regions.iter().find(|r| r.id == region_id) {
+            return Some(region);
+        }
+
+        // Check all state nodes' regions
+        for node in &self.nodes {
+            if let Node::State(state) = node {
+                if let Some(region) = state.regions.iter().find(|r| r.id == region_id) {
+                    return Some(region);
+                }
+            }
+        }
+
+        None
+    }
+
+    /// Find a mutable region by ID (searches root_state and all state nodes)
+    pub fn find_region_mut(&mut self, region_id: Uuid) -> Option<&mut Region> {
+        // Check root state's regions
+        if self.root_state.regions.iter().any(|r| r.id == region_id) {
+            return self.root_state.regions.iter_mut().find(|r| r.id == region_id);
+        }
+
+        // Check all state nodes' regions
+        for node in &mut self.nodes {
+            if let Node::State(state) = node {
+                if let Some(region) = state.regions.iter_mut().find(|r| r.id == region_id) {
+                    return Some(region);
+                }
+            }
+        }
+
+        None
+    }
+
+    /// Find a region by ID and return its name
+    pub fn find_region_name(&self, region_id: Uuid) -> Option<String> {
+        self.find_region(region_id).map(|r| r.name.clone())
+    }
+
+    /// Find the parent state that contains a region
+    pub fn find_region_parent_state(&self, region_id: Uuid) -> Option<&State> {
+        // Check root state
+        if self.root_state.regions.iter().any(|r| r.id == region_id) {
+            return Some(&self.root_state);
+        }
+
+        // Check all state nodes
+        for node in &self.nodes {
+            if let Node::State(state) = node {
+                if state.regions.iter().any(|r| r.id == region_id) {
+                    return Some(state);
+                }
+            }
+        }
+
+        None
+    }
+
+    /// Find which region contains a point (checks all states' regions, innermost first)
+    /// Returns the region_id of the deepest region containing the point
+    pub fn find_region_at_point(&self, x: f32, y: f32) -> Option<Uuid> {
+        // Check state nodes' regions first (inner states before outer)
+        // We want the innermost region that contains the point
+        let mut best_match: Option<(Uuid, f32)> = None; // (region_id, area)
+
+        for node in &self.nodes {
+            if let Node::State(state) = node {
+                for region in &state.regions {
+                    if region.contains_point(x, y) {
+                        let area = region.bounds.width() * region.bounds.height();
+                        if best_match.is_none() || area < best_match.unwrap().1 {
+                            best_match = Some((region.id, area));
+                        }
+                    }
+                }
+            }
+        }
+
+        // If found a region in a state node, return it
+        if let Some((region_id, _)) = best_match {
+            return Some(region_id);
+        }
+
+        // Fall back to root state's regions
+        for region in &self.root_state.regions {
+            if region.contains_point(x, y) {
+                return Some(region.id);
+            }
+        }
+
+        // Default to root region if point is anywhere
+        Some(self.root_region_id())
+    }
+
+    /// Assign a node to a region (updates both node.parent_region_id and region.children)
+    pub fn assign_node_to_region(&mut self, node_id: NodeId, region_id: Uuid) {
+        // First, remove from any existing region
+        self.remove_node_from_region(node_id);
+
+        // Update the node's parent_region_id
+        if let Some(node) = self.find_node_mut(node_id) {
+            node.set_parent_region_id(Some(region_id));
+        }
+
+        // Add to the region's children list
+        if let Some(region) = self.find_region_mut(region_id) {
+            region.add_child(node_id);
+        }
+    }
+
+    /// Remove a node from its current parent region
+    pub fn remove_node_from_region(&mut self, node_id: NodeId) {
+        // Get the node's current parent region
+        let parent_region_id = self.find_node(node_id)
+            .and_then(|n| n.parent_region_id());
+
+        if let Some(region_id) = parent_region_id {
+            // Remove from region's children
+            if let Some(region) = self.find_region_mut(region_id) {
+                region.remove_child(node_id);
+            }
+        }
+
+        // Clear the node's parent_region_id
+        if let Some(node) = self.find_node_mut(node_id) {
+            node.set_parent_region_id(None);
+        }
+    }
+
+    /// Re-parent a node to the appropriate region based on its current position
+    pub fn update_node_region(&mut self, node_id: NodeId) {
+        // Get the node's center position
+        let center = self.find_node(node_id)
+            .map(|n| n.bounds().center());
+
+        if let Some(pos) = center {
+            // Find which region should contain this node
+            if let Some(region_id) = self.find_region_at_point(pos.x, pos.y) {
+                // Get current parent
+                let current_parent = self.find_node(node_id)
+                    .and_then(|n| n.parent_region_id());
+
+                // Only update if different
+                if current_parent != Some(region_id) {
+                    self.assign_node_to_region(node_id, region_id);
+                }
+            }
+        }
     }
 
     /// Add a connection between two nodes

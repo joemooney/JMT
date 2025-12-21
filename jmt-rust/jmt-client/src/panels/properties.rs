@@ -18,8 +18,20 @@ impl PropertiesPanel {
             if selected_nodes.len() == 1 {
                 // Show node properties
                 let node_id = selected_nodes[0];
+
+                // Get region info before getting mutable reference
+                let region_info = state.diagram.find_node(node_id)
+                    .and_then(|n| n.parent_region_id())
+                    .map(|rid| {
+                        let name = state.diagram.find_region_name(rid)
+                            .unwrap_or_else(|| "Unknown".to_string());
+                        let parent_state = state.diagram.find_region_parent_state(rid)
+                            .map(|s| s.name.clone());
+                        (name, parent_state)
+                    });
+
                 if let Some(node) = state.diagram.find_node_mut(node_id) {
-                    Self::show_node_properties(ui, node, &mut state.modified);
+                    Self::show_node_properties(ui, node, &mut state.modified, region_info);
                 }
             } else if let Some(conn_id) = selected_conn {
                 // Show connection properties
@@ -39,7 +51,12 @@ impl PropertiesPanel {
         }
     }
 
-    fn show_node_properties(ui: &mut egui::Ui, node: &mut Node, modified: &mut bool) {
+    fn show_node_properties(
+        ui: &mut egui::Ui,
+        node: &mut Node,
+        modified: &mut bool,
+        region_info: Option<(String, Option<String>)>,  // (region_name, parent_state_name)
+    ) {
         ui.label(format!("Type: {}", node.node_type().display_name()));
 
         ui.horizontal(|ui| {
@@ -50,6 +67,27 @@ impl PropertiesPanel {
                 *modified = true;
             }
         });
+
+        // Show containing region
+        if let Some((region_name, parent_state)) = region_info {
+            ui.horizontal(|ui| {
+                ui.label("In Region:");
+                if let Some(state_name) = parent_state {
+                    if state_name == "Root" {
+                        ui.label(format!("{} (diagram)", region_name));
+                    } else {
+                        ui.label(format!("{} (in {})", region_name, state_name));
+                    }
+                } else {
+                    ui.label(&region_name);
+                }
+            });
+        } else {
+            ui.horizontal(|ui| {
+                ui.label("In Region:");
+                ui.label("(unassigned)");
+            });
+        }
 
         // Show state-specific properties
         if let Some(state) = node.as_state_mut() {
