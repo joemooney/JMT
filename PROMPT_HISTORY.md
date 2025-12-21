@@ -1308,3 +1308,38 @@ This caused the calculated distance to be wildly wrong for diagonal line segment
 - Committed: `3b10679` - Center state name in header region when showing activities
 
 ---
+
+## Session 7 (continued) - Region Rendering (2025-12-21)
+
+### Prompt: Add region separator rendering for composite states
+
+**User Request:**
+"What support do we have for regions in states?" followed by "yes" to implement region rendering.
+
+**Investigation:**
+- Reviewed existing region support in data model (fully implemented)
+- Identified missing UI/rendering (regions invisible on canvas)
+- Referenced Fantom source `JsmRegion.fan` for rendering patterns
+
+**Actions Taken:**
+1. Added region separator rendering in `render_state()`:
+   - Draws dashed lines between regions when `state.regions.len() > 1`
+   - Uses 4px dash, 2px gap pattern (matching original Fantom style)
+   - Skips first region (no separator above it)
+   - Highlights separator in orange when `region.has_focus`
+
+2. Updated state name positioning for composite states:
+   - Composite states: Name centered in 25px header region
+   - States with activities: Name centered in 24px header region
+   - Simple states: Name centered in entire box
+
+**Files Modified:**
+- `jmt-client/src/canvas/renderer.rs` - Added region separator rendering, updated state name positioning
+
+**Build Status:**
+- Successfully compiles with `cargo build`
+
+**Git Operations:**
+- Committed: `3d474dd` - Add region separator rendering for composite states
+
+---
