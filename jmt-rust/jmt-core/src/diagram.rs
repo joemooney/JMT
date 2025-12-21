@@ -339,8 +339,21 @@ impl Diagram {
 
     /// Find a node at the given position
     pub fn find_node_at(&self, pos: Point) -> Option<NodeId> {
-        // Check in reverse order (top-most first)
-        self.nodes.iter().rev().find(|n| n.contains_point(pos)).map(|n| n.id())
+        // Find the innermost (smallest) node at this point
+        // This ensures clicking on a substate selects it, not its parent
+        let mut best_match: Option<(NodeId, f32)> = None; // (node_id, area)
+
+        for node in &self.nodes {
+            if node.contains_point(pos) {
+                let bounds = node.bounds();
+                let area = bounds.width() * bounds.height();
+                if best_match.is_none() || area < best_match.unwrap().1 {
+                    best_match = Some((node.id(), area));
+                }
+            }
+        }
+
+        best_match.map(|(id, _)| id)
     }
 
     /// Find a connection at the given position
