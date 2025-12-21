@@ -233,14 +233,30 @@ impl Node {
 
     /// Move the node by an offset
     pub fn translate(&mut self, dx: f32, dy: f32) {
-        let bounds = self.bounds_mut();
-        *bounds = bounds.translate(dx, dy);
+        match self {
+            Node::State(state) => {
+                state.bounds = state.bounds.translate(dx, dy);
+                // Recalculate region bounds after translation
+                state.recalculate_regions();
+            }
+            Node::Pseudo(pseudo) => {
+                pseudo.bounds = pseudo.bounds.translate(dx, dy);
+            }
+        }
     }
 
     /// Resize the node by dragging a corner
     pub fn resize_from_corner(&mut self, corner: Corner, dx: f32, dy: f32, min_width: f32, min_height: f32) {
-        let bounds = self.bounds_mut();
-        *bounds = bounds.resize_corner(corner, dx, dy, min_width, min_height);
+        match self {
+            Node::State(state) => {
+                state.bounds = state.bounds.resize_corner(corner, dx, dy, min_width, min_height);
+                // Recalculate region bounds after resize
+                state.recalculate_regions();
+            }
+            Node::Pseudo(pseudo) => {
+                pseudo.bounds = pseudo.bounds.resize_corner(corner, dx, dy, min_width, min_height);
+            }
+        }
     }
 
     /// Check if this node can be resized (States can, pseudo-states cannot)
