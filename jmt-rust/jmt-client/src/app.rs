@@ -1677,6 +1677,44 @@ impl eframe::App for JmtApp {
             // Track cursor position for preview
             self.cursor_pos = response.hover_pos();
 
+            // Canvas origin in screen space (for coordinate transformation)
+            let canvas_origin = response.rect.min;
+
+            // Check if cursor is over a corner of any resizable node and change cursor
+            if let Some(hover_pos) = self.cursor_pos {
+                let diagram_pos = Point::new(
+                    (hover_pos.x - canvas_origin.x) / zoom,
+                    (hover_pos.y - canvas_origin.y) / zoom
+                );
+                let corner_margin = 10.0;
+
+                let mut hover_corner = Corner::None;
+                if let Some(state) = self.current_diagram() {
+                    for node in state.diagram.nodes() {
+                        if node.can_resize() {
+                            let corner = node.get_corner(diagram_pos, corner_margin);
+                            if corner != Corner::None {
+                                hover_corner = corner;
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                // Set cursor based on corner
+                match hover_corner {
+                    Corner::TopLeft | Corner::BottomRight => {
+                        ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeNwSe);
+                    }
+                    Corner::TopRight | Corner::BottomLeft => {
+                        ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeNeSw);
+                    }
+                    Corner::None => {
+                        // Default cursor handled by egui
+                    }
+                }
+            }
+
             // Draw the diagram with zoom
             if let Some(state) = self.current_diagram_mut() {
                 state.canvas.render_with_zoom(&state.diagram, &painter, response.rect, zoom);
@@ -1695,9 +1733,6 @@ impl eframe::App for JmtApp {
                     self.status_message = "Switched to Arrow mode".to_string();
                 }
             }
-
-            // Canvas origin in screen space (for coordinate transformation)
-            let canvas_origin = response.rect.min;
 
             // Handle mouse clicks with custom double-click detection (500ms window)
             // Double-click in add mode will add element AND switch back to arrow mode
