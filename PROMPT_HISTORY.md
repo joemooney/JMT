@@ -1343,3 +1343,29 @@ This caused the calculated distance to be wildly wrong for diagonal line segment
 - Committed: `3d474dd` - Add region separator rendering for composite states
 
 ---
+
+## Session 7 (continued) - Region Toolbar Button (2025-12-21)
+
+### Prompt: Add toolbar button for adding regions
+
+**User Request:**
+"add toolbar button for adding regions"
+
+**Actions Taken:**
+1. Added `add_region_button()` method to `Toolbar` in `toolbar.rs`
+2. Icon shows a rounded rectangle (state) with dashed horizontal line (region separator)
+3. Button is only enabled when exactly one state is selected
+4. Clicking adds a new region to the selected state with undo support
+5. Disabled state shows grayed-out icon
+6. Contextual tooltip: "Add region to selected state" vs "Select a state to add a region"
+
+**Files Modified:**
+- `jmt-client/src/panels/toolbar.rs` - Added `add_region_button()` method
+
+**Build Status:**
+- Successfully compiles with `cargo build`
+
+**Git Operations:**
+- Committed: `3e976ca` - Add toolbar button for adding regions to states
+
+---
