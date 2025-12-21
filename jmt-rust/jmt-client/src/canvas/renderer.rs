@@ -349,19 +349,83 @@ impl DiagramCanvas {
         // Draw label if present
         let label = conn.label();
         if !label.is_empty() {
-            if let (Some(start), Some(end)) = (conn.start_point(), conn.end_point()) {
-                let mid = Pos2::new(
-                    (start.x + end.x) / 2.0 * zoom,
-                    ((start.y + end.y) / 2.0 - 10.0) * zoom,
-                );
+            if let Some((label_pos, midpoint)) = conn.label_position() {
+                let label_screen_pos = self.scale_pos(label_pos.x, label_pos.y, zoom);
+                let midpoint_screen_pos = self.scale_pos(midpoint.x, midpoint.y, zoom);
+
+                // Draw leader line if enabled and label has been moved from default
+                if settings.show_leader_lines && conn.label_offset.is_some() {
+                    // Draw dotted line from label to connection midpoint
+                    self.draw_dashed_line(
+                        painter,
+                        label_screen_pos,
+                        midpoint_screen_pos,
+                        Stroke::new(zoom * 0.5, Color32::GRAY),
+                        4.0 * zoom,  // dash length
+                        2.0 * zoom,  // gap length
+                    );
+                }
+
+                // Determine label color based on selection state
+                let label_color = if conn.label_selected || conn.selected {
+                    Color32::from_rgb(255, 165, 0)  // Orange when selected
+                } else {
+                    Color32::BLACK
+                };
+
                 painter.text(
-                    mid,
+                    label_screen_pos,
                     egui::Align2::CENTER_BOTTOM,
                     &label,
                     egui::FontId::proportional(10.0 * zoom),
-                    Color32::BLACK,
+                    label_color,
                 );
             }
+        }
+    }
+
+    /// Draw a dashed line between two points
+    fn draw_dashed_line(
+        &self,
+        painter: &egui::Painter,
+        start: Pos2,
+        end: Pos2,
+        stroke: Stroke,
+        dash_length: f32,
+        gap_length: f32,
+    ) {
+        let dx = end.x - start.x;
+        let dy = end.y - start.y;
+        let total_length = (dx * dx + dy * dy).sqrt();
+
+        if total_length < 0.001 {
+            return;
+        }
+
+        let unit_x = dx / total_length;
+        let unit_y = dy / total_length;
+
+        let mut current_pos = 0.0;
+        let mut drawing = true;
+
+        while current_pos < total_length {
+            let segment_length = if drawing { dash_length } else { gap_length };
+            let end_pos = (current_pos + segment_length).min(total_length);
+
+            if drawing {
+                let p1 = Pos2::new(
+                    start.x + current_pos * unit_x,
+                    start.y + current_pos * unit_y,
+                );
+                let p2 = Pos2::new(
+                    start.x + end_pos * unit_x,
+                    start.y + end_pos * unit_y,
+                );
+                painter.line_segment([p1, p2], stroke);
+            }
+
+            current_pos = end_pos;
+            drawing = !drawing;
         }
     }
 

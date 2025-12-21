@@ -31,9 +31,16 @@ pub struct DiagramSettings {
     /// Whether to show activities in states by default
     #[serde(default = "default_show_activities")]
     pub show_activities: bool,
+    /// Whether to show leader lines connecting labels to their connection midpoints
+    #[serde(default = "default_show_leader_lines")]
+    pub show_leader_lines: bool,
 }
 
 fn default_show_activities() -> bool {
+    true
+}
+
+fn default_show_leader_lines() -> bool {
     true
 }
 
@@ -53,6 +60,7 @@ impl Default for DiagramSettings {
             default_state_height: 60.0,
             default_pseudo_size: 20.0,
             show_activities: true,
+            show_leader_lines: true,
         }
     }
 }

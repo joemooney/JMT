@@ -307,6 +307,48 @@ impl Diagram {
             .map(|c| c.id)
     }
 
+    /// Find a connection label at the given position
+    /// Returns the connection ID if a label was clicked
+    pub fn find_connection_label_at(&self, pos: Point) -> Option<ConnectionId> {
+        // Check each connection's label
+        for conn in &self.connections {
+            let label = conn.label();
+            if !label.is_empty() {
+                // Estimate label dimensions (10px font, ~6px per character)
+                let label_width = label.len() as f32 * 6.0;
+                let label_height = 12.0;
+
+                if conn.is_near_label(pos, label_width, label_height) {
+                    return Some(conn.id);
+                }
+            }
+        }
+        None
+    }
+
+    /// Select a connection label (deselects everything else)
+    pub fn select_connection_label(&mut self, id: ConnectionId) {
+        self.clear_selection();
+        if let Some(conn) = self.find_connection_mut(id) {
+            conn.label_selected = true;
+            conn.selected = true;  // Also select the connection
+        }
+    }
+
+    /// Get the connection with a selected label
+    pub fn selected_connection_label(&self) -> Option<ConnectionId> {
+        self.connections.iter()
+            .find(|c| c.label_selected)
+            .map(|c| c.id)
+    }
+
+    /// Update a connection's label offset
+    pub fn set_connection_label_offset(&mut self, id: ConnectionId, offset: Option<(f32, f32)>) {
+        if let Some(conn) = self.find_connection_mut(id) {
+            conn.set_label_offset(offset);
+        }
+    }
+
     /// Find all nodes within a rectangle
     pub fn find_nodes_in_rect(&self, rect: &Rect) -> Vec<NodeId> {
         self.nodes
@@ -919,6 +961,7 @@ impl Diagram {
         }
         for conn in &mut self.connections {
             conn.selected = false;
+            conn.label_selected = false;
         }
         // Sequence elements
         for lifeline in &mut self.lifelines {

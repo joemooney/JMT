@@ -140,6 +140,8 @@ pub struct JmtApp {
     pub selection_rect: SelectionRect,
     /// Whether we're currently dragging nodes (vs marquee selecting)
     dragging_nodes: bool,
+    /// Connection ID of the label we're currently dragging
+    dragging_label: Option<uuid::Uuid>,
     /// Current cursor position on canvas (for preview rendering)
     pub cursor_pos: Option<egui::Pos2>,
     /// Active resize state (when resizing a node by corner)
@@ -168,6 +170,7 @@ impl Default for JmtApp {
             pending_connection_source: None,
             selection_rect: SelectionRect::default(),
             dragging_nodes: false,
+            dragging_label: None,
             cursor_pos: None,
             resize_state: ResizeState::default(),
             lasso_points: Vec::new(),
@@ -969,6 +972,13 @@ impl JmtApp {
 
         match edit_mode {
             EditMode::Arrow => {
+                // First check for connection labels (highest priority for selection)
+                if let Some(conn_id) = state.diagram.find_connection_label_at(point) {
+                    state.diagram.select_connection_label(conn_id);
+                    self.status_message = "Selected connection label (drag to move)".to_string();
+                    return;
+                }
+
                 // Try to select any element (node, lifeline, actor, use case, action, etc.)
                 if let Some(element_id) = state.diagram.find_element_at(point) {
                     let name = state.diagram.get_element_name(element_id)
@@ -1712,7 +1722,16 @@ impl eframe::App for JmtApp {
                         }
                     }
 
-                    // Second check: connections
+                    // Second check: connection labels (for dragging)
+                    if !cursor_set {
+                        if state.diagram.find_connection_label_at(diagram_pos).is_some() {
+                            // Use move cursor for labels
+                            ui.ctx().set_cursor_icon(egui::CursorIcon::Move);
+                            cursor_set = true;
+                        }
+                    }
+
+                    // Third check: connections
                     if !cursor_set {
                         if let Some(_conn_id) = state.diagram.find_connection_at(diagram_pos, connection_tolerance) {
                             // Use crosshair cursor for connections
@@ -1846,46 +1865,64 @@ impl eframe::App for JmtApp {
                         self.dragging_nodes = false;
                         self.selection_rect.clear();
                     } else {
-                        // Check if we clicked on any element (for dragging)
-                        let clicked_element_id = self.current_diagram()
-                            .and_then(|state| state.diagram.find_element_at(point));
+                        // First check if we clicked on a connection label (for label dragging)
+                        let clicked_label = self.current_diagram()
+                            .and_then(|state| state.diagram.find_connection_label_at(point));
 
-                        if let Some(element_id) = clicked_element_id {
-                            // Dragging on an element - switch to Arrow mode and start dragging
-                            if self.edit_mode != EditMode::Arrow {
-                                self.set_edit_mode(EditMode::Arrow);
-                            }
-
-                            // Select the element if not already selected
+                        if let Some(conn_id) = clicked_label {
+                            // Start dragging a label
                             if let Some(state) = self.current_diagram_mut() {
-                                let already_selected = state.diagram.selected_elements_in_order().contains(&element_id);
-                                if !already_selected {
-                                    // Select this element (this allows click-and-drag in one motion)
-                                    state.diagram.select_element(element_id);
-                                }
-                                // Push undo before we start moving
+                                state.diagram.select_connection_label(conn_id);
                                 state.diagram.push_undo();
                             }
-                            self.dragging_nodes = true;
+                            self.dragging_label = Some(conn_id);
+                            self.dragging_nodes = false;
                             self.selection_rect.clear();
-                        } else if self.edit_mode == EditMode::Arrow {
-                            // We're starting a marquee selection (only in Arrow mode)
-                            // Store screen coordinates for the selection rectangle
-                            self.dragging_nodes = false;
-                            self.selection_rect.start = Some(diagram_pos);
-                            self.selection_rect.current = Some(diagram_pos);
-                            // Clear current selection when starting a new marquee
-                            if let Some(state) = self.current_diagram_mut() {
-                                state.diagram.clear_selection();
-                            }
-                        } else if self.edit_mode == EditMode::Lasso {
-                            // We're starting a lasso selection
-                            self.dragging_nodes = false;
-                            self.lasso_points.clear();
-                            self.lasso_points.push(diagram_pos);
-                            // Clear current selection when starting a new lasso
-                            if let Some(state) = self.current_diagram_mut() {
-                                state.diagram.clear_selection();
+                        } else {
+                            // Check if we clicked on any element (for dragging)
+                            let clicked_element_id = self.current_diagram()
+                                .and_then(|state| state.diagram.find_element_at(point));
+
+                            if let Some(element_id) = clicked_element_id {
+                                // Dragging on an element - switch to Arrow mode and start dragging
+                                if self.edit_mode != EditMode::Arrow {
+                                    self.set_edit_mode(EditMode::Arrow);
+                                }
+
+                                // Select the element if not already selected
+                                if let Some(state) = self.current_diagram_mut() {
+                                    let already_selected = state.diagram.selected_elements_in_order().contains(&element_id);
+                                    if !already_selected {
+                                        // Select this element (this allows click-and-drag in one motion)
+                                        state.diagram.select_element(element_id);
+                                    }
+                                    // Push undo before we start moving
+                                    state.diagram.push_undo();
+                                }
+                                self.dragging_nodes = true;
+                                self.dragging_label = None;
+                                self.selection_rect.clear();
+                            } else if self.edit_mode == EditMode::Arrow {
+                                // We're starting a marquee selection (only in Arrow mode)
+                                // Store screen coordinates for the selection rectangle
+                                self.dragging_nodes = false;
+                                self.dragging_label = None;
+                                self.selection_rect.start = Some(diagram_pos);
+                                self.selection_rect.current = Some(diagram_pos);
+                                // Clear current selection when starting a new marquee
+                                if let Some(state) = self.current_diagram_mut() {
+                                    state.diagram.clear_selection();
+                                }
+                            } else if self.edit_mode == EditMode::Lasso {
+                                // We're starting a lasso selection
+                                self.dragging_nodes = false;
+                                self.dragging_label = None;
+                                self.lasso_points.clear();
+                                self.lasso_points.push(diagram_pos);
+                                // Clear current selection when starting a new lasso
+                                if let Some(state) = self.current_diagram_mut() {
+                                    state.diagram.clear_selection();
+                                }
                             }
                         }
                     }
@@ -1917,6 +1954,23 @@ impl eframe::App for JmtApp {
                                 node.resize_from_corner(corner, diagram_delta_x, diagram_delta_y, min_width, min_height);
                             }
                             state.diagram.recalculate_connections();
+                            state.modified = true;
+                        }
+                    } else if let Some(conn_id) = self.dragging_label {
+                        // Dragging a connection label
+                        if let Some(state) = self.current_diagram_mut() {
+                            if let Some(conn) = state.diagram.find_connection_mut(conn_id) {
+                                // Get the current midpoint to verify connection has segments
+                                if conn.midpoint().is_some() {
+                                    // Calculate new offset from midpoint
+                                    let current_offset = conn.label_offset.unwrap_or((0.0, -15.0));
+                                    let new_offset = (
+                                        current_offset.0 + diagram_delta_x,
+                                        current_offset.1 + diagram_delta_y,
+                                    );
+                                    conn.set_label_offset(Some(new_offset));
+                                }
+                            }
                             state.modified = true;
                         }
                     } else if self.edit_mode == EditMode::Arrow {
@@ -1992,7 +2046,11 @@ impl eframe::App for JmtApp {
 
             // Handle drag end
             if response.drag_stopped() {
-                if self.resize_state.is_active() {
+                if self.dragging_label.is_some() {
+                    // Finished dragging a label
+                    self.dragging_label = None;
+                    self.status_message = "Label moved".to_string();
+                } else if self.resize_state.is_active() {
                     // Finished resizing
                     self.resize_state.clear();
                     self.status_message = "Ready".to_string();
@@ -2038,6 +2096,7 @@ impl eframe::App for JmtApp {
                 // Clear selection rect and reset state
                 self.selection_rect.clear();
                 self.dragging_nodes = false;
+                self.dragging_label = None;
             }
             }); // End ScrollArea
         });

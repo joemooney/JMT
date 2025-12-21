@@ -120,6 +120,15 @@ impl MenuBar {
                     }
                 }
 
+                // Show leader lines toggle
+                if let Some(state) = app.current_diagram_mut() {
+                    let mut show = state.diagram.settings.show_leader_lines;
+                    if ui.checkbox(&mut show, "Show Leader Lines").on_hover_text("Show dotted lines connecting labels to their connections").changed() {
+                        state.diagram.settings.show_leader_lines = show;
+                        state.modified = true;
+                    }
+                }
+
                 ui.separator();
 
                 if ui.button("Zoom In").clicked() {

@@ -81,12 +81,19 @@ pub struct Connection {
     pub guard: String,
     /// Action to execute on transition
     pub action: String,
+    /// Custom label position offset from default (connection midpoint)
+    /// If None, label is positioned at default location (slightly above midpoint)
+    #[serde(default)]
+    pub label_offset: Option<(f32, f32)>,
     /// Line segments making up the connection path
     #[serde(skip)]
     pub segments: Vec<LineSegment>,
     /// Whether this connection is selected
     #[serde(skip)]
     pub selected: bool,
+    /// Whether the label is being hovered/selected (for interaction)
+    #[serde(skip)]
+    pub label_selected: bool,
 }
 
 impl Connection {
@@ -104,8 +111,10 @@ impl Connection {
             event: String::new(),
             guard: String::new(),
             action: String::new(),
+            label_offset: None,
             segments: Vec::new(),
             selected: false,
+            label_selected: false,
         }
     }
 
@@ -123,8 +132,10 @@ impl Connection {
             event: String::new(),
             guard: String::new(),
             action: String::new(),
+            label_offset: None,
             segments: Vec::new(),
             selected: false,
+            label_selected: false,
         }
     }
 
@@ -245,6 +256,68 @@ impl Connection {
     /// Get the start point
     pub fn start_point(&self) -> Option<Point> {
         self.segments.first().map(|s| s.start)
+    }
+
+    /// Get the midpoint of the connection (center of all segments)
+    pub fn midpoint(&self) -> Option<Point> {
+        if self.segments.is_empty() {
+            return None;
+        }
+
+        // Calculate total length and find the point at half that length
+        let total_length: f32 = self.segments.iter().map(|s| s.length()).sum();
+        let half_length = total_length / 2.0;
+
+        let mut accumulated = 0.0;
+        for seg in &self.segments {
+            let seg_len = seg.length();
+            if accumulated + seg_len >= half_length {
+                // The midpoint is on this segment
+                let remaining = half_length - accumulated;
+                let t = if seg_len > 0.0 { remaining / seg_len } else { 0.0 };
+                return Some(Point::new(
+                    seg.start.x + t * (seg.end.x - seg.start.x),
+                    seg.start.y + t * (seg.end.y - seg.start.y),
+                ));
+            }
+            accumulated += seg_len;
+        }
+
+        // Fallback: return end of last segment
+        self.segments.last().map(|s| s.end)
+    }
+
+    /// Get the label position (midpoint + offset if set, or default position above midpoint)
+    /// Returns (label_position, midpoint) for drawing leader line
+    pub fn label_position(&self) -> Option<(Point, Point)> {
+        let midpoint = self.midpoint()?;
+
+        let label_pos = if let Some((dx, dy)) = self.label_offset {
+            Point::new(midpoint.x + dx, midpoint.y + dy)
+        } else {
+            // Default: 15 pixels above the midpoint
+            Point::new(midpoint.x, midpoint.y - 15.0)
+        };
+
+        Some((label_pos, midpoint))
+    }
+
+    /// Set the label offset from the connection midpoint
+    pub fn set_label_offset(&mut self, offset: Option<(f32, f32)>) {
+        self.label_offset = offset;
+    }
+
+    /// Check if a point is near the label (for hit testing)
+    /// Returns true if the point is within the label bounds
+    pub fn is_near_label(&self, p: Point, label_width: f32, label_height: f32) -> bool {
+        if let Some((label_pos, _)) = self.label_position() {
+            // Label is centered horizontally, aligned at bottom
+            let half_width = label_width / 2.0;
+            p.x >= label_pos.x - half_width && p.x <= label_pos.x + half_width &&
+            p.y >= label_pos.y - label_height && p.y <= label_pos.y
+        } else {
+            false
+        }
     }
 }
 
