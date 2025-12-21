@@ -2133,17 +2133,21 @@ impl eframe::App for JmtApp {
                     self.dragging_label = None;
                     self.status_message = "Label moved".to_string();
                 } else if self.resize_state.is_active() {
-                    // Finished resizing
+                    // Finished resizing - re-evaluate all node regions
+                    // since resizing a state may affect containment
+                    if let Some(state) = self.current_diagram_mut() {
+                        state.diagram.update_all_node_regions();
+                    }
                     self.resize_state.clear();
                     self.status_message = "Ready".to_string();
                 } else if self.edit_mode == EditMode::Arrow {
                     if self.dragging_nodes {
-                        // Update region assignments for all moved nodes
+                        // Re-evaluate ALL node region assignments after drag
+                        // This handles cases where:
+                        // - A node was dragged into/out of another state
+                        // - A parent state was moved, affecting child relationships
                         if let Some(state) = self.current_diagram_mut() {
-                            let selected = state.diagram.selected_nodes();
-                            for node_id in selected {
-                                state.diagram.update_node_region(node_id);
-                            }
+                            state.diagram.update_all_node_regions();
                         }
                         self.dragging_nodes = false;
                     } else {

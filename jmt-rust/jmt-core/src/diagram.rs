@@ -1066,6 +1066,18 @@ impl Diagram {
         }
     }
 
+    /// Re-evaluate all nodes' parent/child relationships based on current positions
+    /// Call this after any drag operation to ensure all containment is correct
+    pub fn update_all_node_regions(&mut self) {
+        // Get all node IDs first to avoid borrow issues
+        let node_ids: Vec<NodeId> = self.nodes.iter().map(|n| n.id()).collect();
+
+        // Update each node's region assignment
+        for node_id in node_ids {
+            self.update_node_region(node_id);
+        }
+    }
+
     /// Add a connection between two nodes
     pub fn add_connection(&mut self, source_id: NodeId, target_id: NodeId) -> Option<ConnectionId> {
         // Validate that both nodes exist
