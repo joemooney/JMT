@@ -46,10 +46,9 @@ impl LineSegment {
             return self.start.distance_to(p) <= tolerance;
         }
 
-        let numerator = ((dy * self.start.y) - (dx * self.start.x)
-            + (dx * p.y)
-            - (dy * p.x))
-            .abs();
+        // Perpendicular distance formula: |dy * (px - x1) - dx * (py - y1)| / sqrt(dx² + dy²)
+        // Expanded: |dy * px - dy * x1 - dx * py + dx * y1| / sqrt(dx² + dy²)
+        let numerator = (dy * p.x - dx * p.y + dx * self.start.y - dy * self.start.x).abs();
         let denominator = (dx * dx + dy * dy).sqrt();
         let distance = numerator / denominator;
 
@@ -268,6 +267,36 @@ mod tests {
 
         // Point outside bounding box
         assert!(!seg.is_near_point(Point::new(150.0, 0.0), 5.0));
+    }
+
+    #[test]
+    fn test_line_segment_near_point_diagonal() {
+        // Diagonal line from (110, 130) to (180, 140) - typical connection segment
+        let seg = LineSegment::new(Point::new(110.0, 130.0), Point::new(180.0, 140.0));
+
+        // Point very close to the line (about 2 units perpendicular distance)
+        assert!(seg.is_near_point(Point::new(145.0, 133.0), 8.0));
+
+        // Point on the line
+        assert!(seg.is_near_point(Point::new(145.0, 135.0), 5.0));
+
+        // Point far from the line
+        assert!(!seg.is_near_point(Point::new(145.0, 160.0), 8.0));
+    }
+
+    #[test]
+    fn test_line_segment_near_point_vertical() {
+        // Vertical line segment
+        let seg = LineSegment::new(Point::new(110.0, 120.0), Point::new(110.0, 130.0));
+
+        // Point on the line
+        assert!(seg.is_near_point(Point::new(110.0, 125.0), 5.0));
+
+        // Point near the line
+        assert!(seg.is_near_point(Point::new(113.0, 125.0), 5.0));
+
+        // Point far from the line
+        assert!(!seg.is_near_point(Point::new(120.0, 125.0), 5.0));
     }
 
     #[test]

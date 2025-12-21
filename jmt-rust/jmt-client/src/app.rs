@@ -991,8 +991,8 @@ impl JmtApp {
                     // Only clear selection if Ctrl is not held
                     if !ctrl_held {
                         state.diagram.clear_selection();
-                        self.status_message = "Ready".to_string();
                     }
+                    self.status_message = "Ready".to_string();
                 }
             }
             EditMode::AddState => {
@@ -1680,39 +1680,50 @@ impl eframe::App for JmtApp {
             // Canvas origin in screen space (for coordinate transformation)
             let canvas_origin = response.rect.min;
 
-            // Check if cursor is over a corner of any resizable node and change cursor
+            // Check if cursor is over interactive elements and change cursor accordingly
             if let Some(hover_pos) = self.cursor_pos {
                 let diagram_pos = Point::new(
                     (hover_pos.x - canvas_origin.x) / zoom,
                     (hover_pos.y - canvas_origin.y) / zoom
                 );
                 let corner_margin = 10.0;
+                let connection_tolerance = 8.0;
 
-                let mut hover_corner = Corner::None;
+                let mut cursor_set = false;
+
+                // First check: corners of resizable nodes (highest priority)
                 if let Some(state) = self.current_diagram() {
                     for node in state.diagram.nodes() {
                         if node.can_resize() {
                             let corner = node.get_corner(diagram_pos, corner_margin);
                             if corner != Corner::None {
-                                hover_corner = corner;
+                                match corner {
+                                    Corner::TopLeft | Corner::BottomRight => {
+                                        ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeNwSe);
+                                    }
+                                    Corner::TopRight | Corner::BottomLeft => {
+                                        ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeNeSw);
+                                    }
+                                    Corner::None => {}
+                                }
+                                cursor_set = true;
                                 break;
                             }
                         }
                     }
+
+                    // Second check: connections
+                    if !cursor_set {
+                        if let Some(_conn_id) = state.diagram.find_connection_at(diagram_pos, connection_tolerance) {
+                            // Use crosshair cursor for connections
+                            ui.ctx().set_cursor_icon(egui::CursorIcon::Crosshair);
+                            cursor_set = true;
+                        }
+                    }
                 }
 
-                // Set cursor based on corner
-                match hover_corner {
-                    Corner::TopLeft | Corner::BottomRight => {
-                        ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeNwSe);
-                    }
-                    Corner::TopRight | Corner::BottomLeft => {
-                        ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeNeSw);
-                    }
-                    Corner::None => {
-                        // Default cursor handled by egui
-                    }
-                }
+                // If nothing special, egui handles default cursor
+                let _ = cursor_set;
             }
 
             // Draw the diagram with zoom
