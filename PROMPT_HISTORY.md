@@ -1276,3 +1276,35 @@ This caused the calculated distance to be wildly wrong for diagonal line segment
 - Committed: `7c2c752` - Add draggable connection labels with leader lines
 
 ---
+
+## Session 7 (continued) - State Name Positioning (2025-12-21)
+
+### Prompt: Center state name in header when showing activities
+
+**User Request:**
+"when we are showing the content of a state, move the state name up centered between the separator and the outer perimiter box of the state"
+
+**Actions Taken:**
+1. Modified `render_state()` in `renderer.rs` to calculate header height (24px)
+2. When activities are shown: Position state name at `rect.min.y + header_height / 2.0` (centered in header region)
+3. When no activities: Position state name at `rect.center().y` (centered in entire box)
+4. Changed text alignment from `CENTER_TOP` to `CENTER_CENTER` for both cases
+
+**Before:**
+- State name positioned at fixed 12px from top with CENTER_TOP alignment
+- Name appeared at top of state regardless of activities
+
+**After:**
+- State name centered between top border and separator line when activities shown
+- State name centered in entire box when no activities
+
+**Files Modified:**
+- `jmt-client/src/canvas/renderer.rs` - Updated state name positioning logic
+
+**Build Status:**
+- Successfully compiles with `cargo build`
+
+**Git Operations:**
+- Committed: `3b10679` - Center state name in header region when showing activities
+
+---
