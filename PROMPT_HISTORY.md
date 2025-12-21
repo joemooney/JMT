@@ -1203,3 +1203,40 @@ When using Ctrl+Click to select nodes in a specific order, align/distribute shou
 - Committed: `9cd8d68` - Add PNG export functionality with autocrop option
 
 ---
+
+## Session 7 - Connection Selection Bug Fix (2025-12-21)
+
+### Prompt: Fix connection selection for pseudo-state connections
+
+**User Request:**
+"notice I was able to select one connection but my cursor is right on top of another connection and I do not see the crosshair"
+
+**Investigation:**
+1. User could select State1→State2 connection but not Initial→State1
+2. Added debug output to show segment counts and `is_near_point` results
+3. Discovered the perpendicular distance formula in `LineSegment::is_near_point()` was incorrect
+
+**Root Cause:**
+The formula for calculating perpendicular distance from a point to a line segment had swapped terms:
+- **Incorrect:** `|dy*start.y - dx*start.x + dx*p.y - dy*p.x|`
+- **Correct:** `|dy*p.x - dx*p.y + dx*start.y - dy*start.x|`
+
+This caused the calculated distance to be wildly wrong for diagonal line segments. For example, a point 2 units from a diagonal line was incorrectly calculated as ~21 units away, causing hit detection to fail.
+
+**Actions Taken:**
+1. Fixed the perpendicular distance formula in `LineSegment::is_near_point()`
+2. Added comprehensive unit tests for diagonal and vertical line segments
+3. Verified with test cases that the formula now correctly calculates distances
+
+**Files Modified:**
+- `jmt-core/src/connection.rs` - Fixed distance formula, added tests
+- `jmt-client/src/app.rs` - Removed debug output
+
+**Build Status:**
+- All tests pass
+- Successfully compiles with `cargo build`
+
+**Git Operations:**
+- Committed: `e387115` - Fix connection selection by correcting perpendicular distance formula
+
+---
