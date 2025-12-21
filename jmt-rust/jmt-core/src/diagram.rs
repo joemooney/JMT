@@ -846,6 +846,26 @@ impl Diagram {
         }
     }
 
+    /// Find the innermost state containing a point (by state bounds, not regions)
+    /// Returns the state's node ID, or None if only the root state contains it
+    pub fn find_state_at_point(&self, x: f32, y: f32) -> Option<NodeId> {
+        let point = Point::new(x, y);
+        let mut best_match: Option<(NodeId, f32)> = None; // (state_id, area)
+
+        for node in &self.nodes {
+            if let Node::State(state) = node {
+                if state.bounds.contains_point(point) {
+                    let area = state.bounds.width() * state.bounds.height();
+                    if best_match.is_none() || area < best_match.unwrap().1 {
+                        best_match = Some((state.id, area));
+                    }
+                }
+            }
+        }
+
+        best_match.map(|(id, _)| id)
+    }
+
     /// Re-parent a node to the appropriate region based on its current position
     pub fn update_node_region(&mut self, node_id: NodeId) {
         // Get the node's center position
@@ -853,7 +873,27 @@ impl Diagram {
             .map(|n| n.bounds().center());
 
         if let Some(pos) = center {
-            // Find which region should contain this node
+            // First, check if we're inside a state that has no regions
+            // If so, create a default region for it
+            if let Some(state_id) = self.find_state_at_point(pos.x, pos.y) {
+                // Don't assign a node to itself
+                if state_id != node_id {
+                    // Check if this state has any regions
+                    let needs_region = self.find_node(state_id)
+                        .and_then(|n| n.as_state())
+                        .map(|s| s.regions.is_empty())
+                        .unwrap_or(false);
+
+                    if needs_region {
+                        // Create a default region for this state
+                        if let Some(Node::State(state)) = self.find_node_mut(state_id) {
+                            state.add_region("default");
+                        }
+                    }
+                }
+            }
+
+            // Now find which region should contain this node
             if let Some(region_id) = self.find_region_at_point(pos.x, pos.y) {
                 // Get current parent
                 let current_parent = self.find_node(node_id)
