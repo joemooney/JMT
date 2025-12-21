@@ -1431,3 +1431,31 @@ This caused the calculated distance to be wildly wrong for diagonal line segment
 - Committed: `83a86c0` - Position state name at top when state has children
 
 ---
+
+## Session 7 (continued) - Auto-create Regions for Container States (2025-12-21)
+
+### Prompt: Fix node parenting when dragged into region-less state
+
+**User Request:**
+"Initial node dragged into a state still shows default region"
+
+**Problem:**
+When a node was dragged into a state that had no regions, the node would be assigned to the diagram's root "default" region instead of a region inside the target state. This happened because `find_region_at_point` could only find existing regions, and states without explicit regions had none.
+
+**Actions Taken:**
+1. Added `find_state_at_point(x, y)` to find the innermost state (by bounds area) containing a point
+2. Modified `update_node_region()` to:
+   - First check if the node is inside a state without regions
+   - Auto-create a "default" region for that state if needed
+   - Then find the region and assign the node to it
+
+**Files Modified:**
+- `jmt-core/src/diagram.rs` - Added `find_state_at_point()`, modified `update_node_region()`
+
+**Build Status:**
+- Successfully compiles with `cargo build`
+
+**Git Operations:**
+- Committed: `e38369e` - Auto-create region when node is dragged into region-less state
+
+---
