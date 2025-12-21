@@ -856,7 +856,9 @@ impl JmtApp {
             (':', &[0b00000, 0b01100, 0b01100, 0b00000, 0b01100, 0b01100, 0b00000]),
         ];
 
-        let pattern = patterns.iter().find(|(ch, _)| *ch == c.to_ascii_uppercase() || *ch == c);
+        // Search for exact character first, then fall back to uppercase
+        let pattern = patterns.iter().find(|(ch, _)| *ch == c)
+            .or_else(|| patterns.iter().find(|(ch, _)| *ch == c.to_ascii_uppercase()));
         if let Some((_, bits)) = pattern {
             for (row, &byte) in bits.iter().enumerate() {
                 for col in 0..5 {
