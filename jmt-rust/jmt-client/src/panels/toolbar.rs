@@ -298,6 +298,99 @@ impl Toolbar {
             painter.line_segment([right, Pos2::new(right.x - arrow_size, right.y - arrow_size)], Stroke::new(1.5, stroke_color));
             painter.line_segment([right, Pos2::new(right.x - arrow_size, right.y + arrow_size)], Stroke::new(1.5, stroke_color));
         });
+
+        ui.separator();
+
+        // Add Region button - only enabled when a state is selected
+        Self::add_region_button(ui, app);
+    }
+
+    /// Add Region button - adds a region to the selected state
+    fn add_region_button(ui: &mut egui::Ui, app: &mut JmtApp) {
+        // Check if exactly one state is selected
+        let selected_state_id = app.current_diagram().and_then(|s| {
+            let selected = s.diagram.selected_nodes();
+            if selected.len() == 1 {
+                let id = selected[0];
+                // Check if it's a State (not a PseudoState)
+                if let Some(jmt_core::Node::State(_)) = s.diagram.find_node(id) {
+                    return Some(id);
+                }
+            }
+            None
+        });
+
+        let is_enabled = selected_state_id.is_some();
+        let is_dark_mode = ui.visuals().dark_mode;
+        let stroke_color = if is_dark_mode {
+            if is_enabled {
+                Color32::from_rgb(220, 220, 220)
+            } else {
+                Color32::from_rgb(100, 100, 100)
+            }
+        } else {
+            if is_enabled {
+                Color32::BLACK
+            } else {
+                Color32::from_rgb(180, 180, 180)
+            }
+        };
+
+        let size = Vec2::splat(ICON_SIZE + 8.0);
+        let (rect, response) = ui.allocate_exact_size(size, egui::Sense::click());
+
+        // Draw button background
+        let bg_color = if !is_enabled {
+            Color32::TRANSPARENT
+        } else if response.hovered() {
+            if is_dark_mode {
+                Color32::from_rgb(70, 70, 70)
+            } else {
+                Color32::from_rgb(230, 230, 230)
+            }
+        } else {
+            Color32::TRANSPARENT
+        };
+
+        ui.painter().rect(rect, Rounding::same(4.0), bg_color, Stroke::NONE);
+
+        // Draw icon: state with dashed region separator
+        let icon_rect = rect.shrink(4.0);
+        let inner = icon_rect.shrink(2.0);
+
+        // State rectangle
+        ui.painter().rect(inner, Rounding::same(3.0), Color32::from_rgb(255, 255, 204), Stroke::new(1.0, stroke_color));
+
+        // Dashed horizontal line (region separator)
+        let y = inner.center().y;
+        let mut x = inner.left() + 2.0;
+        while x < inner.right() - 2.0 {
+            let end_x = (x + 3.0).min(inner.right() - 2.0);
+            ui.painter().line_segment(
+                [Pos2::new(x, y), Pos2::new(end_x, y)],
+                Stroke::new(1.0, stroke_color),
+            );
+            x += 5.0;
+        }
+
+        // Handle click
+        let tooltip = if is_enabled {
+            "Add region to selected state"
+        } else {
+            "Select a state to add a region"
+        };
+
+        if response.on_hover_text(tooltip).clicked() && is_enabled {
+            if let Some(state_id) = selected_state_id {
+                if let Some(diagram_state) = app.current_diagram_mut() {
+                    diagram_state.diagram.push_undo();
+                    if let Some(jmt_core::Node::State(state)) = diagram_state.diagram.find_node_mut(state_id) {
+                        state.add_region("Region");
+                    }
+                    diagram_state.modified = true;
+                }
+            }
+        }
     }
 
     fn show_sequence_tools(ui: &mut egui::Ui, app: &mut JmtApp) {
