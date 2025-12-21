@@ -160,18 +160,21 @@ impl DiagramCanvas {
         // Draw activities if they should be shown
         let show_activities = state.should_show_activities(settings.show_activities);
         let header_height = 24.0 * zoom;
-        let is_composite = state.regions.len() > 1;
 
-        // Draw state name - centered in header region when composite or showing activities
-        let text_pos = if is_composite {
-            // Composite state: center name in header (25px from top)
+        // Check if state has children (multiple regions OR any region with children)
+        let has_children = state.regions.len() > 1 ||
+            state.regions.iter().any(|r| !r.children.is_empty());
+
+        // Draw state name - at top when has children, activities, or multiple regions
+        let text_pos = if has_children {
+            // State with children: name at top in header (25px from top)
             let composite_header = 25.0 * zoom;
             Pos2::new(rect.center().x, rect.min.y + composite_header / 2.0)
         } else if show_activities {
             // Center vertically between top and separator line
             Pos2::new(rect.center().x, rect.min.y + header_height / 2.0)
         } else {
-            // Center in the state box when no activities
+            // Center in the state box when no children/activities
             Pos2::new(rect.center().x, rect.center().y)
         };
 
