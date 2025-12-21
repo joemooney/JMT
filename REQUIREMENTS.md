@@ -16,6 +16,10 @@
 - Add, move, resize, and delete diagram elements
 - Align and organize shapes (left, right, center, top, bottom, middle)
 - Select single or multiple elements
+- Marquee selection (requires full containment)
+- Lasso selection tool for freeform selection
+- Ctrl+Click to toggle selection / add to selection
+- Ctrl+Arrow keys to nudge selected elements by 1 pixel
 - Undo/redo operations
 - Dynamic toolbar showing diagram-type-specific tools
 
@@ -36,12 +40,20 @@
 - Join (bar - parallel merge)
 - Junction (diamond - unconditional branching)
 
+#### Regions
+- States can contain regions for parallel substates
+- Region separator lines are draggable to resize regions
+- Nodes placed in a state become children of that state's region
+- Parent-child relationships automatically maintained on drag
+- Size-based z-order (smaller states render on top of larger ones)
+
 #### Transitions
 - Connect states with directional arrows
 - Event trigger
 - Guard condition
 - Action specification
 - Automatic routing with stubs
+- Draggable connection labels with optional leader lines
 
 ### Sequence Diagram Elements
 

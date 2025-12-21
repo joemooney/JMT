@@ -1534,3 +1534,56 @@ When a node was dragged into a state that had no regions, the node would be assi
 - Committed: `a7aa0d8` - Fix z-order and substate assignment when dragging states
 
 ---
+
+## Session 8 (continued) - Substate Selection and Movement (2025-12-21)
+
+### Prompt: Fix substate selection and child movement
+
+**User Requests:**
+1. "I cannot select a substate, it selects the containing parent state"
+2. "After you drag states, you need to reevaluate all the parent/child relationships"
+3. "If you drag a state all its child states should be dragged with it"
+4. "Can we render nodes in order of size from the largest to the smallest"
+5. "After dragging it may be simplest to do a full reevaluation of parent/child relationships"
+
+**Actions Taken:**
+
+1. **Fixed substate selection:**
+   - Modified `find_node_at()` to find the smallest (innermost) node at a point
+   - Uses area-based comparison to select substates instead of their parents
+
+2. **Simplified z-order to size-based:**
+   - Changed `nodes_in_render_order()` to sort by area (largest first, smallest last)
+   - This ensures smaller nodes always render on top of larger nodes
+   - Simpler and more predictable than depth-based tracking
+
+3. **Added child movement with parent:**
+   - Added `translate_node_with_children()` recursive function
+   - Collects all child nodes (from regions) and moves them together
+   - Prevents duplicate movement with HashSet tracking
+
+4. **Added full parent/child re-evaluation:**
+   - Added `update_all_node_regions()` to re-evaluate all nodes after drag operations
+   - Called at end of drag operations to ensure correct containment
+
+5. **Fixed region assignment for new nodes:**
+   - Modified `add_state()` and `add_pseudo_state()` to use `update_node_region()`
+   - New nodes placed inside states now correctly get assigned to those states' regions
+
+6. **Fixed region bounds after translation:**
+   - Modified `Node::translate()` to call `state.recalculate_regions()` for State nodes
+   - Modified `Node::resize_from_corner()` similarly
+   - Ensures region bounds stay in sync when parent state moves
+
+**Files Modified:**
+- `jmt-core/src/diagram.rs` - Size-based z-order, smallest-node selection, child movement, auto-region assignment
+- `jmt-core/src/node/mod.rs` - Region bounds recalculation in translate/resize
+- `jmt-client/src/app.rs` - Child movement in drag/keyboard handlers
+
+**Build Status:**
+- Successfully compiles with `cargo build`
+
+**Git Operations:**
+- Multiple commits including: `0699714` - Recalculate region bounds when state is translated or resized
+
+---
