@@ -94,11 +94,14 @@ pub enum Corner {
 
 impl Corner {
     /// Check which corner a point is in, given the node bounds and margin
+    /// The margin extends BOTH inside and outside the node bounds to allow
+    /// starting a resize by dragging outward (to grow) or inward (to shrink)
     pub fn from_point(bounds: &Rect, p: Point, margin: f32) -> Corner {
-        let in_left = p.x >= bounds.x1 && p.x <= bounds.x1 + margin;
-        let in_right = p.x >= bounds.x2 - margin && p.x <= bounds.x2;
-        let in_top = p.y >= bounds.y1 && p.y <= bounds.y1 + margin;
-        let in_bottom = p.y >= bounds.y2 - margin && p.y <= bounds.y2;
+        // Check if point is within margin distance of each edge (inside OR outside)
+        let in_left = p.x >= bounds.x1 - margin && p.x <= bounds.x1 + margin;
+        let in_right = p.x >= bounds.x2 - margin && p.x <= bounds.x2 + margin;
+        let in_top = p.y >= bounds.y1 - margin && p.y <= bounds.y1 + margin;
+        let in_bottom = p.y >= bounds.y2 - margin && p.y <= bounds.y2 + margin;
 
         match (in_left, in_right, in_top, in_bottom) {
             (true, _, true, _) => Corner::TopLeft,

@@ -1819,6 +1819,7 @@ impl eframe::App for JmtApp {
 
                     if let Some((node_id, corner)) = corner_info {
                         // We're starting a resize operation
+                        self.status_message = "Resizing...".to_string();
                         if self.edit_mode != EditMode::Arrow {
                             self.set_edit_mode(EditMode::Arrow);
                         }
@@ -1833,7 +1834,6 @@ impl eframe::App for JmtApp {
                         self.resize_state.start(node_id, corner);
                         self.dragging_nodes = false;
                         self.selection_rect.clear();
-                        self.status_message = "Resizing...".to_string();
                     } else {
                         // Check if we clicked on any element (for dragging)
                         let clicked_element_id = self.current_diagram()
