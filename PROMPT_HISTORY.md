@@ -1497,3 +1497,40 @@ When a node was dragged into a state that had no regions, the node would be assi
 - Committed: `163ca7d` - Add marquee containment, draggable region separators, and Ctrl+arrow movement
 
 ---
+
+## Session 8 (continued) - Z-order and Substate Fix (2025-12-21)
+
+### Prompt: Fix dragging states into other states
+
+**User Request:**
+"Dragging a state into another state to make it a substate is no longer working; dragging a state that was created before another state was created (e.g. state1 dragged over state2) hides the first state behind the other"
+
+**Issues Identified:**
+1. Z-order issue: Nodes rendered in creation order, so older nodes appeared behind newer ones
+2. Substate assignment: `find_state_at_point` included the dragged node itself, causing it to find itself instead of the target state
+
+**Actions Taken:**
+
+1. **Fixed z-order rendering:**
+   - Added `nodes_in_render_order()` method that sorts nodes by containment depth
+   - Calculates depth by following parent_region_id chain
+   - Parents (depth 0) render first (background), children (higher depth) render last (foreground)
+   - Updated `render_state_machine()` and activity diagram rendering to use new method
+
+2. **Fixed substate assignment:**
+   - Added `find_state_at_point_excluding()` with optional exclude_id parameter
+   - Added `find_region_at_point_excluding()` with optional exclude_id parameter
+   - Updated `update_node_region()` to exclude the node being moved from both searches
+   - Now correctly finds the target state when dragging a smaller state into a larger one
+
+**Files Modified:**
+- `jmt-core/src/diagram.rs` - Added excluding versions of find methods, added nodes_in_render_order()
+- `jmt-client/src/canvas/renderer.rs` - Updated to use nodes_in_render_order()
+
+**Build Status:**
+- Successfully compiles with `cargo build`
+
+**Git Operations:**
+- Committed: `a7aa0d8` - Fix z-order and substate assignment when dragging states
+
+---
