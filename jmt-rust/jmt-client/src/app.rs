@@ -142,6 +142,9 @@ pub struct JmtApp {
     dragging_nodes: bool,
     /// Connection ID of the label we're currently dragging
     dragging_label: Option<uuid::Uuid>,
+    /// Region separator being dragged: (state_id, region_index)
+    /// region_index refers to the region whose top edge is being dragged
+    dragging_separator: Option<(uuid::Uuid, usize)>,
     /// Current cursor position on canvas (for preview rendering)
     pub cursor_pos: Option<egui::Pos2>,
     /// Active resize state (when resizing a node by corner)
@@ -171,6 +174,7 @@ impl Default for JmtApp {
             selection_rect: SelectionRect::default(),
             dragging_nodes: false,
             dragging_label: None,
+            dragging_separator: None,
             cursor_pos: None,
             resize_state: ResizeState::default(),
             lasso_points: Vec::new(),
@@ -1580,6 +1584,43 @@ impl JmtApp {
         if ctx.input(|i| i.modifiers.command && i.key_pressed(egui::Key::O)) {
             self.open();
         }
+
+        // Ctrl+Arrow keys to move selected nodes by 1 pixel
+        if !text_edit_has_focus {
+            let ctrl = ctx.input(|i| i.modifiers.ctrl);
+            if ctrl {
+                let mut dx = 0.0_f32;
+                let mut dy = 0.0_f32;
+
+                if ctx.input(|i| i.key_pressed(egui::Key::ArrowLeft)) {
+                    dx = -1.0;
+                }
+                if ctx.input(|i| i.key_pressed(egui::Key::ArrowRight)) {
+                    dx = 1.0;
+                }
+                if ctx.input(|i| i.key_pressed(egui::Key::ArrowUp)) {
+                    dy = -1.0;
+                }
+                if ctx.input(|i| i.key_pressed(egui::Key::ArrowDown)) {
+                    dy = 1.0;
+                }
+
+                if dx != 0.0 || dy != 0.0 {
+                    if let Some(state) = self.current_diagram_mut() {
+                        let selected = state.diagram.selected_elements_in_order();
+                        if !selected.is_empty() {
+                            // Push undo on first movement
+                            state.diagram.push_undo();
+                            for id in selected {
+                                state.diagram.translate_element(id, dx, dy);
+                            }
+                            state.diagram.recalculate_connections();
+                            state.modified = true;
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -1722,7 +1763,16 @@ impl eframe::App for JmtApp {
                         }
                     }
 
-                    // Second check: connection labels (for dragging)
+                    // Second check: region separators (for resizing)
+                    let separator_tolerance = 5.0;
+                    if !cursor_set {
+                        if state.diagram.find_region_separator_at(diagram_pos.x, diagram_pos.y, separator_tolerance).is_some() {
+                            ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeVertical);
+                            cursor_set = true;
+                        }
+                    }
+
+                    // Third check: connection labels (for dragging)
                     if !cursor_set {
                         if state.diagram.find_connection_label_at(diagram_pos).is_some() {
                             // Use move cursor for labels
@@ -1731,7 +1781,7 @@ impl eframe::App for JmtApp {
                         }
                     }
 
-                    // Third check: connections
+                    // Fourth check: connections
                     if !cursor_set {
                         if let Some(_conn_id) = state.diagram.find_connection_at(diagram_pos, connection_tolerance) {
                             // Use crosshair cursor for connections
@@ -1863,8 +1913,26 @@ impl eframe::App for JmtApp {
                         }
                         self.resize_state.start(node_id, corner);
                         self.dragging_nodes = false;
+                        self.dragging_separator = None;
                         self.selection_rect.clear();
                     } else {
+                        // Check if we clicked on a region separator (for resizing regions)
+                        let separator_tolerance = 5.0;
+                        let clicked_separator = self.current_diagram()
+                            .and_then(|state| state.diagram.find_region_separator_at(diagram_pos.x, diagram_pos.y, separator_tolerance));
+
+                        if let Some((state_id, region_idx)) = clicked_separator {
+                            // Start dragging a separator
+                            self.status_message = "Resizing regions...".to_string();
+                            if let Some(state) = self.current_diagram_mut() {
+                                state.diagram.select_region(state_id, region_idx);
+                                state.diagram.push_undo();
+                            }
+                            self.dragging_separator = Some((state_id, region_idx));
+                            self.dragging_nodes = false;
+                            self.dragging_label = None;
+                            self.selection_rect.clear();
+                        } else {
                         // First check if we clicked on a connection label (for label dragging)
                         let clicked_label = self.current_diagram()
                             .and_then(|state| state.diagram.find_connection_label_at(point));
@@ -1925,6 +1993,7 @@ impl eframe::App for JmtApp {
                                 }
                             }
                         }
+                        } // Close separator else block
                     }
                 }
             }
@@ -1954,6 +2023,12 @@ impl eframe::App for JmtApp {
                                 node.resize_from_corner(corner, diagram_delta_x, diagram_delta_y, min_width, min_height);
                             }
                             state.diagram.recalculate_connections();
+                            state.modified = true;
+                        }
+                    } else if let Some((state_id, region_idx)) = self.dragging_separator {
+                        // Dragging a region separator
+                        if let Some(state) = self.current_diagram_mut() {
+                            state.diagram.move_region_separator(state_id, region_idx, diagram_delta_y);
                             state.modified = true;
                         }
                     } else if let Some(conn_id) = self.dragging_label {
@@ -2046,7 +2121,14 @@ impl eframe::App for JmtApp {
 
             // Handle drag end
             if response.drag_stopped() {
-                if self.dragging_label.is_some() {
+                if self.dragging_separator.is_some() {
+                    // Finished dragging a region separator
+                    if let Some(state) = self.current_diagram_mut() {
+                        state.diagram.clear_region_selection();
+                    }
+                    self.dragging_separator = None;
+                    self.status_message = "Ready".to_string();
+                } else if self.dragging_label.is_some() {
                     // Finished dragging a label
                     self.dragging_label = None;
                     self.status_message = "Label moved".to_string();

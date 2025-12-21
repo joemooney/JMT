@@ -349,11 +349,11 @@ impl Diagram {
         }
     }
 
-    /// Find all nodes within a rectangle
+    /// Find all nodes fully contained within a rectangle (all four corners inside)
     pub fn find_nodes_in_rect(&self, rect: &Rect) -> Vec<NodeId> {
         self.nodes
             .iter()
-            .filter(|n| rect.overlaps(n.bounds()))
+            .filter(|n| rect.contains_rect(n.bounds()))
             .map(|n| n.id())
             .collect()
     }
@@ -809,6 +809,89 @@ impl Diagram {
 
         // Default to root region if point is anywhere
         Some(self.root_region_id())
+    }
+
+    /// Find if a point is on a region separator line within a state
+    /// Returns (state_id, region_index) where region_index is the region whose top edge this is
+    pub fn find_region_separator_at(&self, x: f32, y: f32, tolerance: f32) -> Option<(NodeId, usize)> {
+        for node in &self.nodes {
+            if let Node::State(state) = node {
+                // Only check states with multiple regions
+                if state.regions.len() > 1 {
+                    // Check each region separator (skip first region - no separator above it)
+                    for (i, region) in state.regions.iter().enumerate().skip(1) {
+                        let separator_y = region.bounds.y1;
+                        // Check if point is on this horizontal separator line
+                        if (y - separator_y).abs() <= tolerance
+                            && x >= state.bounds.x1
+                            && x <= state.bounds.x2
+                        {
+                            return Some((state.id, i));
+                        }
+                    }
+                }
+            }
+        }
+        None
+    }
+
+    /// Resize regions by moving a separator line
+    /// region_index is the region whose top edge is being moved
+    /// delta_y is how much to move the separator (positive = down)
+    pub fn move_region_separator(&mut self, state_id: NodeId, region_index: usize, delta_y: f32) {
+        if let Some(Node::State(state)) = self.find_node_mut(state_id) {
+            if region_index > 0 && region_index < state.regions.len() {
+                // Get the regions involved
+                let min_region_height = 20.0;
+
+                let curr_region_top = state.regions[region_index].bounds.y1;
+                let prev_region_top = state.regions[region_index - 1].bounds.y1;
+                let curr_region_bottom = state.regions[region_index].bounds.y2;
+
+                // Calculate new separator position
+                let new_separator_y = curr_region_top + delta_y;
+
+                // Ensure both regions maintain minimum height
+                let prev_new_height = new_separator_y - prev_region_top;
+                let curr_new_height = curr_region_bottom - new_separator_y;
+
+                if prev_new_height >= min_region_height && curr_new_height >= min_region_height {
+                    // Update the previous region's bottom
+                    state.regions[region_index - 1].bounds.y2 = new_separator_y;
+                    // Update the current region's top
+                    state.regions[region_index].bounds.y1 = new_separator_y;
+                }
+            }
+        }
+    }
+
+    /// Select a region (for visual feedback)
+    pub fn select_region(&mut self, state_id: NodeId, region_index: usize) {
+        // Clear all region selections first
+        for node in &mut self.nodes {
+            if let Node::State(state) = node {
+                for region in &mut state.regions {
+                    region.has_focus = false;
+                }
+            }
+        }
+        // Select the specified region
+        if let Some(Node::State(state)) = self.find_node_mut(state_id) {
+            if region_index < state.regions.len() {
+                state.regions[region_index].has_focus = true;
+            }
+        }
+    }
+
+    /// Clear all region selections
+    pub fn clear_region_selection(&mut self) {
+        for node in &mut self.nodes {
+            if let Node::State(state) = node {
+                for region in &mut state.regions {
+                    region.has_focus = false;
+                }
+            }
+        }
     }
 
     /// Assign a node to a region (updates both node.parent_region_id and region.children)
