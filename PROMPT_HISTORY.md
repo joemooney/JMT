@@ -1459,3 +1459,41 @@ When a node was dragged into a state that had no regions, the node would be assi
 - Committed: `e38369e` - Auto-create region when node is dragged into region-less state
 
 ---
+
+## Session 8 - UI Improvements (2025-12-21)
+
+### Prompt: Marquee selection, region separators, and keyboard movement
+
+**User Request:**
+"when you marquee select and the four corners are not contained, do not select the node; allow for region dashed line separators to be selected and dragged/moved up and down; if you have nodes selected and you use the Ctrl+arrow keys you should move the nodes pixels in that direction"
+
+**Actions Taken:**
+
+1. **Fixed marquee selection to require full containment:**
+   - Changed `find_nodes_in_rect()` from `overlaps()` to `contains_rect()`
+   - Now only selects nodes when all four corners are inside the marquee rectangle
+
+2. **Made region separator lines selectable and draggable:**
+   - Added `find_region_separator_at()` - detects if a point is on a separator line (5px tolerance)
+   - Added `move_region_separator()` - moves separator up/down to resize adjacent regions
+   - Added `select_region()` and `clear_region_selection()` for visual feedback
+   - Added cursor change to ResizeVertical when hovering over separator
+   - Added drag handling for separator movement with minimum region height (20px)
+   - Added new `dragging_separator` state field in JmtApp
+
+3. **Added Ctrl+Arrow key movement:**
+   - Ctrl+Left/Right/Up/Down moves selected elements by 1 pixel
+   - Works with all selectable elements (nodes, lifelines, actors, etc.)
+   - Includes undo support (pushes undo on first key press)
+
+**Files Modified:**
+- `jmt-core/src/diagram.rs` - Added region separator methods, changed marquee selection
+- `jmt-client/src/app.rs` - Added separator drag handling, cursor change, Ctrl+arrow key handler
+
+**Build Status:**
+- Successfully compiles with `cargo build`
+
+**Git Operations:**
+- Committed: `163ca7d` - Add marquee containment, draggable region separators, and Ctrl+arrow movement
+
+---
