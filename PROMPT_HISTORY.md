@@ -1240,3 +1240,39 @@ This caused the calculated distance to be wildly wrong for diagonal line segment
 - Committed: `e387115` - Fix connection selection by correcting perpendicular distance formula
 
 ---
+
+## Session 7 (continued) - Draggable Connection Labels (2025-12-21)
+
+### Prompt: Add draggable connection labels with leader lines
+
+**User Request:**
+"the text associated with the highlighted connection is far away, we should make it closer and have a dotted line that connects to the center of the connection, this should be an option that we can turn on and off. Also it would be nice to be able to select the text and move it"
+
+**Actions Taken:**
+1. Added `label_offset` field to Connection struct to store custom label positions
+2. Added `label_selected` field to track label selection state
+3. Implemented `midpoint()` method to calculate connection center (accounting for curved paths)
+4. Implemented `label_position()` method to return label position with offset
+5. Implemented `is_near_label()` for hit detection on labels
+6. Updated renderer to position labels closer to connection (15px above midpoint by default)
+7. Added `draw_dashed_line()` method for leader lines
+8. Added "Show Leader Lines" toggle in View menu
+9. Added cursor change (move icon) when hovering over labels
+10. Added click-to-select and drag-to-move for labels
+11. Labels highlight orange when selected
+
+**Files Modified:**
+- `jmt-core/src/connection.rs` - Added label_offset, label_selected, midpoint(), label_position(), is_near_label(), set_label_offset()
+- `jmt-core/src/diagram.rs` - Added find_connection_label_at(), select_connection_label(), selected_connection_label(), set_connection_label_offset()
+- `jmt-core/src/settings.rs` - Added show_leader_lines setting
+- `jmt-client/src/canvas/renderer.rs` - Updated label rendering with leader lines
+- `jmt-client/src/app.rs` - Added dragging_label state, label interaction handling
+- `jmt-client/src/panels/menu_bar.rs` - Added "Show Leader Lines" checkbox
+
+**Build Status:**
+- Successfully compiles with `cargo build`
+
+**Git Operations:**
+- Committed: `7c2c752` - Add draggable connection labels with leader lines
+
+---
