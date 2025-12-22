@@ -2610,6 +2610,11 @@ impl Diagram {
         !self.redo_stack.is_empty()
     }
 
+    /// Get the number of items in the undo stack (for debugging)
+    pub fn undo_stack_len(&self) -> usize {
+        self.undo_stack.len()
+    }
+
     /// Delete all selected nodes and connections
     pub fn delete_selected(&mut self) {
         let selected_nodes: Vec<NodeId> = self.selected_nodes();

@@ -781,6 +781,7 @@ impl Toolbar {
             };
 
             if selected_ids.len() < 2 {
+                // Not enough nodes selected
                 return;
             }
 
@@ -857,6 +858,7 @@ impl Toolbar {
 
             // Push undo AFTER all early return checks to avoid pushing undo for no-op
             state.diagram.push_undo();
+            state.modified = true;
 
             // Note: nodes_with_bounds is already in connection-based order (for marquee/lasso)
             // or explicit selection order (for Ctrl+Click), so no further sorting needed.
@@ -961,6 +963,7 @@ impl Toolbar {
             state.diagram.expand_parents_to_contain_children();
             state.diagram.recalculate_connections();
             state.modified = true;
+
         }
     }
 

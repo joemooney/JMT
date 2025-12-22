@@ -1323,6 +1323,11 @@ impl JmtApp {
                     let name = state.diagram.get_element_name(element_id)
                         .unwrap_or_default();
 
+                    // Check if this node has a placement error
+                    let has_error = state.diagram.find_node(element_id)
+                        .map(|n| n.has_error())
+                        .unwrap_or(false);
+
                     if ctrl_held {
                         // Ctrl+Click: Toggle selection
                         state.diagram.toggle_element_selection(element_id);
@@ -1331,7 +1336,11 @@ impl JmtApp {
                     } else {
                         // Regular click: Select only this element
                         state.diagram.select_element(element_id);
-                        self.status_message = format!("Selected: {}", name);
+                        if has_error {
+                            self.status_message = format!("Selected: {} ⚠ PLACEMENT ERROR: This node is partially overlapping another state. Move it fully inside or fully outside.", name);
+                        } else {
+                            self.status_message = format!("Selected: {}", name);
+                        }
                     }
                 } else {
                     // Only clear selection if Ctrl is not held
@@ -2145,6 +2154,9 @@ impl eframe::App for JmtApp {
             }
 
             // Second priority: hover states (cursor is over interactive elements)
+            // Check if mouse button is currently pressed - affects cursor type
+            let mouse_button_pressed = ui.ctx().input(|i| i.pointer.primary_down());
+
             if !cursor_set {
                 if let Some(hover_pos) = self.cursor_pos {
                     let diagram_pos = Point::new(
@@ -2187,8 +2199,13 @@ impl eframe::App for JmtApp {
                         // Third check: connection labels (for dragging)
                         if !cursor_set {
                             if state.diagram.find_connection_label_at(diagram_pos).is_some() {
-                                // Use grab cursor for labels (shows they can be grabbed)
-                                ui.ctx().set_cursor_icon(egui::CursorIcon::Grab);
+                                // Use grab/grabbing cursor for labels based on mouse button state
+                                let cursor = if mouse_button_pressed {
+                                    egui::CursorIcon::Grabbing
+                                } else {
+                                    egui::CursorIcon::Grab
+                                };
+                                ui.ctx().set_cursor_icon(cursor);
                                 cursor_set = true;
                             }
                         }
@@ -2196,8 +2213,13 @@ impl eframe::App for JmtApp {
                         // Fourth check: pivot points and endpoints
                         if !cursor_set {
                             if let Some((_conn_id, drag_type)) = self.check_pivot_or_endpoint_at(diagram_pos) {
-                                // Show grab cursor for pivot points and endpoints
-                                ui.ctx().set_cursor_icon(egui::CursorIcon::Grab);
+                                // Show grab/grabbing cursor for pivot points and endpoints
+                                let cursor = if mouse_button_pressed {
+                                    egui::CursorIcon::Grabbing
+                                } else {
+                                    egui::CursorIcon::Grab
+                                };
+                                ui.ctx().set_cursor_icon(cursor);
                                 cursor_set = true;
                                 let _ = drag_type; // suppress unused warning
                             }
@@ -2205,10 +2227,31 @@ impl eframe::App for JmtApp {
 
                         // Fifth check: nodes (for dragging)
                         if !cursor_set {
-                            if state.diagram.find_node_at(diagram_pos).is_some() {
-                                // Show grab cursor for nodes
-                                ui.ctx().set_cursor_icon(egui::CursorIcon::Grab);
+                            if let Some(node_id) = state.diagram.find_node_at(diagram_pos) {
+                                // Show grab/grabbing cursor for nodes based on mouse button state
+                                let cursor = if mouse_button_pressed {
+                                    egui::CursorIcon::Grabbing
+                                } else {
+                                    egui::CursorIcon::Grab
+                                };
+                                ui.ctx().set_cursor_icon(cursor);
                                 cursor_set = true;
+
+                                // Show error tooltip if node has placement error
+                                if let Some(node) = state.diagram.find_node(node_id) {
+                                    if node.has_error() {
+                                        egui::show_tooltip_at_pointer(
+                                            ui.ctx(),
+                                            egui::LayerId::new(egui::Order::Foreground, egui::Id::new("error_tooltip")),
+                                            egui::Id::new("placement_error"),
+                                            |ui| {
+                                                ui.colored_label(egui::Color32::RED, "⚠ Placement Error");
+                                                ui.label("This node is partially overlapping another state.");
+                                                ui.label("Move it fully inside or fully outside the other state.");
+                                            }
+                                        );
+                                    }
+                                }
                             }
                         }
 
