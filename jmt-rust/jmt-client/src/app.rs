@@ -101,7 +101,9 @@ impl DiagramState {
     }
 
     /// Create with an existing file path (for opened files)
-    pub fn with_path(diagram: Diagram, path: std::path::PathBuf) -> Self {
+    pub fn with_path(mut diagram: Diagram, path: std::path::PathBuf) -> Self {
+        // Ensure the diagram settings also have the path
+        diagram.settings.file_path = Some(path.to_string_lossy().to_string());
         Self {
             canvas: DiagramCanvas::new(),
             diagram,
@@ -295,9 +297,11 @@ impl JmtApp {
             .set_file_name(&format!("{}.jmt", default_name));
 
         if let Some(path) = dialog.save_file() {
-            // Update the file path
+            // Update the file path in both places
             if let Some(state) = self.current_diagram_mut() {
-                state.file_path = Some(path);
+                state.file_path = Some(path.clone());
+                // Also update the diagram settings so it gets serialized
+                state.diagram.settings.file_path = Some(path.to_string_lossy().to_string());
             }
             // Now save to this path
             self.save_to_current_path();
