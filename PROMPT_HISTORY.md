@@ -1587,3 +1587,80 @@ When a node was dragged into a state that had no regions, the node would be assi
 - Multiple commits including: `0699714` - Recalculate region bounds when state is translated or resized
 
 ---
+
+## Session 9 - Parent Expansion and Selection Fixes (2025-12-21)
+
+### Prompt: Fix stack overflow, partial containment, and alignment issues
+
+**User Requests:**
+1. "thread 'main' has overflowed its stack" - circular parent-child relationships
+2. "marquee should not select a node unless all four corners are in the area"
+3. "Any node that is partially in another node is an error, and display in red"
+4. "Alignment must not alter parentage. If necessary the parent node must have its height or width expanded"
+5. "if the parent widens then nodes outside the parent need to be shifted accordingly"
+
+**Issues Identified:**
+1. Stack overflow when large state's center was inside smaller state
+2. Stale region bounds caused incorrect parent assignment
+3. Marquee and lasso selected nodes with only center point inside
+4. Alignment could move children outside their parent's bounds
+5. Sibling nodes weren't shifted when parent expanded
+
+**Actions Taken:**
+
+1. **Fixed stack overflow from circular parent-child:**
+   - Added size check in `update_node_region()` - only larger states can be parents
+   - Created `find_region_at_point_for_node()` with node_area parameter
+   - Skips potential parents that are smaller than the node being parented
+
+2. **Fixed stale region bounds:**
+   - Added `recalculate_regions()` call at start of `update_all_node_regions()`
+   - Ensures region bounds are current before containment checks
+
+3. **Added partial containment error highlighting:**
+   - Added `has_error` field to State and PseudoState structs
+   - Added `has_error()` and `set_error()` methods to Node enum
+   - Modified `update_all_node_regions()` to detect partial containment (1-3 corners)
+   - Updated renderer to show red fill/stroke when `has_error` is true
+
+4. **Fixed marquee/lasso selection:**
+   - Modified `select_elements_in_rect()` to use `contains_rect()` (all 4 corners)
+   - Modified `select_elements_in_polygon()` to check all 4 corners inside polygon
+
+5. **Added parent expansion for alignment:**
+   - Created `expand_parent_to_contain()` method that:
+     - Calculates required expansion on each side
+     - Expands parent state bounds to contain child (with margin)
+     - Recalculates regions after expansion
+     - Recursively expands grandparent if needed
+   - Created `expand_parents_to_contain_children()` to process all nodes
+   - Called after alignment/distribution in toolbar
+
+6. **Added sibling shifting when parent expands:**
+   - When parent expands left, siblings to the left shift left
+   - When parent expands up, siblings above shift up
+   - When parent expands right, siblings to the right shift right
+   - When parent expands down, siblings below shift down
+   - Uses `translate_node_with_children()` to shift siblings with their children
+
+7. **Cleaned up debug statements:**
+   - Removed all eprintln debug statements after issues were resolved
+
+**Files Modified:**
+- `jmt-core/src/diagram.rs` - Region bounds recalculation, error detection, parent expansion, sibling shifting, selection fixes
+- `jmt-core/src/node/mod.rs` - has_error getter/setter
+- `jmt-core/src/node/state.rs` - has_error field
+- `jmt-core/src/node/pseudo.rs` - has_error field
+- `jmt-client/src/canvas/renderer.rs` - Red highlighting for error states
+- `jmt-client/src/panels/toolbar.rs` - Call expand_parents_to_contain_children after align/distribute
+
+**Build Status:**
+- Successfully compiles with `cargo build --release`
+
+**Git Operations:**
+- `0487b9c` - Fix stack overflow from circular parent-child relationships
+- `bf854d2` - Add partial containment error highlighting and fix selection
+- `dd13cca` - Add parent expansion with sibling shifting for alignment operations
+- `8272a74` - Remove debug statements from region assignment code
+
+---
