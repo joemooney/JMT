@@ -1430,6 +1430,78 @@ impl Diagram {
         }
     }
 
+    /// Expand a state to fit all its children (used when show_expanded is enabled)
+    /// This calculates the bounding box of all children and expands the state to contain them
+    pub fn expand_state_to_fit_children(&mut self, state_id: NodeId) -> bool {
+        const MARGIN: f32 = 15.0;
+        const HEADER_HEIGHT: f32 = 30.0;
+
+        // Get all children of this state
+        let children = self.get_children_of_node(state_id);
+        if children.is_empty() {
+            return false;
+        }
+
+        // Calculate bounding box of all children
+        let mut min_x = f32::MAX;
+        let mut min_y = f32::MAX;
+        let mut max_x = f32::MIN;
+        let mut max_y = f32::MIN;
+
+        for child_id in &children {
+            if let Some(node) = self.find_node(*child_id) {
+                let bounds = node.bounds();
+                min_x = min_x.min(bounds.x1);
+                min_y = min_y.min(bounds.y1);
+                max_x = max_x.max(bounds.x2);
+                max_y = max_y.max(bounds.y2);
+            }
+        }
+
+        if min_x == f32::MAX {
+            return false;
+        }
+
+        // Calculate required state bounds
+        let new_x1 = min_x - MARGIN;
+        let new_y1 = min_y - HEADER_HEIGHT - MARGIN;
+        let new_x2 = max_x + MARGIN;
+        let new_y2 = max_y + MARGIN;
+
+        // Get current bounds and expand if needed
+        if let Some(node) = self.find_node_mut(state_id) {
+            if let Node::State(state) = node {
+                let bounds = &mut state.bounds;
+                let mut changed = false;
+
+                if new_x1 < bounds.x1 {
+                    bounds.x1 = new_x1;
+                    changed = true;
+                }
+                if new_y1 < bounds.y1 {
+                    bounds.y1 = new_y1;
+                    changed = true;
+                }
+                if new_x2 > bounds.x2 {
+                    bounds.x2 = new_x2;
+                    changed = true;
+                }
+                if new_y2 > bounds.y2 {
+                    bounds.y2 = new_y2;
+                    changed = true;
+                }
+
+                if changed {
+                    state.recalculate_regions();
+                }
+
+                return changed;
+            }
+        }
+
+        false
+    }
+
     /// Crop a parent state to remove blank margins around its children
     /// Returns true if the state was cropped
     /// For collapsed sub-statemachines (show_expanded=false), crops to simple state size

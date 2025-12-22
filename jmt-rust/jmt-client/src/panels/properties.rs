@@ -11,6 +11,8 @@ pub enum PropertiesAction {
     OpenSubStateMachine(NodeId),
     /// Create a new embedded sub-statemachine for the given state
     CreateSubStateMachine(NodeId),
+    /// Expand a state to fit its children (when show_expanded is enabled)
+    ExpandStateToFitChildren(NodeId),
 }
 
 pub struct PropertiesPanel;
@@ -74,6 +76,14 @@ impl PropertiesPanel {
                 }
                 PropertiesAction::CreateSubStateMachine(node_id) => {
                     app.create_substatemachine(node_id);
+                }
+                PropertiesAction::ExpandStateToFitChildren(node_id) => {
+                    if let Some(state) = app.current_diagram_mut() {
+                        state.diagram.push_undo();
+                        state.diagram.expand_state_to_fit_children(node_id);
+                        state.diagram.recalculate_connections();
+                        state.modified = true;
+                    }
                 }
             }
         }
@@ -201,6 +211,7 @@ impl PropertiesPanel {
 
             // Show expanded checkbox (only if has sub-statemachine)
             if state.substatemachine_path.is_some() {
+                let was_expanded = state.show_expanded;
                 ui.horizontal(|ui| {
                     if ui.checkbox(&mut state.show_expanded, "Show Expanded")
                         .on_hover_text("Show sub-statemachine contents inline instead of icon")
@@ -209,6 +220,10 @@ impl PropertiesPanel {
                         *modified = true;
                     }
                 });
+                // If show_expanded was just enabled, expand state to fit children
+                if state.show_expanded && !was_expanded {
+                    action = Some(PropertiesAction::ExpandStateToFitChildren(node_id));
+                }
 
                 // Storage mode
                 ui.horizontal(|ui| {
