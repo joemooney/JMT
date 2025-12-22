@@ -878,6 +878,8 @@ impl Toolbar {
                 }
             }
 
+            // Expand parent states to contain children (preserve parentage)
+            state.diagram.expand_parents_to_contain_children();
             state.diagram.recalculate_connections();
             state.modified = true;
         }
@@ -971,6 +973,8 @@ impl Toolbar {
                 }
             }
 
+            // Expand parent states to contain children (preserve parentage)
+            state.diagram.expand_parents_to_contain_children();
             state.diagram.recalculate_connections();
             state.modified = true;
         }

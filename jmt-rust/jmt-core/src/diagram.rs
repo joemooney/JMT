@@ -987,6 +987,156 @@ impl Diagram {
         }
     }
 
+    /// Expand a node's parent state to fully contain the node
+    /// This preserves parent-child relationships when nodes are moved (e.g., by alignment)
+    /// Also shifts sibling nodes that would overlap with the expanded parent
+    /// Returns true if the parent was expanded
+    pub fn expand_parent_to_contain(&mut self, node_id: NodeId) -> bool {
+        const MARGIN: f32 = 10.0; // Margin around child within parent
+
+        // Get node bounds and parent region ID
+        let (node_bounds, parent_region_id) = match self.find_node(node_id) {
+            Some(n) => (n.bounds().clone(), n.parent_region_id()),
+            None => return false,
+        };
+
+        // Get the parent region ID (skip if it's the root region)
+        let region_id = match parent_region_id {
+            Some(rid) if rid != self.root_region_id() => rid,
+            _ => return false, // Node is in root region, no parent to expand
+        };
+
+        // Find which state owns this region
+        let parent_state_id = self.nodes.iter()
+            .filter_map(|n| n.as_state())
+            .find(|s| s.regions.iter().any(|r| r.id == region_id))
+            .map(|s| s.id);
+
+        let parent_state_id = match parent_state_id {
+            Some(id) => id,
+            None => return false,
+        };
+
+        // Get parent state bounds
+        let parent_bounds = match self.find_node(parent_state_id) {
+            Some(n) => n.bounds().clone(),
+            None => return false,
+        };
+
+        // Check if node is fully contained (with margin for header)
+        let header_height = 25.0;
+        let effective_parent = Rect::new(
+            parent_bounds.x1 + MARGIN,
+            parent_bounds.y1 + header_height + MARGIN,
+            parent_bounds.x2 - MARGIN,
+            parent_bounds.y2 - MARGIN,
+        );
+
+        // Calculate required expansion
+        let mut new_bounds = parent_bounds.clone();
+        let mut expand_left = 0.0;
+        let mut expand_up = 0.0;
+        let mut expand_right = 0.0;
+        let mut expand_down = 0.0;
+
+        if node_bounds.x1 < effective_parent.x1 {
+            expand_left = effective_parent.x1 - node_bounds.x1 + MARGIN;
+            new_bounds.x1 = node_bounds.x1 - MARGIN;
+        }
+        if node_bounds.x2 > effective_parent.x2 {
+            expand_right = node_bounds.x2 - effective_parent.x2 + MARGIN;
+            new_bounds.x2 = node_bounds.x2 + MARGIN;
+        }
+        if node_bounds.y1 < effective_parent.y1 {
+            expand_up = effective_parent.y1 - node_bounds.y1 + MARGIN;
+            new_bounds.y1 = node_bounds.y1 - header_height - MARGIN;
+        }
+        if node_bounds.y2 > effective_parent.y2 {
+            expand_down = node_bounds.y2 - effective_parent.y2 + MARGIN;
+            new_bounds.y2 = node_bounds.y2 + MARGIN;
+        }
+
+        let expanded = expand_left > 0.0 || expand_up > 0.0 || expand_right > 0.0 || expand_down > 0.0;
+
+        // Apply expansion if needed
+        if expanded {
+            // Collect sibling node IDs that need to be shifted
+            // (nodes at the same level as parent, not children of parent)
+            let parent_parent_region = self.find_node(parent_state_id)
+                .and_then(|n| n.parent_region_id());
+
+            let siblings_to_shift: Vec<(NodeId, f32, f32)> = self.nodes.iter()
+                .filter(|n| {
+                    let nid = n.id();
+                    if nid == parent_state_id || nid == node_id {
+                        return false;
+                    }
+                    // Same parent region as the expanding state
+                    n.parent_region_id() == parent_parent_region
+                })
+                .filter_map(|n| {
+                    let nb = n.bounds();
+                    let mut dx = 0.0;
+                    let mut dy = 0.0;
+
+                    // If parent expands left and sibling is to the left, shift left
+                    if expand_left > 0.0 && nb.x2 <= parent_bounds.x1 {
+                        dx = -expand_left;
+                    }
+                    // If parent expands up and sibling is above, shift up
+                    if expand_up > 0.0 && nb.y2 <= parent_bounds.y1 {
+                        dy = -expand_up;
+                    }
+                    // If parent expands right and sibling is to the right, shift right
+                    if expand_right > 0.0 && nb.x1 >= parent_bounds.x2 {
+                        dx = expand_right;
+                    }
+                    // If parent expands down and sibling is below, shift down
+                    if expand_down > 0.0 && nb.y1 >= parent_bounds.y2 {
+                        dy = expand_down;
+                    }
+
+                    if dx != 0.0 || dy != 0.0 {
+                        Some((n.id(), dx, dy))
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+
+            // Shift siblings
+            for (sibling_id, dx, dy) in siblings_to_shift {
+                self.translate_node_with_children(sibling_id, dx, dy);
+            }
+
+            // Expand the parent
+            if let Some(node) = self.find_node_mut(parent_state_id) {
+                *node.bounds_mut() = new_bounds;
+                // Recalculate regions for the parent state
+                if let Some(state) = node.as_state_mut() {
+                    state.recalculate_regions();
+                }
+            }
+
+            // Recursively expand grandparent if needed
+            self.expand_parent_to_contain(parent_state_id);
+        }
+
+        expanded
+    }
+
+    /// Expand all parent states to contain their children
+    /// Call this after alignment/distribution to preserve parentage
+    pub fn expand_parents_to_contain_children(&mut self) {
+        // Get all node IDs
+        let node_ids: Vec<NodeId> = self.nodes.iter().map(|n| n.id()).collect();
+
+        // Expand parents for each node (smallest to largest would be ideal but this works)
+        for node_id in node_ids {
+            self.expand_parent_to_contain(node_id);
+        }
+    }
+
     /// Find the innermost state containing a point (by state bounds, not regions)
     /// Returns the state's node ID, or None if only the root state contains it
     /// `exclude_id` can be used to exclude a specific node (e.g., the node being dragged)
