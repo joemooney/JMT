@@ -1431,10 +1431,12 @@ impl Diagram {
     }
 
     /// Expand a state to fit all its children (used when show_expanded is enabled)
-    /// This calculates the bounding box of all children and expands the state to contain them
+    /// This calculates the bounding box of all children and expands the state to contain them.
+    /// Also pushes sibling nodes out of the way to avoid overlapping.
     pub fn expand_state_to_fit_children(&mut self, state_id: NodeId) -> bool {
         const MARGIN: f32 = 15.0;
         const HEADER_HEIGHT: f32 = 30.0;
+        const SIBLING_GAP: f32 = 20.0; // Gap between siblings after push
 
         // Get all children of this state
         let children = self.get_children_of_node(state_id);
@@ -1462,44 +1464,126 @@ impl Diagram {
             return false;
         }
 
+        // Get current bounds before expansion
+        let old_bounds = match self.find_node(state_id) {
+            Some(n) => n.bounds().clone(),
+            None => return false,
+        };
+
         // Calculate required state bounds
         let new_x1 = min_x - MARGIN;
         let new_y1 = min_y - HEADER_HEIGHT - MARGIN;
         let new_x2 = max_x + MARGIN;
         let new_y2 = max_y + MARGIN;
 
-        // Get current bounds and expand if needed
-        if let Some(node) = self.find_node_mut(state_id) {
-            if let Node::State(state) = node {
-                let bounds = &mut state.bounds;
-                let mut changed = false;
+        // Calculate expansion amounts
+        let expand_left = if new_x1 < old_bounds.x1 { old_bounds.x1 - new_x1 } else { 0.0 };
+        let expand_up = if new_y1 < old_bounds.y1 { old_bounds.y1 - new_y1 } else { 0.0 };
+        let expand_right = if new_x2 > old_bounds.x2 { new_x2 - old_bounds.x2 } else { 0.0 };
+        let expand_down = if new_y2 > old_bounds.y2 { new_y2 - old_bounds.y2 } else { 0.0 };
 
-                if new_x1 < bounds.x1 {
-                    bounds.x1 = new_x1;
-                    changed = true;
-                }
-                if new_y1 < bounds.y1 {
-                    bounds.y1 = new_y1;
-                    changed = true;
-                }
-                if new_x2 > bounds.x2 {
-                    bounds.x2 = new_x2;
-                    changed = true;
-                }
-                if new_y2 > bounds.y2 {
-                    bounds.y2 = new_y2;
-                    changed = true;
-                }
+        let changed = expand_left > 0.0 || expand_up > 0.0 || expand_right > 0.0 || expand_down > 0.0;
 
-                if changed {
-                    state.recalculate_regions();
-                }
+        if !changed {
+            return false;
+        }
 
-                return changed;
+        // Get parent region to find siblings
+        let parent_region_id = self.find_node(state_id)
+            .and_then(|n| n.parent_region_id());
+
+        // Find sibling nodes (nodes in the same region, excluding this state and its descendants)
+        let descendants: std::collections::HashSet<NodeId> = self.get_all_descendants(state_id)
+            .into_iter()
+            .collect();
+
+        let siblings: Vec<(NodeId, Rect)> = self.nodes.iter()
+            .filter(|n| {
+                let id = n.id();
+                id != state_id &&
+                !descendants.contains(&id) &&
+                n.parent_region_id() == parent_region_id
+            })
+            .map(|n| (n.id(), n.bounds().clone()))
+            .collect();
+
+        // Calculate the new bounds for the expanding state
+        let new_bounds = Rect::new(new_x1, new_y1, new_x2, new_y2);
+
+        // Push siblings out of the way
+        for (sibling_id, sibling_bounds) in siblings {
+            // Check if sibling overlaps with new bounds
+            if !self.bounds_overlap(&new_bounds, &sibling_bounds) {
+                continue;
+            }
+
+            // Determine which direction to push (pick the smallest push distance)
+            let push_left = new_bounds.x2 - sibling_bounds.x1 + SIBLING_GAP;
+            let push_right = sibling_bounds.x2 - new_bounds.x1 + SIBLING_GAP;
+            let push_up = new_bounds.y2 - sibling_bounds.y1 + SIBLING_GAP;
+            let push_down = sibling_bounds.y2 - new_bounds.y1 + SIBLING_GAP;
+
+            // Find minimum positive push distance
+            let mut min_push = f32::MAX;
+            let mut push_dx = 0.0f32;
+            let mut push_dy = 0.0f32;
+
+            // Only consider pushes in the direction of expansion
+            if expand_right > 0.0 && push_right < min_push && sibling_bounds.x1 > old_bounds.x2 - 10.0 {
+                min_push = push_right;
+                push_dx = push_right;
+                push_dy = 0.0;
+            }
+            if expand_left > 0.0 && push_left < min_push && sibling_bounds.x2 < old_bounds.x1 + 10.0 {
+                min_push = push_left;
+                push_dx = -push_left;
+                push_dy = 0.0;
+            }
+            if expand_down > 0.0 && push_down < min_push && sibling_bounds.y1 > old_bounds.y2 - 10.0 {
+                min_push = push_down;
+                push_dx = 0.0;
+                push_dy = push_down;
+            }
+            if expand_up > 0.0 && push_up < min_push && sibling_bounds.y2 < old_bounds.y1 + 10.0 {
+                // min_push = push_up;
+                push_dx = 0.0;
+                push_dy = -push_up;
+            }
+
+            // If no directional push, use smallest overall
+            if push_dx == 0.0 && push_dy == 0.0 {
+                let pushes = [
+                    (push_right, push_right, 0.0),
+                    (push_left, -push_left, 0.0),
+                    (push_down, 0.0, push_down),
+                    (push_up, 0.0, -push_up),
+                ];
+                if let Some((_, dx, dy)) = pushes.iter().min_by(|a, b| a.0.partial_cmp(&b.0).unwrap()) {
+                    push_dx = *dx;
+                    push_dy = *dy;
+                }
+            }
+
+            // Apply push to sibling and all its descendants
+            if push_dx != 0.0 || push_dy != 0.0 {
+                self.translate_node_with_children(sibling_id, push_dx, push_dy);
             }
         }
 
-        false
+        // Now expand the state
+        if let Some(node) = self.find_node_mut(state_id) {
+            if let Node::State(state) = node {
+                state.bounds = new_bounds;
+                state.recalculate_regions();
+            }
+        }
+
+        true
+    }
+
+    /// Check if two rectangles overlap
+    fn bounds_overlap(&self, a: &Rect, b: &Rect) -> bool {
+        !(a.x2 <= b.x1 || b.x2 <= a.x1 || a.y2 <= b.y1 || b.y2 <= a.y1)
     }
 
     /// Crop a parent state to remove blank margins around its children

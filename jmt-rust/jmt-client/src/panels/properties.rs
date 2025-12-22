@@ -81,6 +81,10 @@ impl PropertiesPanel {
                     if let Some(state) = app.current_diagram_mut() {
                         state.diagram.push_undo();
                         state.diagram.expand_state_to_fit_children(node_id);
+                        // Expand parent states if the expanded state grew beyond their bounds
+                        state.diagram.expand_parents_to_contain_children();
+                        // Update node regions and recalculate connections
+                        state.diagram.update_all_node_regions();
                         state.diagram.recalculate_connections();
                         state.modified = true;
                     }
