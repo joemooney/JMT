@@ -784,8 +784,6 @@ impl Toolbar {
                 return;
             }
 
-            state.diagram.push_undo();
-
             // Determine which nodes to align and which are parents whose children move with them
             // Rule 1: If selection is exactly one parent + all its children, align only children
             // Rule 2: Otherwise, exclude descendants of selected parents from alignment
@@ -856,6 +854,9 @@ impl Toolbar {
             if nodes_with_bounds.len() < 2 {
                 return;
             }
+
+            // Push undo AFTER all early return checks to avoid pushing undo for no-op
+            state.diagram.push_undo();
 
             // Note: nodes_with_bounds is already in connection-based order (for marquee/lasso)
             // or explicit selection order (for Ctrl+Click), so no further sorting needed.
@@ -1019,8 +1020,6 @@ impl Toolbar {
                 return; // Need at least 3 nodes to distribute
             }
 
-            state.diagram.push_undo();
-
             // Determine which nodes to distribute and which are parents whose children move with them
             // Rule 1: If selection is exactly one parent + all its children, distribute only children
             // Rule 2: Otherwise, exclude descendants of selected parents from distribution
@@ -1095,6 +1094,9 @@ impl Toolbar {
             if nodes_with_info.len() < 3 {
                 return;
             }
+
+            // Push undo AFTER all early return checks to avoid pushing undo for no-op
+            state.diagram.push_undo();
 
             // Note: nodes_with_info is already in connection-based order (for marquee/lasso)
             // or explicit selection order (for Ctrl+Click), so no further sorting needed.

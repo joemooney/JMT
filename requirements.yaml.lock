@@ -1,1 +1,9 @@
-Locked by PID 2208798 at 2025-12-20T21:38:57.098621226+00:00
+sessions:
+  2612545-3fe92288-2067-4d8f-a192-89977cc92765:
+    session_id: 2612545-3fe92288-2067-4d8f-a192-89977cc92765
+    user_name: Joe Mooney
+    hostname: imac
+    pid: 2612545
+    started_at: 2025-12-22T06:35:57.630283534Z
+    last_heartbeat: 2025-12-22T06:47:37.931900998Z
+    editing_requirement: null
