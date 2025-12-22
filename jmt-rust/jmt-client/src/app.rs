@@ -313,6 +313,10 @@ pub struct JmtApp {
     selected_pivot: Option<(uuid::Uuid, usize)>,
     /// Current cursor position on canvas (for preview rendering)
     pub cursor_pos: Option<egui::Pos2>,
+    /// Current cursor position in diagram coordinates
+    pub diagram_cursor_pos: Option<(f32, f32)>,
+    /// Info about what's under the cursor (for status bar)
+    hover_info: Option<String>,
     /// Active resize state (when resizing a node by corner)
     resize_state: ResizeState,
     /// Lasso selection points (freeform polygon)
@@ -361,6 +365,8 @@ impl Default for JmtApp {
             dragging_endpoint: None,
             selected_pivot: None,
             cursor_pos: None,
+            diagram_cursor_pos: None,
+            hover_info: None,
             resize_state: ResizeState::default(),
             lasso_points: Vec::new(),
             last_click_time: None,
@@ -2631,7 +2637,12 @@ impl eframe::App for JmtApp {
 
         // Bottom panel - Status bar
         egui::TopBottomPanel::bottom("status_bar").show(ctx, |ui| {
-            StatusBar::show(ui, &self.status_message);
+            StatusBar::show(
+                ui,
+                &self.status_message,
+                self.hover_info.as_deref(),
+                self.diagram_cursor_pos,
+            );
         });
 
         // Right panel - Properties
@@ -2720,6 +2731,87 @@ impl eframe::App for JmtApp {
 
             // Canvas origin in screen space (for coordinate transformation)
             let canvas_origin = response.rect.min;
+
+            // Update diagram cursor position and hover info
+            if let Some(hover_pos) = self.cursor_pos {
+                let diagram_x = (hover_pos.x - canvas_origin.x) / zoom;
+                let diagram_y = (hover_pos.y - canvas_origin.y) / zoom;
+                self.diagram_cursor_pos = Some((diagram_x, diagram_y));
+
+                // Detect what's under the cursor for status bar
+                let point = Point::new(diagram_x, diagram_y);
+                let pivot_tolerance = self.settings.pivot_hit_tolerance;
+                let connection_tolerance = self.settings.connection_hit_tolerance;
+
+                self.hover_info = self.current_diagram().and_then(|state| {
+                    // Check pivot points on selected connection first
+                    if let Some(conn_id) = state.diagram.selected_connection() {
+                        if let Some(conn) = state.diagram.find_connection(conn_id) {
+                            if let Some(idx) = conn.find_pivot_at(point, pivot_tolerance) {
+                                return Some(format!("Pivot {}", idx + 1));
+                            }
+                        }
+                    }
+
+                    // Check connection endpoints
+                    for conn in state.diagram.connections() {
+                        if let (Some(source_node), Some(target_node)) = (
+                            state.diagram.find_node(conn.source_id),
+                            state.diagram.find_node(conn.target_id),
+                        ) {
+                            let source_bounds = source_node.bounds();
+                            let target_bounds = target_node.bounds();
+
+                            if let Some(is_source) = conn.find_endpoint_at(point, source_bounds, target_bounds, pivot_tolerance) {
+                                let endpoint_type = if is_source { "source" } else { "target" };
+                                return Some(format!("{} endpoint", endpoint_type));
+                            }
+                        }
+                    }
+
+                    // Check connection labels
+                    if let Some(conn_id) = state.diagram.find_connection_label_at(point) {
+                        if let Some(conn) = state.diagram.find_connection(conn_id) {
+                            let label = conn.label();
+                            if label.is_empty() {
+                                return Some("Connection label".to_string());
+                            } else {
+                                return Some(format!("Label: {}", label));
+                            }
+                        }
+                    }
+
+                    // Check nodes (smallest first for innermost)
+                    if let Some(node_id) = state.diagram.find_node_at(point) {
+                        if let Some(node) = state.diagram.find_node(node_id) {
+                            let type_name = node.node_type().display_name();
+                            let name = node.name();
+                            if name.is_empty() {
+                                return Some(type_name.to_string());
+                            } else {
+                                return Some(format!("{}: {}", type_name, name));
+                            }
+                        }
+                    }
+
+                    // Check connection lines
+                    if let Some(conn_id) = state.diagram.find_connection_at(point, connection_tolerance) {
+                        if let Some(conn) = state.diagram.find_connection(conn_id) {
+                            let label = conn.label();
+                            if label.is_empty() {
+                                return Some("Connection".to_string());
+                            } else {
+                                return Some(format!("Connection: {}", label));
+                            }
+                        }
+                    }
+
+                    None
+                });
+            } else {
+                self.diagram_cursor_pos = None;
+                self.hover_info = None;
+            }
 
             // Check if cursor is over interactive elements and change cursor accordingly
             // First priority: active drag states (mouse is pressed and dragging)
