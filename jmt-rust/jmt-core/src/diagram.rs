@@ -1432,10 +1432,56 @@ impl Diagram {
 
     /// Crop a parent state to remove blank margins around its children
     /// Returns true if the state was cropped
+    /// For collapsed sub-statemachines (show_expanded=false), crops to simple state size
     pub fn crop_state(&mut self, state_id: NodeId) -> bool {
         const MARGIN: f32 = 10.0;
         const HEADER_HEIGHT: f32 = 25.0;
 
+        // Check if this is a collapsed sub-statemachine
+        let is_collapsed_substatemachine = self.find_node(state_id)
+            .and_then(|n| n.as_state())
+            .map(|s| s.has_substatemachine() && !s.show_expanded)
+            .unwrap_or(false);
+
+        if is_collapsed_substatemachine {
+            // Crop to simple state size (default state dimensions)
+            let simple_width = self.settings.default_state_width;
+            let simple_height = self.settings.default_state_height;
+
+            // Get current bounds to preserve position
+            let current_bounds = match self.find_node(state_id) {
+                Some(n) => n.bounds().clone(),
+                None => return false,
+            };
+
+            // Keep top-left corner, shrink to simple size
+            let new_bounds = Rect::new(
+                current_bounds.x1,
+                current_bounds.y1,
+                current_bounds.x1 + simple_width,
+                current_bounds.y1 + simple_height,
+            );
+
+            // Check if cropping would change anything
+            let would_crop = (new_bounds.width() - current_bounds.width()).abs() > 0.1
+                || (new_bounds.height() - current_bounds.height()).abs() > 0.1;
+
+            if !would_crop {
+                return false;
+            }
+
+            // Apply the crop
+            if let Some(node) = self.find_node_mut(state_id) {
+                *node.bounds_mut() = new_bounds;
+                if let Some(state) = node.as_state_mut() {
+                    state.recalculate_regions();
+                }
+            }
+
+            return true;
+        }
+
+        // Regular crop for expanded states - fit around children
         // Get children of this state
         let children = self.get_children_of_node(state_id);
         if children.is_empty() {
@@ -1497,18 +1543,31 @@ impl Diagram {
         true
     }
 
+    /// Check if a state should be cropped (has children or is a collapsed sub-statemachine)
+    fn should_crop_state(&self, state_id: NodeId) -> bool {
+        // Has children
+        if !self.get_children_of_node(state_id).is_empty() {
+            return true;
+        }
+        // Is a collapsed sub-statemachine
+        self.find_node(state_id)
+            .and_then(|n| n.as_state())
+            .map(|s| s.has_substatemachine() && !s.show_expanded)
+            .unwrap_or(false)
+    }
+
     /// Crop all selected parent states, or all parent states if none selected
     pub fn crop_selected_or_all(&mut self) {
         let selected = self.selected_nodes();
 
         if selected.is_empty() {
-            // Crop all parent states (states with children)
+            // Crop all parent states (states with children or collapsed sub-statemachines)
             let state_ids: Vec<NodeId> = self.nodes.iter()
                 .filter_map(|n| n.as_state().map(|s| s.id))
                 .collect();
 
             for state_id in state_ids {
-                if !self.get_children_of_node(state_id).is_empty() {
+                if self.should_crop_state(state_id) {
                     self.crop_state(state_id);
                 }
             }
@@ -1524,14 +1583,14 @@ impl Diagram {
         self.recalculate_connections();
     }
 
-    /// Crop all parent states that have children
+    /// Crop all parent states that have children or collapsed sub-statemachines
     pub fn crop_all_parents(&mut self) {
         let state_ids: Vec<NodeId> = self.nodes.iter()
             .filter_map(|n| n.as_state().map(|s| s.id))
             .collect();
 
         for state_id in state_ids {
-            if !self.get_children_of_node(state_id).is_empty() {
+            if self.should_crop_state(state_id) {
                 self.crop_state(state_id);
             }
         }
@@ -1570,14 +1629,25 @@ impl Diagram {
 
     /// Re-parent a node to the appropriate region based on its current position
     pub fn update_node_region(&mut self, node_id: NodeId) {
-        // Get the node's center position and area
-        let (center, node_area) = match self.find_node(node_id) {
+        // Get the node's center position, area, and current parent region
+        let (center, node_area, current_region_id) = match self.find_node(node_id) {
             Some(n) => {
                 let bounds = n.bounds();
-                (bounds.center(), bounds.width() * bounds.height())
+                (bounds.center(), bounds.width() * bounds.height(), n.parent_region_id())
             }
             None => return,
         };
+
+        // If node is currently a child of a collapsed sub-statemachine, don't reassign it.
+        // This preserves children when the parent state is resized.
+        if let Some(region_id) = current_region_id {
+            if let Some(parent_state) = self.find_region_parent_state(region_id) {
+                if parent_state.has_substatemachine() && !parent_state.show_expanded {
+                    // Node is inside a collapsed sub-statemachine - keep it there
+                    return;
+                }
+            }
+        }
 
         // First, check if we're inside a state that has no regions
         // If so, create a default region for it
