@@ -91,46 +91,52 @@ impl Toolbar {
                 .unwrap_or(false);
 
             ui.add_enabled_ui(has_multiple_selected, |ui| {
-                egui::menu::menu_button(ui, "⬚ Align", |ui| {
-                    ui.set_min_width(150.0);
+                egui::menu::menu_button(ui, "⬚ Arrange", |ui| {
+                    ui.set_min_width(180.0);
 
-                    ui.label("Horizontal");
+                    ui.label("Align Horizontal (+ distribute vertical)");
                     if ui.button("⫷ Align Left").clicked() {
-                        Self::align_nodes(app, AlignMode::Left);
+                        Self::align_and_distribute(app, AlignMode::Left);
                         ui.close_menu();
                     }
-                    if ui.button("⫿ Align Vertically").clicked() {
-                        Self::align_nodes(app, AlignMode::CenterH);
+                    if ui.button("⫿ Align Center").clicked() {
+                        Self::align_and_distribute(app, AlignMode::CenterH);
                         ui.close_menu();
                     }
                     if ui.button("⫸ Align Right").clicked() {
-                        Self::align_nodes(app, AlignMode::Right);
+                        Self::align_and_distribute(app, AlignMode::Right);
                         ui.close_menu();
                     }
 
                     ui.separator();
-                    ui.label("Vertical");
+                    ui.label("Align Vertical (+ distribute horizontal)");
                     if ui.button("⫠ Align Top").clicked() {
-                        Self::align_nodes(app, AlignMode::Top);
+                        Self::align_and_distribute(app, AlignMode::Top);
                         ui.close_menu();
                     }
-                    if ui.button("⫟ Align Horizontally").clicked() {
-                        Self::align_nodes(app, AlignMode::CenterV);
+                    if ui.button("⫟ Align Center").clicked() {
+                        Self::align_and_distribute(app, AlignMode::CenterV);
                         ui.close_menu();
                     }
                     if ui.button("⫡ Align Bottom").clicked() {
-                        Self::align_nodes(app, AlignMode::Bottom);
+                        Self::align_and_distribute(app, AlignMode::Bottom);
                         ui.close_menu();
                     }
 
                     ui.separator();
-                    ui.label("Distribute");
+                    ui.label("Distribute Only");
                     if ui.button("↔ Distribute Horizontally").clicked() {
                         Self::distribute_nodes(app, DistributeMode::Horizontal);
                         ui.close_menu();
                     }
                     if ui.button("↕ Distribute Vertically").clicked() {
                         Self::distribute_nodes(app, DistributeMode::Vertical);
+                        ui.close_menu();
+                    }
+
+                    ui.separator();
+                    if ui.button("✂ Crop Parents").on_hover_text("Crop blank margins from selected parent states").clicked() {
+                        Self::crop_parents(app);
                         ui.close_menu();
                     }
                 });
@@ -953,6 +959,42 @@ impl Toolbar {
             // Expand parent states to contain children (preserve parentage)
             state.diagram.expand_parents_to_contain_children();
             state.diagram.recalculate_connections();
+            state.modified = true;
+        }
+    }
+
+    /// Align nodes and automatically distribute in the perpendicular direction, then autocrop
+    fn align_and_distribute(app: &mut JmtApp, mode: AlignMode) {
+        // First align
+        Self::align_nodes(app, mode);
+
+        // Then distribute in the perpendicular direction
+        let distribute_mode = match mode {
+            AlignMode::Left | AlignMode::Right | AlignMode::CenterH => DistributeMode::Vertical,
+            AlignMode::Top | AlignMode::Bottom | AlignMode::CenterV => DistributeMode::Horizontal,
+        };
+
+        // Check if we have enough nodes to distribute (3+)
+        let should_distribute = app.current_diagram()
+            .map(|s| s.diagram.selected_nodes().len() >= 3)
+            .unwrap_or(false);
+
+        if should_distribute {
+            Self::distribute_nodes(app, distribute_mode);
+        }
+
+        // Autocrop parent states
+        if let Some(state) = app.current_diagram_mut() {
+            state.diagram.crop_all_parents();
+            state.diagram.recalculate_connections();
+        }
+    }
+
+    /// Crop blank margins from selected parent states (or all if none selected)
+    fn crop_parents(app: &mut JmtApp) {
+        if let Some(state) = app.current_diagram_mut() {
+            state.diagram.push_undo();
+            state.diagram.crop_selected_or_all();
             state.modified = true;
         }
     }

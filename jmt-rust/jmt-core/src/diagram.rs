@@ -1171,6 +1171,113 @@ impl Diagram {
         }
     }
 
+    /// Crop a parent state to remove blank margins around its children
+    /// Returns true if the state was cropped
+    pub fn crop_state(&mut self, state_id: NodeId) -> bool {
+        const MARGIN: f32 = 10.0;
+        const HEADER_HEIGHT: f32 = 25.0;
+
+        // Get children of this state
+        let children = self.get_children_of_node(state_id);
+        if children.is_empty() {
+            return false;
+        }
+
+        // Calculate bounding box of all children
+        let mut min_x = f32::MAX;
+        let mut min_y = f32::MAX;
+        let mut max_x = f32::MIN;
+        let mut max_y = f32::MIN;
+
+        for child_id in &children {
+            if let Some(node) = self.find_node(*child_id) {
+                let bounds = node.bounds();
+                min_x = min_x.min(bounds.x1);
+                min_y = min_y.min(bounds.y1);
+                max_x = max_x.max(bounds.x2);
+                max_y = max_y.max(bounds.y2);
+            }
+        }
+
+        if min_x == f32::MAX {
+            return false;
+        }
+
+        // Calculate new bounds for parent (with margin and header)
+        let new_bounds = Rect::new(
+            min_x - MARGIN,
+            min_y - HEADER_HEIGHT - MARGIN,
+            max_x + MARGIN,
+            max_y + MARGIN,
+        );
+
+        // Get current bounds
+        let current_bounds = match self.find_node(state_id) {
+            Some(n) => n.bounds().clone(),
+            None => return false,
+        };
+
+        // Check if cropping would change anything
+        let would_crop = new_bounds.x1 > current_bounds.x1
+            || new_bounds.y1 > current_bounds.y1
+            || new_bounds.x2 < current_bounds.x2
+            || new_bounds.y2 < current_bounds.y2;
+
+        if !would_crop {
+            return false;
+        }
+
+        // Apply the crop
+        if let Some(node) = self.find_node_mut(state_id) {
+            *node.bounds_mut() = new_bounds;
+            if let Some(state) = node.as_state_mut() {
+                state.recalculate_regions();
+            }
+        }
+
+        true
+    }
+
+    /// Crop all selected parent states, or all parent states if none selected
+    pub fn crop_selected_or_all(&mut self) {
+        let selected = self.selected_nodes();
+
+        if selected.is_empty() {
+            // Crop all parent states (states with children)
+            let state_ids: Vec<NodeId> = self.nodes.iter()
+                .filter_map(|n| n.as_state().map(|s| s.id))
+                .collect();
+
+            for state_id in state_ids {
+                if !self.get_children_of_node(state_id).is_empty() {
+                    self.crop_state(state_id);
+                }
+            }
+        } else {
+            // Crop selected parent states
+            for id in selected {
+                if self.find_node(id).and_then(|n| n.as_state()).is_some() {
+                    self.crop_state(id);
+                }
+            }
+        }
+
+        self.recalculate_connections();
+    }
+
+    /// Crop all parent states that have children
+    pub fn crop_all_parents(&mut self) {
+        let state_ids: Vec<NodeId> = self.nodes.iter()
+            .filter_map(|n| n.as_state().map(|s| s.id))
+            .collect();
+
+        for state_id in state_ids {
+            if !self.get_children_of_node(state_id).is_empty() {
+                self.crop_state(state_id);
+            }
+        }
+    }
+
     /// Find the innermost state containing a point (by state bounds, not regions)
     /// Returns the state's node ID, or None if only the root state contains it
     /// `exclude_id` can be used to exclude a specific node (e.g., the node being dragged)
