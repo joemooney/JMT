@@ -983,8 +983,13 @@ impl JmtApp {
                     return;
                 }
 
-                // Try to select any element (node, lifeline, actor, use case, action, etc.)
-                if let Some(element_id) = state.diagram.find_element_at(point) {
+                // Check connections before nodes - connections are thin lines so if user
+                // clicks on one, that's what they intended (even if inside a state)
+                if let Some(conn_id) = state.diagram.find_connection_at(point, 10.0) {
+                    state.diagram.select_connection(conn_id);
+                    self.status_message = "Selected connection".to_string();
+                } else if let Some(element_id) = state.diagram.find_element_at(point) {
+                    // Try to select any element (node, lifeline, actor, use case, action, etc.)
                     let name = state.diagram.get_element_name(element_id)
                         .unwrap_or_default();
 
@@ -998,9 +1003,6 @@ impl JmtApp {
                         state.diagram.select_element(element_id);
                         self.status_message = format!("Selected: {}", name);
                     }
-                } else if let Some(conn_id) = state.diagram.find_connection_at(point, 10.0) {
-                    state.diagram.select_connection(conn_id);
-                    self.status_message = "Selected connection".to_string();
                 } else {
                     // Only clear selection if Ctrl is not held
                     if !ctrl_held {
