@@ -45,6 +45,15 @@ impl TitleStyle {
     }
 }
 
+/// Reference to a parent diagram that uses this diagram as a sub-statemachine
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ParentReference {
+    /// Path to the parent diagram file
+    pub diagram_path: String,
+    /// Name of the state in the parent diagram that references this sub-statemachine
+    pub state_name: String,
+}
+
 /// A complete UML diagram (state machine, sequence, use case, or activity)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Diagram {
@@ -113,6 +122,10 @@ pub struct Diagram {
     #[serde(default)]
     pub control_flows: Vec<ControlFlow>,
 
+    /// References to parent diagrams that use this as a sub-statemachine
+    #[serde(default)]
+    pub parent_references: Vec<ParentReference>,
+
     /// Undo history (serialized diagram snapshots)
     #[serde(skip)]
     undo_stack: Vec<String>,
@@ -167,6 +180,8 @@ impl Diagram {
             partitions: Vec::new(),
             object_nodes: Vec::new(),
             control_flows: Vec::new(),
+            // Sub-statemachine parent tracking
+            parent_references: Vec::new(),
             // Undo
             undo_stack: Vec::new(),
             redo_stack: Vec::new(),

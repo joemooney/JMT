@@ -30,6 +30,18 @@ pub struct State {
     /// Whether to show activities in this state (None = use diagram default)
     #[serde(default)]
     pub show_activities: Option<bool>,
+    /// Display title for the state (shown in title bar, separate from name)
+    #[serde(default)]
+    pub title: String,
+    /// Path to sub-statemachine file, or empty string if embedded, or None if no sub-statemachine
+    /// - Some("path/to/file.jmt") = external file
+    /// - Some("") = embedded sub-statemachine (stored in regions)
+    /// - None = no sub-statemachine
+    #[serde(default)]
+    pub substatemachine_path: Option<String>,
+    /// Whether to show the sub-statemachine expanded inline (true) or as icon (false)
+    #[serde(default)]
+    pub show_expanded: bool,
     /// Whether this state is currently selected
     #[serde(skip)]
     pub has_focus: bool,
@@ -52,6 +64,9 @@ impl State {
             do_activity: String::new(),
             regions: Vec::new(),
             show_activities: None, // Use diagram default
+            title: String::new(),
+            substatemachine_path: None,
+            show_expanded: false,
             has_focus: false,
             has_error: false,
         }
@@ -70,9 +85,22 @@ impl State {
             do_activity: String::new(),
             regions: Vec::new(),
             show_activities: None, // Use diagram default
+            title: String::new(),
+            substatemachine_path: None,
+            show_expanded: false,
             has_focus: false,
             has_error: false,
         }
+    }
+
+    /// Returns true if this state has a sub-statemachine (external or embedded)
+    pub fn has_substatemachine(&self) -> bool {
+        self.substatemachine_path.is_some()
+    }
+
+    /// Returns true if the sub-statemachine is stored as an external file
+    pub fn is_external_substatemachine(&self) -> bool {
+        self.substatemachine_path.as_ref().map(|p| !p.is_empty()).unwrap_or(false)
     }
 
     /// Returns true if this is a composite state (has regions with children)

@@ -344,6 +344,117 @@ impl JmtApp {
         }
     }
 
+    /// Open a sub-statemachine for the given state node
+    pub fn open_substatemachine(&mut self, state_id: NodeId) {
+        // Get the sub-statemachine info from the state
+        let substatemachine_info = {
+            let Some(diagram_state) = self.current_diagram() else { return; };
+            let Some(node) = diagram_state.diagram.find_node(state_id) else { return; };
+            let Some(state) = node.as_state() else { return; };
+
+            match &state.substatemachine_path {
+                Some(path) if !path.is_empty() => {
+                    // External file
+                    Some((path.clone(), state.name.clone(), state.title.clone()))
+                }
+                Some(_) => {
+                    // Embedded - create view from regions
+                    Some((String::new(), state.name.clone(), state.title.clone()))
+                }
+                None => None,
+            }
+        };
+
+        if let Some((path, state_name, title)) = substatemachine_info {
+            if path.is_empty() {
+                // Embedded sub-statemachine - create a new diagram view
+                self.open_embedded_substatemachine(state_id, &state_name, &title);
+            } else {
+                // External file - load it
+                self.open_file_at_path(&path);
+            }
+        }
+    }
+
+    /// Create a new sub-statemachine for the given state
+    pub fn create_substatemachine(&mut self, state_id: NodeId) {
+        // Mark the state as having an embedded sub-statemachine
+        if let Some(diagram_state) = self.current_diagram_mut() {
+            if let Some(node) = diagram_state.diagram.find_node_mut(state_id) {
+                if let Some(state) = node.as_state_mut() {
+                    state.substatemachine_path = Some(String::new()); // Embedded by default
+                    diagram_state.modified = true;
+                    self.status_message = format!("Created sub-statemachine for '{}'", state.name);
+                }
+            }
+        }
+    }
+
+    /// Open an embedded sub-statemachine as a new tab
+    fn open_embedded_substatemachine(&mut self, _state_id: NodeId, state_name: &str, title: &str) {
+        // For embedded sub-statemachines, we create a new diagram view
+        // In a future implementation, this would show the child states from the parent state's regions
+        let display_name = if title.is_empty() { state_name } else { title };
+        let name = format!("{} (sub)", display_name);
+        let mut diagram = Diagram::new(&name);
+        diagram.title = display_name.to_string();
+        diagram.diagram_type = DiagramType::StateMachine;
+
+        self.diagrams.push(DiagramState::new(diagram));
+        self.active_diagram = self.diagrams.len() - 1;
+        self.edit_mode = EditMode::Arrow;
+        self.status_message = format!("Opened sub-statemachine: {}", display_name);
+    }
+
+    /// Open a diagram file at the given path
+    #[cfg(not(target_arch = "wasm32"))]
+    fn open_file_at_path(&mut self, path: &str) {
+        use std::path::PathBuf;
+
+        // Resolve relative path based on current diagram's location
+        let resolved_path = if let Some(current_state) = self.current_diagram() {
+            if let Some(current_path) = &current_state.file_path {
+                if let Some(parent) = current_path.parent() {
+                    parent.join(path)
+                } else {
+                    PathBuf::from(path)
+                }
+            } else {
+                PathBuf::from(path)
+            }
+        } else {
+            PathBuf::from(path)
+        };
+
+        match std::fs::read_to_string(&resolved_path) {
+            Ok(content) => {
+                match serde_json::from_str::<Diagram>(&content) {
+                    Ok(mut diagram) => {
+                        diagram.recalculate_connections();
+                        let state = DiagramState::with_path(diagram, resolved_path.clone());
+                        self.diagrams.push(state);
+                        self.active_diagram = self.diagrams.len() - 1;
+                        let filename = resolved_path.file_name()
+                            .map(|s| s.to_string_lossy().to_string())
+                            .unwrap_or_else(|| "file".to_string());
+                        self.status_message = format!("Opened: {}", filename);
+                    }
+                    Err(e) => {
+                        self.status_message = format!("Error parsing file: {}", e);
+                    }
+                }
+            }
+            Err(e) => {
+                self.status_message = format!("Error reading file '{}': {}", path, e);
+            }
+        }
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    fn open_file_at_path(&mut self, path: &str) {
+        self.status_message = format!("Cannot open external files in web mode: {}", path);
+    }
+
     /// Save the current diagram (prompts for path if not yet saved)
     #[cfg(not(target_arch = "wasm32"))]
     pub fn save(&mut self) {
@@ -2080,13 +2191,29 @@ impl eframe::App for JmtApp {
                                         self.status_message = "Pivot point added".to_string();
                                     }
                                 }
-                            } else if self.edit_mode.is_add_node() {
-                                // Double-click in add mode: first click already added node, switch to Arrow
-                                self.set_edit_mode(EditMode::Arrow);
-                                self.status_message = "Switched to Arrow mode".to_string();
                             } else {
-                                // For non-add modes, handle normally (e.g., Arrow mode selection)
-                                self.handle_canvas_click(diagram_pos, true, ctrl_held);
+                                // Check if double-clicked on a state with sub-statemachine
+                                let sub_state = self.current_diagram()
+                                    .and_then(|state| state.diagram.find_node_at(point))
+                                    .and_then(|node_id| {
+                                        self.current_diagram()
+                                            .and_then(|state| state.diagram.find_node(node_id))
+                                            .and_then(|node| node.as_state())
+                                            .filter(|s| s.has_substatemachine())
+                                            .map(|_| node_id)
+                                    });
+
+                                if let Some(state_id) = sub_state {
+                                    // Open the sub-statemachine
+                                    self.open_substatemachine(state_id);
+                                } else if self.edit_mode.is_add_node() {
+                                    // Double-click in add mode: first click already added node, switch to Arrow
+                                    self.set_edit_mode(EditMode::Arrow);
+                                    self.status_message = "Switched to Arrow mode".to_string();
+                                } else {
+                                    // For non-add modes, handle normally (e.g., Arrow mode selection)
+                                    self.handle_canvas_click(diagram_pos, true, ctrl_held);
+                                }
                             }
                         }
                     } else {

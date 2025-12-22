@@ -381,10 +381,65 @@ impl DiagramCanvas {
             }
         }
 
+        // Draw sub-statemachine icon if collapsed
+        if state.has_substatemachine() && !state.show_expanded {
+            self.render_substatemachine_icon(rect, painter, zoom);
+        }
+
         // Draw focus corners if selected
         if state.has_focus {
             self.render_focus_corners(rect, painter, settings.corner_size * zoom);
         }
+    }
+
+    /// Render a small sub-statemachine icon in the bottom-right corner of a state
+    fn render_substatemachine_icon(&self, rect: Rect, painter: &egui::Painter, zoom: f32) {
+        let icon_size = 16.0 * zoom;
+        let margin = 4.0 * zoom;
+
+        // Position icon in bottom-right corner
+        let icon_rect = Rect::from_min_size(
+            Pos2::new(
+                rect.max.x - icon_size - margin,
+                rect.max.y - icon_size - margin,
+            ),
+            Vec2::new(icon_size, icon_size),
+        );
+
+        // Draw mini diagram icon (small rectangle with internal lines)
+        let icon_fill = Color32::from_rgba_premultiplied(255, 255, 255, 200);
+        let icon_stroke = Stroke::new(zoom, Color32::DARK_GRAY);
+
+        // Background rectangle
+        painter.rect(icon_rect, Rounding::same(2.0 * zoom), icon_fill, icon_stroke);
+
+        // Draw internal lines to suggest diagram content
+        let inner_margin = 2.0 * zoom;
+        let inner_rect = icon_rect.shrink(inner_margin);
+
+        // Small rounded rectangle inside (mini-state)
+        let mini_state = Rect::from_min_size(
+            Pos2::new(inner_rect.min.x + 1.0 * zoom, inner_rect.min.y + 1.0 * zoom),
+            Vec2::new(inner_rect.width() * 0.5, inner_rect.height() * 0.4),
+        );
+        painter.rect(
+            mini_state,
+            Rounding::same(zoom),
+            Color32::from_gray(220),
+            Stroke::new(zoom * 0.5, Color32::DARK_GRAY),
+        );
+
+        // Small circle (mini initial state)
+        let circle_center = Pos2::new(
+            inner_rect.min.x + inner_rect.width() * 0.25,
+            inner_rect.max.y - 3.0 * zoom,
+        );
+        painter.circle_filled(circle_center, 2.0 * zoom, Color32::DARK_GRAY);
+
+        // Arrow line connecting them
+        let arrow_start = Pos2::new(circle_center.x + 2.0 * zoom, circle_center.y - 1.0 * zoom);
+        let arrow_end = Pos2::new(mini_state.center().x, mini_state.max.y);
+        painter.line_segment([arrow_start, arrow_end], Stroke::new(zoom * 0.5, Color32::DARK_GRAY));
     }
 
     /// Render a pseudo-state node

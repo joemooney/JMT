@@ -1,8 +1,17 @@
 //! Properties panel for editing selected elements
 
 use eframe::egui;
-use jmt_core::{Node, TitleStyle};
+use jmt_core::{Node, NodeId, TitleStyle};
 use crate::app::JmtApp;
+
+/// Actions that the properties panel can request
+#[derive(Debug, Clone)]
+pub enum PropertiesAction {
+    /// Open a sub-statemachine for the given state
+    OpenSubStateMachine(NodeId),
+    /// Create a new embedded sub-statemachine for the given state
+    CreateSubStateMachine(NodeId),
+}
 
 pub struct PropertiesPanel;
 
@@ -10,6 +19,8 @@ impl PropertiesPanel {
     pub fn show(ui: &mut egui::Ui, app: &mut JmtApp) {
         ui.heading("Properties");
         ui.separator();
+
+        let mut action: Option<PropertiesAction> = None;
 
         if let Some(state) = app.current_diagram_mut() {
             let selected_nodes = state.diagram.selected_nodes();
@@ -31,7 +42,7 @@ impl PropertiesPanel {
                     });
 
                 if let Some(node) = state.diagram.find_node_mut(node_id) {
-                    Self::show_node_properties(ui, node, &mut state.modified, region_info);
+                    action = Self::show_node_properties(ui, node, &mut state.modified, region_info);
                 }
             } else if let Some(conn_id) = selected_conn {
                 // Show connection properties
@@ -54,6 +65,18 @@ impl PropertiesPanel {
         } else {
             ui.label("No diagram open");
         }
+
+        // Handle actions from properties panel
+        if let Some(action) = action {
+            match action {
+                PropertiesAction::OpenSubStateMachine(node_id) => {
+                    app.open_substatemachine(node_id);
+                }
+                PropertiesAction::CreateSubStateMachine(node_id) => {
+                    app.create_substatemachine(node_id);
+                }
+            }
+        }
     }
 
     fn show_node_properties(
@@ -61,7 +84,9 @@ impl PropertiesPanel {
         node: &mut Node,
         modified: &mut bool,
         region_info: Option<(String, Option<String>)>,  // (region_name, parent_state_name)
-    ) {
+    ) -> Option<PropertiesAction> {
+        let mut action: Option<PropertiesAction> = None;
+        let node_id = node.id();
         ui.label(format!("Type: {}", node.node_type().display_name()));
 
         ui.horizontal(|ui| {
@@ -160,6 +185,98 @@ impl PropertiesPanel {
                 state.add_region("Region");
                 *modified = true;
             }
+
+            ui.separator();
+
+            // Sub-Statemachine Section
+            ui.label("Sub-Statemachine:");
+
+            // Title field
+            ui.horizontal(|ui| {
+                ui.label("Title:");
+                if ui.text_edit_singleline(&mut state.title).changed() {
+                    *modified = true;
+                }
+            });
+
+            // Show expanded checkbox (only if has sub-statemachine)
+            if state.substatemachine_path.is_some() {
+                ui.horizontal(|ui| {
+                    if ui.checkbox(&mut state.show_expanded, "Show Expanded")
+                        .on_hover_text("Show sub-statemachine contents inline instead of icon")
+                        .changed()
+                    {
+                        *modified = true;
+                    }
+                });
+
+                // Storage mode
+                ui.horizontal(|ui| {
+                    ui.label("Storage:");
+                    let is_external = state.is_external_substatemachine();
+
+                    if ui.selectable_label(!is_external, "Embedded")
+                        .on_hover_text("Store sub-statemachine in this file")
+                        .clicked()
+                    {
+                        state.substatemachine_path = Some(String::new());
+                        *modified = true;
+                    }
+                    if ui.selectable_label(is_external, "External File")
+                        .on_hover_text("Store sub-statemachine in separate .jmt file")
+                        .clicked()
+                    {
+                        // Default to name-based file
+                        let safe_name = state.name.replace(' ', "_");
+                        state.substatemachine_path = Some(format!("{}_sub.jmt", safe_name));
+                        *modified = true;
+                    }
+                });
+
+                // Show file path if external
+                let is_external = state.substatemachine_path.as_ref()
+                    .map(|p| !p.is_empty())
+                    .unwrap_or(false);
+                if is_external {
+                    let mut path_str = state.substatemachine_path.clone().unwrap_or_default();
+                    let original_path = path_str.clone();
+                    ui.horizontal(|ui| {
+                        ui.label("Path:");
+                        ui.text_edit_singleline(&mut path_str);
+                    });
+                    // Update after horizontal to avoid borrow issues
+                    if path_str != original_path {
+                        state.substatemachine_path = Some(path_str);
+                        *modified = true;
+                    }
+                }
+
+                // Open button
+                if ui.button("📂 Open SubStateMachine")
+                    .on_hover_text("Open sub-statemachine in a new tab")
+                    .clicked()
+                {
+                    action = Some(PropertiesAction::OpenSubStateMachine(node_id));
+                }
+
+                // Remove sub-statemachine button
+                if ui.button("🗑 Remove SubStateMachine")
+                    .on_hover_text("Remove sub-statemachine reference")
+                    .clicked()
+                {
+                    state.substatemachine_path = None;
+                    state.show_expanded = false;
+                    *modified = true;
+                }
+            } else {
+                // Create button
+                if ui.button("➕ Create SubStateMachine")
+                    .on_hover_text("Create a sub-statemachine for this state")
+                    .clicked()
+                {
+                    action = Some(PropertiesAction::CreateSubStateMachine(node_id));
+                }
+            }
         }
 
         // Show bounds (read-only)
@@ -169,6 +286,8 @@ impl PropertiesPanel {
         ui.label(format!("  X: {:.0} - {:.0}", bounds.x1, bounds.x2));
         ui.label(format!("  Y: {:.0} - {:.0}", bounds.y1, bounds.y2));
         ui.label(format!("  Size: {:.0} x {:.0}", bounds.width(), bounds.height()));
+
+        action
     }
 
     /// Show connection properties. Returns true if segments need recalculation.
