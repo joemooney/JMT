@@ -206,6 +206,18 @@ impl PropertiesPanel {
         if !label.is_empty() {
             ui.label(format!("Label: {}", label));
         }
+
+        ui.separator();
+
+        // Text adjoined checkbox
+        let mut text_adjoined = conn.text_adjoined;
+        if ui.checkbox(&mut text_adjoined, "Text Adjoined")
+            .on_hover_text("Keep label attached to connection without leader line")
+            .changed()
+        {
+            conn.set_text_adjoined(text_adjoined);
+            *modified = true;
+        }
     }
 
     fn show_diagram_properties(ui: &mut egui::Ui, state: &mut crate::app::DiagramState) {

@@ -56,6 +56,11 @@ impl LineSegment {
     }
 }
 
+/// Default value for text_adjoined field
+fn default_text_adjoined() -> bool {
+    true
+}
+
 /// A connection (transition) between two nodes
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Connection {
@@ -85,6 +90,10 @@ pub struct Connection {
     /// If None, label is positioned at default location (slightly above midpoint)
     #[serde(default)]
     pub label_offset: Option<(f32, f32)>,
+    /// Whether the label is adjoined to the connection (vs floating with leader line)
+    /// When true, label stays at default position and target node may be shifted if overlapping
+    #[serde(default = "default_text_adjoined")]
+    pub text_adjoined: bool,
     /// Line segments making up the connection path
     #[serde(skip)]
     pub segments: Vec<LineSegment>,
@@ -112,6 +121,7 @@ impl Connection {
             guard: String::new(),
             action: String::new(),
             label_offset: None,
+            text_adjoined: true,
             segments: Vec::new(),
             selected: false,
             label_selected: false,
@@ -133,6 +143,7 @@ impl Connection {
             guard: String::new(),
             action: String::new(),
             label_offset: None,
+            text_adjoined: true,
             segments: Vec::new(),
             selected: false,
             label_selected: false,
@@ -305,6 +316,39 @@ impl Connection {
     /// Set the label offset from the connection midpoint
     pub fn set_label_offset(&mut self, offset: Option<(f32, f32)>) {
         self.label_offset = offset;
+    }
+
+    /// Calculate estimated label dimensions based on label text
+    /// Returns (width, height) in pixels
+    pub fn label_dimensions(&self) -> (f32, f32) {
+        let label = self.label();
+        // Estimate ~6px per character at 10pt font, 12px height
+        let width = (label.len() as f32 * 6.0).max(10.0);
+        let height = 12.0;
+        (width, height)
+    }
+
+    /// Calculate the bounding rectangle of the label
+    /// Returns None if no label or no segments (no midpoint)
+    pub fn label_bounds(&self) -> Option<Rect> {
+        let (label_pos, _) = self.label_position()?;
+        let (width, height) = self.label_dimensions();
+        // Label is centered horizontally, aligned at bottom of text
+        Some(Rect::new(
+            label_pos.x - width / 2.0,
+            label_pos.y - height,
+            label_pos.x + width / 2.0,
+            label_pos.y
+        ))
+    }
+
+    /// Set text_adjoined property
+    /// When re-adjoining (setting to true), also resets label_offset
+    pub fn set_text_adjoined(&mut self, adjoined: bool) {
+        self.text_adjoined = adjoined;
+        if adjoined {
+            self.label_offset = None;
+        }
     }
 
     /// Check if a point is near the label (for hit testing)

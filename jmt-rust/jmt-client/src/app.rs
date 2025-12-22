@@ -1864,11 +1864,28 @@ impl eframe::App for JmtApp {
                     };
 
                     if is_double_click {
-                        // Double-click detected: the first click already added the node,
-                        // so just switch to Arrow mode without adding another node
+                        // Double-click detected
                         self.last_click_time = None;
                         self.last_click_pos = None;
-                        if self.edit_mode.is_add_node() {
+
+                        // First check if double-clicked on a connection label - re-adjoin it
+                        let point = Point::new(diagram_pos.x, diagram_pos.y);
+                        let label_clicked = self.current_diagram()
+                            .and_then(|state| state.diagram.find_connection_label_at(point));
+
+                        if let Some(conn_id) = label_clicked {
+                            // Re-adjoin the label
+                            if let Some(state) = self.current_diagram_mut() {
+                                if let Some(conn) = state.diagram.find_connection_mut(conn_id) {
+                                    conn.set_text_adjoined(true);
+                                }
+                                state.modified = true;
+                                // Check for overlap and shift target if needed
+                                state.diagram.adjust_for_label_overlap(conn_id);
+                            }
+                            self.status_message = "Label adjoined to connection".to_string();
+                        } else if self.edit_mode.is_add_node() {
+                            // Double-click in add mode: first click already added node, switch to Arrow
                             self.set_edit_mode(EditMode::Arrow);
                             self.status_message = "Switched to Arrow mode".to_string();
                         } else {
@@ -1970,6 +1987,17 @@ impl eframe::App for JmtApp {
                             if let Some(state) = self.current_diagram_mut() {
                                 state.diagram.select_connection_label(conn_id);
                                 state.diagram.push_undo();
+
+                                // Mark label as no longer adjoined when user starts dragging
+                                if let Some(conn) = state.diagram.find_connection_mut(conn_id) {
+                                    if conn.text_adjoined {
+                                        conn.text_adjoined = false;
+                                        // Initialize label_offset from current default position
+                                        if conn.label_offset.is_none() {
+                                            conn.label_offset = Some((0.0, -15.0));
+                                        }
+                                    }
+                                }
                             }
                             self.dragging_label = Some(conn_id);
                             self.dragging_nodes = false;

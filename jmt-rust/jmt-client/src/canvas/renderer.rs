@@ -515,8 +515,8 @@ impl DiagramCanvas {
                 let label_screen_pos = self.scale_pos(label_pos.x, label_pos.y, zoom);
                 let midpoint_screen_pos = self.scale_pos(midpoint.x, midpoint.y, zoom);
 
-                // Draw leader line if enabled and label has been moved from default
-                if settings.show_leader_lines && conn.label_offset.is_some() {
+                // Draw leader line if enabled, label is not adjoined, and has been moved from default
+                if settings.show_leader_lines && !conn.text_adjoined && conn.label_offset.is_some() {
                     // Draw dotted line from label to connection midpoint
                     self.draw_dashed_line(
                         painter,

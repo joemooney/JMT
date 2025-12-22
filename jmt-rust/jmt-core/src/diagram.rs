@@ -723,6 +723,105 @@ impl Diagram {
         descendants.contains(&node_id)
     }
 
+    /// Check if an adjoined label overlaps target node and shift target if needed
+    /// Returns true if a shift was performed
+    pub fn adjust_for_label_overlap(&mut self, conn_id: ConnectionId) -> bool {
+        // Gather connection info first to avoid borrow issues
+        let conn_info = self.find_connection(conn_id).map(|c| {
+            (
+                c.text_adjoined,
+                c.source_id,
+                c.target_id,
+                c.label(),
+                c.label_bounds(),
+            )
+        });
+
+        let Some((text_adjoined, source_id, target_id, label, label_bounds)) = conn_info else {
+            return false;
+        };
+
+        // Only process if text is adjoined and label exists
+        if !text_adjoined || label.is_empty() {
+            return false;
+        }
+
+        let Some(label_bounds) = label_bounds else {
+            return false;
+        };
+
+        // Skip self-loop connections
+        if source_id == target_id {
+            return false;
+        }
+
+        // Get node bounds and centers
+        let target_bounds = self.find_node(target_id).map(|n| n.bounds().clone());
+        let source_center = self.find_node(source_id).map(|n| n.bounds().center());
+        let target_center = self.find_node(target_id).map(|n| n.bounds().center());
+
+        let Some(target_bounds) = target_bounds else { return false; };
+        let Some(source_center) = source_center else { return false; };
+        let Some(target_center) = target_center else { return false; };
+
+        // Check if label overlaps target node
+        if !label_bounds.overlaps(&target_bounds) {
+            return false;
+        }
+
+        // Calculate shift direction and amount
+        let (shift_dx, shift_dy) = Self::calculate_target_shift_for_label(
+            &label_bounds,
+            &target_bounds,
+            source_center,
+            target_center,
+        );
+
+        // Shift the target node (only if there's actually a shift to make)
+        if shift_dx.abs() > 0.1 || shift_dy.abs() > 0.1 {
+            self.translate_node_with_children(target_id, shift_dx, shift_dy);
+            self.recalculate_connections();
+            return true;
+        }
+
+        false
+    }
+
+    /// Calculate how much to shift the target node to avoid label overlap
+    fn calculate_target_shift_for_label(
+        label_bounds: &Rect,
+        target_bounds: &Rect,
+        source_center: Point,
+        target_center: Point,
+    ) -> (f32, f32) {
+        const MARGIN: f32 = 5.0;
+
+        let dx = target_center.x - source_center.x;
+        let dy = target_center.y - source_center.y;
+
+        if dx.abs() > dy.abs() {
+            // Horizontal connection - shift target horizontally
+            let shift = if dx > 0.0 {
+                // Target is to the right of source, shift target further right
+                (label_bounds.x2 - target_bounds.x1 + MARGIN).max(0.0)
+            } else {
+                // Target is to the left of source, shift target further left
+                (label_bounds.x1 - target_bounds.x2 - MARGIN).min(0.0)
+            };
+            (shift, 0.0)
+        } else {
+            // Vertical connection - shift target vertically
+            let shift = if dy > 0.0 {
+                // Target is below source, shift target further down
+                (label_bounds.y2 - target_bounds.y1 + MARGIN).max(0.0)
+            } else {
+                // Target is above source, shift target further up
+                (label_bounds.y1 - target_bounds.y2 - MARGIN).min(0.0)
+            };
+            (0.0, shift)
+        }
+    }
+
     /// Get selected elements in order (across all diagram types)
     pub fn selected_elements_in_order(&self) -> Vec<Uuid> {
         self.selection_order.clone()
@@ -1544,6 +1643,9 @@ impl Diagram {
         // Recalculate all connections (slots and segments) since adding a connection
         // may affect slot positions of other connections on the same node/side
         self.recalculate_connections();
+
+        // Adjust for label overlap if needed (won't do anything for new connections without labels)
+        self.adjust_for_label_overlap(id);
 
         Some(id)
     }
