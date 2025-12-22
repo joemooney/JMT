@@ -93,6 +93,9 @@ pub struct PseudoState {
     /// Whether this pseudo-state is currently selected
     #[serde(skip)]
     pub has_focus: bool,
+    /// Whether this node has a placement error (partially inside another node)
+    #[serde(skip)]
+    pub has_error: bool,
 }
 
 impl PseudoState {
@@ -107,6 +110,7 @@ impl PseudoState {
             fill_color: Color::BLACK,
             parent_region_id: None,
             has_focus: false,
+            has_error: false,
         }
     }
 
@@ -121,6 +125,7 @@ impl PseudoState {
             fill_color: Color::BLACK,
             parent_region_id: None,
             has_focus: false,
+            has_error: false,
         }
     }
 

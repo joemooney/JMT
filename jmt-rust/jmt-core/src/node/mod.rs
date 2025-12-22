@@ -205,6 +205,22 @@ impl Node {
         }
     }
 
+    /// Check if this node has a placement error
+    pub fn has_error(&self) -> bool {
+        match self {
+            Node::State(s) => s.has_error,
+            Node::Pseudo(p) => p.has_error,
+        }
+    }
+
+    /// Set the error state of this node
+    pub fn set_error(&mut self, error: bool) {
+        match self {
+            Node::State(s) => s.has_error = error,
+            Node::Pseudo(p) => p.has_error = error,
+        }
+    }
+
     /// Get the parent region ID of this node
     pub fn parent_region_id(&self) -> Option<Uuid> {
         match self {

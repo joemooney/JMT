@@ -33,6 +33,9 @@ pub struct State {
     /// Whether this state is currently selected
     #[serde(skip)]
     pub has_focus: bool,
+    /// Whether this node has a placement error (partially inside another node)
+    #[serde(skip)]
+    pub has_error: bool,
 }
 
 impl State {
@@ -50,6 +53,7 @@ impl State {
             regions: Vec::new(),
             show_activities: None, // Use diagram default
             has_focus: false,
+            has_error: false,
         }
     }
 
@@ -67,6 +71,7 @@ impl State {
             regions: Vec::new(),
             show_activities: None, // Use diagram default
             has_focus: false,
+            has_error: false,
         }
     }
 

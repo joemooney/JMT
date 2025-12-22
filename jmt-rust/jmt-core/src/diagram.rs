@@ -1020,14 +1020,17 @@ impl Diagram {
 
     /// Re-parent a node to the appropriate region based on its current position
     pub fn update_node_region(&mut self, node_id: NodeId) {
-        // Get the node's center position and area
-        let (center, node_area) = match self.find_node(node_id) {
+        // Get the node's center position, area, and name for debug
+        let (center, node_area, node_name) = match self.find_node(node_id) {
             Some(n) => {
                 let bounds = n.bounds();
-                (bounds.center(), bounds.width() * bounds.height())
+                (bounds.center(), bounds.width() * bounds.height(), n.name().to_string())
             }
             None => return,
         };
+
+        eprintln!("  update_node_region: {} center=({:.0},{:.0}) area={:.0}",
+            node_name, center.x, center.y, node_area);
 
         // First, check if we're inside a state that has no regions
         // If so, create a default region for it
@@ -1035,6 +1038,7 @@ impl Diagram {
         // Also check that the potential parent is LARGER than the node being moved
         // (to prevent circular parent-child relationships)
         if let Some(state_id) = self.find_state_at_point_excluding(center.x, center.y, Some(node_id)) {
+            let parent_name = self.find_node(state_id).map(|n| n.name().to_string()).unwrap_or_default();
             // Check if this state is larger than our node (only larger states can be parents)
             let parent_area = self.find_node(state_id)
                 .map(|n| {
@@ -1042,6 +1046,8 @@ impl Diagram {
                     b.width() * b.height()
                 })
                 .unwrap_or(0.0);
+
+            eprintln!("    find_state_at_point_excluding found: {} (area={:.0})", parent_name, parent_area);
 
             if parent_area > node_area {
                 // Check if this state has any regions
@@ -1051,51 +1057,73 @@ impl Diagram {
                     .unwrap_or(false);
 
                 if needs_region {
+                    eprintln!("    Creating default region for {}", parent_name);
                     // Create a default region for this state
                     if let Some(Node::State(state)) = self.find_node_mut(state_id) {
                         state.add_region("default");
                     }
                 }
+            } else {
+                eprintln!("    Skipping {} as potential parent (not larger)", parent_name);
             }
+        } else {
+            eprintln!("    find_state_at_point_excluding: no state found at center");
         }
 
         // Now find which region should contain this node
         // We need to find a region that belongs to a state LARGER than this node
         if let Some(region_id) = self.find_region_at_point_for_node(center.x, center.y, node_id, node_area) {
+            // Get region name for debug
+            let region_name = self.find_region_name(region_id).unwrap_or_else(|| "unknown".to_string());
+            eprintln!("    find_region_at_point_for_node found: {} (id={:?})", region_name, region_id);
+
             // Get current parent
             let current_parent = self.find_node(node_id)
                 .and_then(|n| n.parent_region_id());
 
             // Only update if different
             if current_parent != Some(region_id) {
+                eprintln!("    Assigning {} to region {}", node_name, region_name);
                 self.assign_node_to_region(node_id, region_id);
+            } else {
+                eprintln!("    Already in correct region: {}", region_name);
             }
+        } else {
+            eprintln!("    find_region_at_point_for_node: no region found!");
         }
     }
 
     /// Find the region at a point that can contain a node of the given area
     /// Only returns regions from states that are larger than the node
     fn find_region_at_point_for_node(&self, x: f32, y: f32, exclude_id: NodeId, node_area: f32) -> Option<Uuid> {
+        eprintln!("      find_region_at_point_for_node: point=({:.0},{:.0}) node_area={:.0}", x, y, node_area);
+
         // Check state nodes' regions first (inner states before outer)
         // We want the innermost region that contains the point AND belongs to a larger state
-        let mut best_match: Option<(Uuid, f32)> = None; // (region_id, area)
+        let mut best_match: Option<(Uuid, f32, String)> = None; // (region_id, area, state_name)
 
         for node in &self.nodes {
             if let Node::State(state) = node {
                 // Skip the excluded node's regions
                 if state.id == exclude_id {
+                    eprintln!("        Skipping {} (excluded node)", state.name);
                     continue;
                 }
                 // Only consider states that are larger than the node being parented
                 let state_area = state.bounds.width() * state.bounds.height();
                 if state_area <= node_area {
+                    eprintln!("        Skipping {} (area {:.0} <= node_area {:.0})", state.name, state_area, node_area);
                     continue;
                 }
+                eprintln!("        Checking {} (area={:.0}, {} regions)", state.name, state_area, state.regions.len());
                 for region in &state.regions {
-                    if region.contains_point(x, y) {
+                    let contains = region.contains_point(x, y);
+                    eprintln!("          Region '{}' bounds ({:.0},{:.0})-({:.0},{:.0}): contains={}",
+                        region.name, region.bounds.x1, region.bounds.y1, region.bounds.x2, region.bounds.y2, contains);
+                    if contains {
                         let area = region.bounds.width() * region.bounds.height();
-                        if best_match.is_none() || area < best_match.unwrap().1 {
-                            best_match = Some((region.id, area));
+                        if best_match.is_none() || area < best_match.as_ref().unwrap().1 {
+                            best_match = Some((region.id, area, state.name.clone()));
                         }
                     }
                 }
@@ -1103,31 +1131,101 @@ impl Diagram {
         }
 
         // If found a region in a state node, return it
-        if let Some((region_id, _)) = best_match {
+        if let Some((region_id, area, state_name)) = best_match {
+            eprintln!("      -> Best match: region in {} (area={:.0})", state_name, area);
             return Some(region_id);
         }
 
         // Fall back to root state's regions
+        eprintln!("        No state region found, checking root state regions");
         for region in &self.root_state.regions {
-            if region.contains_point(x, y) {
+            let contains = region.contains_point(x, y);
+            eprintln!("          Root region '{}' bounds ({:.0},{:.0})-({:.0},{:.0}): contains={}",
+                region.name, region.bounds.x1, region.bounds.y1, region.bounds.x2, region.bounds.y2, contains);
+            if contains {
                 return Some(region.id);
             }
         }
 
         // Default to root region if point is anywhere
+        eprintln!("      -> Falling back to root_region_id()");
         Some(self.root_region_id())
     }
 
     /// Re-evaluate all nodes' parent/child relationships based on current positions
     /// Call this after any drag operation to ensure all containment is correct
     pub fn update_all_node_regions(&mut self) {
-        // Get all node IDs first to avoid borrow issues
-        let node_ids: Vec<NodeId> = self.nodes.iter().map(|n| n.id()).collect();
-
-        // Update each node's region assignment
-        for node_id in node_ids {
-            self.update_node_region(node_id);
+        // FIRST: Recalculate all region bounds to ensure they match current state positions
+        // This is critical because states may have been moved and regions need to update
+        // Also clear any existing errors
+        for node in &mut self.nodes {
+            node.set_error(false);
+            if let Node::State(state) = node {
+                state.recalculate_regions();
+            }
         }
+
+        // Get all nodes sorted by area (largest first)
+        // This ensures parent states are processed before their potential children
+        let mut node_info: Vec<(NodeId, String, f32, Rect)> = self.nodes.iter()
+            .map(|n| {
+                let bounds = n.bounds().clone();
+                let area = bounds.width() * bounds.height();
+                (n.id(), n.name().to_string(), area, bounds)
+            })
+            .collect();
+
+        // Sort by area descending (largest first)
+        node_info.sort_by(|a, b| b.2.partial_cmp(&a.2).unwrap_or(std::cmp::Ordering::Equal));
+
+        eprintln!("\n=== update_all_node_regions ===");
+        for (_id, name, area, bounds) in &node_info {
+            eprintln!("  {} (area={:.0}): corners ({:.0},{:.0}) to ({:.0},{:.0})",
+                name, area, bounds.x1, bounds.y1, bounds.x2, bounds.y2);
+        }
+
+        // Check for partial containment errors and update region assignments
+        let mut error_nodes: Vec<NodeId> = Vec::new();
+
+        for (node_id, name, _area, bounds) in &node_info {
+            eprintln!("\nProcessing {} at ({:.0},{:.0})-({:.0},{:.0}):",
+                name, bounds.x1, bounds.y1, bounds.x2, bounds.y2);
+
+            // Check which larger nodes this node overlaps with
+            for (other_id, other_name, other_area, other_bounds) in &node_info {
+                if other_id == node_id {
+                    continue;
+                }
+
+                // Count how many corners are contained
+                let corners = [
+                    Point::new(bounds.x1, bounds.y1),
+                    Point::new(bounds.x2, bounds.y1),
+                    Point::new(bounds.x1, bounds.y2),
+                    Point::new(bounds.x2, bounds.y2),
+                ];
+                let contained_count = corners.iter().filter(|c| other_bounds.contains_point(**c)).count();
+
+                if contained_count == 4 {
+                    eprintln!("  -> All 4 corners contained in {} (area={:.0})", other_name, other_area);
+                } else if contained_count > 0 {
+                    // Partial containment - this is an error
+                    eprintln!("  -> ERROR: {} corners in {} (partial containment)", contained_count, other_name);
+                    error_nodes.push(*node_id);
+                }
+            }
+
+            self.update_node_region(*node_id);
+        }
+
+        // Mark nodes with errors
+        for error_id in error_nodes {
+            if let Some(node) = self.find_node_mut(error_id) {
+                node.set_error(true);
+            }
+        }
+
+        eprintln!("=== end update_all_node_regions ===\n");
     }
 
     /// Add a connection between two nodes
@@ -1460,80 +1558,73 @@ impl Diagram {
         self.select_nodes(&ids);
     }
 
-    /// Select all elements whose center is inside a rectangle (for marquee selection)
+    /// Select all elements that are fully contained in a rectangle (for marquee selection)
+    /// All four corners must be inside the rectangle
     /// Works for all diagram types
     pub fn select_elements_in_rect(&mut self, rect: &Rect) {
         self.clear_selection();
 
         match self.diagram_type {
             DiagramType::StateMachine => {
-                // Select nodes whose center is in the rect
+                // Select nodes fully contained in rect
                 let mut ids = Vec::new();
                 for node in &self.nodes {
-                    let center = node.bounds().center();
-                    if rect.contains_point(center) {
+                    if rect.contains_rect(node.bounds()) {
                         ids.push(node.id());
                     }
                 }
                 self.select_nodes(&ids);
             }
             DiagramType::Sequence => {
-                // Select lifelines
+                // Select lifelines fully contained
                 for lifeline in &mut self.lifelines {
-                    let center = lifeline.head_bounds().center();
-                    if rect.contains_point(center) {
+                    if rect.contains_rect(&lifeline.head_bounds()) {
                         lifeline.has_focus = true;
                         self.selection_order.push(lifeline.id);
                     }
                 }
             }
             DiagramType::UseCase => {
-                // Select actors
+                // Select actors fully contained
                 for actor in &mut self.actors {
-                    let center = actor.center();
-                    if rect.contains_point(center) {
+                    if rect.contains_rect(&actor.bounds()) {
                         actor.has_focus = true;
                         self.selection_order.push(actor.id);
                     }
                 }
-                // Select use cases
+                // Select use cases fully contained
                 for uc in &mut self.use_cases {
-                    let center = uc.center();
-                    if rect.contains_point(center) {
+                    if rect.contains_rect(&uc.bounds) {
                         uc.has_focus = true;
                         self.selection_order.push(uc.id);
                     }
                 }
-                // Select system boundaries
+                // Select system boundaries fully contained
                 for sb in &mut self.system_boundaries {
-                    let center = sb.bounds.center();
-                    if rect.contains_point(center) {
+                    if rect.contains_rect(&sb.bounds) {
                         sb.has_focus = true;
                         self.selection_order.push(sb.id);
                     }
                 }
             }
             DiagramType::Activity => {
-                // Select actions
+                // Select actions fully contained
                 for action in &mut self.actions {
-                    let center = action.center();
-                    if rect.contains_point(center) {
+                    if rect.contains_rect(&action.bounds) {
                         action.has_focus = true;
                         self.selection_order.push(action.id);
                     }
                 }
-                // Select swimlanes
+                // Select swimlanes fully contained
                 for swimlane in &mut self.swimlanes {
-                    let center = swimlane.bounds.center();
-                    if rect.contains_point(center) {
+                    if rect.contains_rect(&swimlane.bounds) {
                         swimlane.has_focus = true;
                         self.selection_order.push(swimlane.id);
                     }
                 }
-                // Select object nodes
+                // Select object nodes fully contained
                 for obj in &mut self.object_nodes {
-                    let center = obj.bounds.center();
-                    if rect.contains_point(center) {
+                    if rect.contains_rect(&obj.bounds) {
                         obj.has_focus = true;
                         self.selection_order.push(obj.id);
                     }
@@ -1544,81 +1635,85 @@ impl Diagram {
         self.explicit_selection_order = false;
     }
 
-    /// Select all elements whose center is inside a polygon (for lasso selection)
+    /// Select all elements that are fully contained in a polygon (for lasso selection)
+    /// All four corners must be inside the polygon
     pub fn select_elements_in_polygon(&mut self, polygon: &[Point]) {
         use crate::geometry::point_in_polygon;
+
+        // Helper: check if all four corners of bounds are in polygon
+        let all_corners_in_polygon = |bounds: &Rect| -> bool {
+            let corners = [
+                Point::new(bounds.x1, bounds.y1),
+                Point::new(bounds.x2, bounds.y1),
+                Point::new(bounds.x1, bounds.y2),
+                Point::new(bounds.x2, bounds.y2),
+            ];
+            corners.iter().all(|c| point_in_polygon(*c, polygon))
+        };
 
         self.clear_selection();
 
         match self.diagram_type {
             DiagramType::StateMachine => {
-                // Select nodes whose center is in the polygon
+                // Select nodes fully contained in polygon
                 let mut ids = Vec::new();
                 for node in &self.nodes {
-                    let center = node.bounds().center();
-                    if point_in_polygon(center, polygon) {
+                    if all_corners_in_polygon(node.bounds()) {
                         ids.push(node.id());
                     }
                 }
                 self.select_nodes(&ids);
             }
             DiagramType::Sequence => {
-                // Select lifelines
+                // Select lifelines fully contained
                 for lifeline in &mut self.lifelines {
-                    let center = lifeline.head_bounds().center();
-                    if point_in_polygon(center, polygon) {
+                    if all_corners_in_polygon(&lifeline.head_bounds()) {
                         lifeline.has_focus = true;
                         self.selection_order.push(lifeline.id);
                     }
                 }
             }
             DiagramType::UseCase => {
-                // Select actors
+                // Select actors fully contained
                 for actor in &mut self.actors {
-                    let center = actor.center();
-                    if point_in_polygon(center, polygon) {
+                    if all_corners_in_polygon(&actor.bounds()) {
                         actor.has_focus = true;
                         self.selection_order.push(actor.id);
                     }
                 }
-                // Select use cases
+                // Select use cases fully contained
                 for uc in &mut self.use_cases {
-                    let center = uc.center();
-                    if point_in_polygon(center, polygon) {
+                    if all_corners_in_polygon(&uc.bounds) {
                         uc.has_focus = true;
                         self.selection_order.push(uc.id);
                     }
                 }
-                // Select system boundaries
+                // Select system boundaries fully contained
                 for sb in &mut self.system_boundaries {
-                    let center = sb.bounds.center();
-                    if point_in_polygon(center, polygon) {
+                    if all_corners_in_polygon(&sb.bounds) {
                         sb.has_focus = true;
                         self.selection_order.push(sb.id);
                     }
                 }
             }
             DiagramType::Activity => {
-                // Select actions
+                // Select actions fully contained
                 for action in &mut self.actions {
-                    let center = action.center();
-                    if point_in_polygon(center, polygon) {
+                    if all_corners_in_polygon(&action.bounds) {
                         action.has_focus = true;
                         self.selection_order.push(action.id);
                     }
                 }
-                // Select swimlanes
+                // Select swimlanes fully contained
                 for swimlane in &mut self.swimlanes {
-                    let center = swimlane.bounds.center();
-                    if point_in_polygon(center, polygon) {
+                    if all_corners_in_polygon(&swimlane.bounds) {
                         swimlane.has_focus = true;
                         self.selection_order.push(swimlane.id);
                     }
                 }
-                // Select object nodes
+                // Select object nodes fully contained
                 for obj in &mut self.object_nodes {
-                    let center = obj.bounds.center();
-                    if point_in_polygon(center, polygon) {
+                    if all_corners_in_polygon(&obj.bounds) {
                         obj.has_focus = true;
                         self.selection_order.push(obj.id);
                     }

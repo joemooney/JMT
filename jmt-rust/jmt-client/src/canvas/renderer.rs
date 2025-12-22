@@ -149,13 +149,25 @@ impl DiagramCanvas {
         let bounds = &state.bounds;
         let rect = self.scale_rect(bounds, zoom);
 
-        // Fill color
-        let fill_color = state.fill_color.unwrap_or(settings.state_color);
-        let fill = color_to_egui(fill_color);
+        // Fill color - use red tint if has error
+        let fill = if state.has_error {
+            Color32::from_rgb(255, 180, 180) // Light red for error
+        } else {
+            let fill_color = state.fill_color.unwrap_or(settings.state_color);
+            color_to_egui(fill_color)
+        };
+
+        // Stroke color - red if error
+        let stroke_color = if state.has_error {
+            Color32::RED
+        } else {
+            Color32::BLACK
+        };
 
         // Draw rounded rectangle
         let rounding = Rounding::same(settings.corner_rounding * zoom);
-        painter.rect(rect, rounding, fill, Stroke::new(zoom, Color32::BLACK));
+        let stroke_width = if state.has_error { 2.0 * zoom } else { zoom };
+        painter.rect(rect, rounding, fill, Stroke::new(stroke_width, stroke_color));
 
         // Draw activities if they should be shown
         let show_activities = state.should_show_activities(settings.show_activities);
@@ -280,18 +292,22 @@ impl DiagramCanvas {
         let bounds = &pseudo.bounds;
         let center = self.scale_pos(bounds.center().x, bounds.center().y, zoom);
 
+        // Use red color if has error
+        let fill_color = if pseudo.has_error { Color32::RED } else { Color32::BLACK };
+        let stroke = Stroke::new(if pseudo.has_error { 2.0 * zoom } else { zoom }, fill_color);
+
         match pseudo.kind {
             PseudoStateKind::Initial => {
-                // Filled black circle
+                // Filled circle
                 let radius = (bounds.width().min(bounds.height()) / 2.0 - 2.0) * zoom;
-                painter.circle_filled(center, radius, Color32::BLACK);
+                painter.circle_filled(center, radius, fill_color);
             }
             PseudoStateKind::Final => {
                 // Double circle (outer ring + inner filled)
                 let outer_radius = (bounds.width().min(bounds.height()) / 2.0 - 2.0) * zoom;
                 let inner_radius = outer_radius - 4.0 * zoom;
-                painter.circle_stroke(center, outer_radius, Stroke::new(zoom, Color32::BLACK));
-                painter.circle_filled(center, inner_radius, Color32::BLACK);
+                painter.circle_stroke(center, outer_radius, stroke);
+                painter.circle_filled(center, inner_radius, fill_color);
             }
             PseudoStateKind::Choice | PseudoStateKind::Junction => {
                 // Diamond shape
@@ -304,12 +320,12 @@ impl DiagramCanvas {
                     Pos2::new(center.x - half_w, center.y),  // left
                     Pos2::new(center.x, center.y - half_h),  // close
                 ];
-                painter.add(egui::Shape::line(points, Stroke::new(zoom, Color32::BLACK)));
+                painter.add(egui::Shape::line(points, stroke));
             }
             PseudoStateKind::Fork | PseudoStateKind::Join => {
                 // Thick horizontal or vertical bar
                 let rect = self.scale_rect(bounds, zoom);
-                painter.rect_filled(rect, Rounding::ZERO, Color32::BLACK);
+                painter.rect_filled(rect, Rounding::ZERO, fill_color);
             }
         }
 
