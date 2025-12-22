@@ -2179,6 +2179,157 @@ impl Diagram {
             .collect()
     }
 
+    /// Get selected nodes ordered by their connections.
+    ///
+    /// Orders nodes based on connection flow: if A→B→C, returns [A, B, C].
+    /// Handles bidirectional connections (A↔B↔C becomes [A, B, C]).
+    /// Starts with nodes that have no incoming connections from other selected nodes.
+    /// Falls back to position-based ordering if no connections exist.
+    pub fn selected_nodes_by_connection_order(&self) -> Vec<NodeId> {
+        use std::collections::{HashMap, HashSet, VecDeque};
+
+        let selected: HashSet<NodeId> = self.selected_nodes().into_iter().collect();
+        if selected.len() < 2 {
+            return selected.into_iter().collect();
+        }
+
+        // Build adjacency lists for connections between selected nodes only
+        // outgoing[a] = set of nodes that a connects TO
+        // incoming[a] = set of nodes that connect TO a
+        let mut outgoing: HashMap<NodeId, HashSet<NodeId>> = HashMap::new();
+        let mut incoming: HashMap<NodeId, HashSet<NodeId>> = HashMap::new();
+
+        for node_id in &selected {
+            outgoing.insert(*node_id, HashSet::new());
+            incoming.insert(*node_id, HashSet::new());
+        }
+
+        for conn in &self.connections {
+            if selected.contains(&conn.source_id) && selected.contains(&conn.target_id) {
+                outgoing.get_mut(&conn.source_id).unwrap().insert(conn.target_id);
+                incoming.get_mut(&conn.target_id).unwrap().insert(conn.source_id);
+            }
+        }
+
+        // Find starting nodes: nodes with no incoming connections from selected nodes
+        let mut starting_nodes: Vec<NodeId> = selected
+            .iter()
+            .filter(|id| incoming.get(id).map(|s| s.is_empty()).unwrap_or(true))
+            .copied()
+            .collect();
+
+        // If all nodes have incoming (cycle), pick by position (top-left first)
+        if starting_nodes.is_empty() {
+            starting_nodes = selected.iter().copied().collect();
+            starting_nodes.sort_by(|a, b| {
+                let a_bounds = self.find_node(*a).map(|n| n.bounds());
+                let b_bounds = self.find_node(*b).map(|n| n.bounds());
+                match (a_bounds, b_bounds) {
+                    (Some(a), Some(b)) => {
+                        a.y1.partial_cmp(&b.y1)
+                            .unwrap_or(std::cmp::Ordering::Equal)
+                            .then(a.x1.partial_cmp(&b.x1).unwrap_or(std::cmp::Ordering::Equal))
+                    }
+                    _ => std::cmp::Ordering::Equal,
+                }
+            });
+            // Just take the first one as starting point
+            starting_nodes.truncate(1);
+        } else {
+            // Sort starting nodes by position (top-left first)
+            starting_nodes.sort_by(|a, b| {
+                let a_bounds = self.find_node(*a).map(|n| n.bounds());
+                let b_bounds = self.find_node(*b).map(|n| n.bounds());
+                match (a_bounds, b_bounds) {
+                    (Some(a), Some(b)) => {
+                        a.y1.partial_cmp(&b.y1)
+                            .unwrap_or(std::cmp::Ordering::Equal)
+                            .then(a.x1.partial_cmp(&b.x1).unwrap_or(std::cmp::Ordering::Equal))
+                    }
+                    _ => std::cmp::Ordering::Equal,
+                }
+            });
+        }
+
+        // BFS from starting nodes, following outgoing connections
+        let mut result: Vec<NodeId> = Vec::new();
+        let mut visited: HashSet<NodeId> = HashSet::new();
+        let mut queue: VecDeque<NodeId> = VecDeque::new();
+
+        for start in &starting_nodes {
+            if !visited.contains(start) {
+                queue.push_back(*start);
+                visited.insert(*start);
+            }
+        }
+
+        while let Some(current) = queue.pop_front() {
+            result.push(current);
+
+            // Get outgoing connections, sorted by target position
+            let mut targets: Vec<NodeId> = outgoing
+                .get(&current)
+                .map(|s| s.iter().copied().collect())
+                .unwrap_or_default();
+
+            targets.sort_by(|a, b| {
+                let a_bounds = self.find_node(*a).map(|n| n.bounds());
+                let b_bounds = self.find_node(*b).map(|n| n.bounds());
+                match (a_bounds, b_bounds) {
+                    (Some(a), Some(b)) => {
+                        a.y1.partial_cmp(&b.y1)
+                            .unwrap_or(std::cmp::Ordering::Equal)
+                            .then(a.x1.partial_cmp(&b.x1).unwrap_or(std::cmp::Ordering::Equal))
+                    }
+                    _ => std::cmp::Ordering::Equal,
+                }
+            });
+
+            for target in targets {
+                if !visited.contains(&target) {
+                    visited.insert(target);
+                    queue.push_back(target);
+                }
+            }
+
+            // Also check for bidirectional - if we haven't visited nodes that connect TO us,
+            // add them (handles A↔B where we came from A and need to continue to nodes B connects to)
+            let mut sources: Vec<NodeId> = incoming
+                .get(&current)
+                .map(|s| s.iter().copied().collect())
+                .unwrap_or_default();
+
+            sources.sort_by(|a, b| {
+                let a_bounds = self.find_node(*a).map(|n| n.bounds());
+                let b_bounds = self.find_node(*b).map(|n| n.bounds());
+                match (a_bounds, b_bounds) {
+                    (Some(a), Some(b)) => {
+                        a.y1.partial_cmp(&b.y1)
+                            .unwrap_or(std::cmp::Ordering::Equal)
+                            .then(a.x1.partial_cmp(&b.x1).unwrap_or(std::cmp::Ordering::Equal))
+                    }
+                    _ => std::cmp::Ordering::Equal,
+                }
+            });
+
+            for source in sources {
+                if !visited.contains(&source) {
+                    visited.insert(source);
+                    queue.push_back(source);
+                }
+            }
+        }
+
+        // Add any unvisited nodes (disconnected from the graph)
+        for node_id in &selected {
+            if !visited.contains(node_id) {
+                result.push(*node_id);
+            }
+        }
+
+        result
+    }
+
     /// Returns true if selection was made via explicit Ctrl+Click ordering
     /// Returns false if selection was via marquee/lasso (should use position order)
     pub fn has_explicit_selection_order(&self) -> bool {

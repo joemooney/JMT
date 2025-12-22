@@ -768,13 +768,21 @@ impl Toolbar {
         const MIN_SEPARATION: f32 = 20.0; // Minimum gap between nodes
 
         if let Some(state) = app.current_diagram_mut() {
-            let selected_ids = state.diagram.selected_nodes_in_order();
+            // Check if user explicitly ordered via Ctrl+Click
+            let use_selection_order = state.diagram.has_explicit_selection_order();
+
+            // Get nodes in appropriate order:
+            // - Ctrl+Click: use explicit selection order
+            // - Marquee/Lasso: use connection-based order
+            let selected_ids = if use_selection_order {
+                state.diagram.selected_nodes_in_order()
+            } else {
+                state.diagram.selected_nodes_by_connection_order()
+            };
+
             if selected_ids.len() < 2 {
                 return;
             }
-
-            // Check if user explicitly ordered via Ctrl+Click
-            let use_selection_order = state.diagram.has_explicit_selection_order();
 
             state.diagram.push_undo();
 
@@ -849,18 +857,10 @@ impl Toolbar {
                 return;
             }
 
-            let is_horizontal_align = matches!(mode, AlignMode::Left | AlignMode::Right | AlignMode::CenterH);
+            // Note: nodes_with_bounds is already in connection-based order (for marquee/lasso)
+            // or explicit selection order (for Ctrl+Click), so no further sorting needed.
 
-            // Sort by position if NOT using explicit selection order (marquee/lasso)
-            if !use_selection_order {
-                if is_horizontal_align {
-                    // Sort by Y for horizontal alignment (vertical spreading)
-                    nodes_with_bounds.sort_by(|a, b| a.1.y1.partial_cmp(&b.1.y1).unwrap());
-                } else {
-                    // Sort by X for vertical alignment (horizontal spreading)
-                    nodes_with_bounds.sort_by(|a, b| a.1.x1.partial_cmp(&b.1.x1).unwrap());
-                }
-            }
+            let is_horizontal_align = matches!(mode, AlignMode::Left | AlignMode::Right | AlignMode::CenterH);
 
             // Collect just bounds for alignment target calculation
             let bounds: Vec<_> = nodes_with_bounds.iter().map(|(_, b)| b.clone()).collect();
@@ -1003,13 +1003,21 @@ impl Toolbar {
         const MIN_SEPARATION: f32 = 20.0; // Minimum gap between nodes
 
         if let Some(state) = app.current_diagram_mut() {
-            let selected_ids = state.diagram.selected_nodes_in_order();
+            // Check if user explicitly ordered via Ctrl+Click
+            let use_selection_order = state.diagram.has_explicit_selection_order();
+
+            // Get nodes in appropriate order:
+            // - Ctrl+Click: use explicit selection order
+            // - Marquee/Lasso: use connection-based order
+            let selected_ids = if use_selection_order {
+                state.diagram.selected_nodes_in_order()
+            } else {
+                state.diagram.selected_nodes_by_connection_order()
+            };
+
             if selected_ids.len() < 3 {
                 return; // Need at least 3 nodes to distribute
             }
-
-            // Check if user explicitly ordered via Ctrl+Click
-            let use_selection_order = state.diagram.has_explicit_selection_order();
 
             state.diagram.push_undo();
 
@@ -1074,7 +1082,7 @@ impl Toolbar {
             }
 
             // Collect node IDs with their bounds and center positions
-            let mut nodes_with_info: Vec<_> = nodes_to_distribute.iter()
+            let nodes_with_info: Vec<_> = nodes_to_distribute.iter()
                 .filter_map(|id| {
                     state.diagram.find_node(*id).map(|n| {
                         let bounds = n.bounds().clone();
@@ -1088,17 +1096,8 @@ impl Toolbar {
                 return;
             }
 
-            // Sort by position if NOT using explicit selection order (marquee/lasso)
-            if !use_selection_order {
-                match mode {
-                    DistributeMode::Horizontal => {
-                        nodes_with_info.sort_by(|a, b| a.2.partial_cmp(&b.2).unwrap());
-                    }
-                    DistributeMode::Vertical => {
-                        nodes_with_info.sort_by(|a, b| a.3.partial_cmp(&b.3).unwrap());
-                    }
-                }
-            }
+            // Note: nodes_with_info is already in connection-based order (for marquee/lasso)
+            // or explicit selection order (for Ctrl+Click), so no further sorting needed.
 
             match mode {
                 DistributeMode::Horizontal => {
