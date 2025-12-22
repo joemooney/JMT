@@ -25,6 +25,61 @@ impl LineSegment {
         self.start.distance_to(self.end)
     }
 
+    /// Check if this segment intersects a rectangle (for obstacle detection)
+    /// Uses parametric line-box intersection
+    pub fn intersects_rect(&self, rect: &Rect) -> bool {
+        // Quick check: if both endpoints are outside on same side, no intersection
+        let dx = self.end.x - self.start.x;
+        let dy = self.end.y - self.start.y;
+
+        // Check endpoints
+        let p1_inside = rect.contains_point(self.start);
+        let p2_inside = rect.contains_point(self.end);
+        if p1_inside || p2_inside {
+            return true;
+        }
+
+        // Parametric intersection: find t where line enters/exits box
+        let mut t_min = 0.0f32;
+        let mut t_max = 1.0f32;
+
+        // Check X bounds
+        if dx.abs() > 0.001 {
+            let t1 = (rect.x1 - self.start.x) / dx;
+            let t2 = (rect.x2 - self.start.x) / dx;
+            let (t_near, t_far) = if t1 < t2 { (t1, t2) } else { (t2, t1) };
+            t_min = t_min.max(t_near);
+            t_max = t_max.min(t_far);
+            if t_min > t_max {
+                return false;
+            }
+        } else {
+            // Line is vertical; must be within x bounds
+            if self.start.x < rect.x1 || self.start.x > rect.x2 {
+                return false;
+            }
+        }
+
+        // Check Y bounds
+        if dy.abs() > 0.001 {
+            let t1 = (rect.y1 - self.start.y) / dy;
+            let t2 = (rect.y2 - self.start.y) / dy;
+            let (t_near, t_far) = if t1 < t2 { (t1, t2) } else { (t2, t1) };
+            t_min = t_min.max(t_near);
+            t_max = t_max.min(t_far);
+            if t_min > t_max {
+                return false;
+            }
+        } else {
+            // Line is horizontal; must be within y bounds
+            if self.start.y < rect.y1 || self.start.y > rect.y2 {
+                return false;
+            }
+        }
+
+        t_min <= t_max && t_max >= 0.0 && t_min <= 1.0
+    }
+
     /// Check if a point is close to this line segment
     pub fn is_near_point(&self, p: Point, tolerance: f32) -> bool {
         // Quick bounding box check first
@@ -54,6 +109,63 @@ impl LineSegment {
 
         distance <= tolerance
     }
+}
+
+/// Connection routing style
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub enum RoutingStyle {
+    /// Straight line directly between source and target
+    Direct,
+    /// Orthogonal routing with automatic obstacle avoidance (default)
+    #[default]
+    OrthogonalAuto,
+    /// U-shape: exits and returns from the same direction
+    UShape,
+    /// L-shape: single right-angle turn
+    LShape,
+    /// S-shape (Step): two right-angle turns
+    SShape,
+    /// Smooth curved arc using Bezier curve
+    Arc,
+}
+
+impl RoutingStyle {
+    /// Get display name for UI
+    pub fn display_name(&self) -> &'static str {
+        match self {
+            Self::Direct => "Direct",
+            Self::OrthogonalAuto => "Orthogonal (Auto)",
+            Self::UShape => "U-Shape",
+            Self::LShape => "L-Shape",
+            Self::SShape => "S-Shape (Step)",
+            Self::Arc => "Arc",
+        }
+    }
+
+    /// Get all variants for UI iteration
+    pub fn all() -> &'static [RoutingStyle] {
+        &[
+            Self::Direct,
+            Self::OrthogonalAuto,
+            Self::UShape,
+            Self::LShape,
+            Self::SShape,
+            Self::Arc,
+        ]
+    }
+}
+
+/// A segment that can be either a line or a curve
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum PathSegment {
+    /// Straight line segment
+    Line(LineSegment),
+    /// Quadratic Bezier curve (start, control, end)
+    QuadraticBezier {
+        start: Point,
+        control: Point,
+        end: Point,
+    },
 }
 
 /// Default value for text_adjoined field
@@ -94,9 +206,15 @@ pub struct Connection {
     /// When true, label stays at default position and target node may be shifted if overlapping
     #[serde(default = "default_text_adjoined")]
     pub text_adjoined: bool,
-    /// Line segments making up the connection path
+    /// Routing style for this connection
+    #[serde(default)]
+    pub routing_style: RoutingStyle,
+    /// Line segments making up the connection path (for hit testing and simple rendering)
     #[serde(skip)]
     pub segments: Vec<LineSegment>,
+    /// Path segments including curves (for rendering arcs)
+    #[serde(skip)]
+    pub path: Vec<PathSegment>,
     /// Whether this connection is selected
     #[serde(skip)]
     pub selected: bool,
@@ -122,7 +240,9 @@ impl Connection {
             action: String::new(),
             label_offset: None,
             text_adjoined: true,
+            routing_style: RoutingStyle::OrthogonalAuto,
             segments: Vec::new(),
+            path: Vec::new(),
             selected: false,
             label_selected: false,
         }
@@ -144,7 +264,9 @@ impl Connection {
             action: String::new(),
             label_offset: None,
             text_adjoined: true,
+            routing_style: RoutingStyle::OrthogonalAuto,
             segments: Vec::new(),
+            path: Vec::new(),
             selected: false,
             label_selected: false,
         }
@@ -214,7 +336,7 @@ impl Connection {
         }
     }
 
-    /// Calculate the line segments for this connection based on node positions
+    /// Calculate the line segments for this connection based on routing style
     pub fn calculate_segments(
         &mut self,
         source_bounds: &Rect,
@@ -222,19 +344,349 @@ impl Connection {
         stub_len: f32,
     ) {
         self.segments.clear();
+        self.path.clear();
 
-        // Get connection points on the sides
+        match self.routing_style {
+            RoutingStyle::Direct => {
+                self.calculate_direct_segments(source_bounds, target_bounds);
+            }
+            RoutingStyle::LShape => {
+                self.calculate_lshape_segments(source_bounds, target_bounds);
+            }
+            RoutingStyle::SShape | RoutingStyle::OrthogonalAuto => {
+                // OrthogonalAuto uses S-shape by default; obstacle avoidance handled separately
+                self.calculate_sshape_segments(source_bounds, target_bounds, stub_len);
+            }
+            RoutingStyle::UShape => {
+                self.calculate_ushape_segments(source_bounds, target_bounds, stub_len);
+            }
+            RoutingStyle::Arc => {
+                self.calculate_arc_segments(source_bounds, target_bounds, stub_len);
+            }
+        }
+
+        // Populate path from segments for non-Arc styles
+        if self.path.is_empty() {
+            for seg in &self.segments {
+                self.path.push(PathSegment::Line(*seg));
+            }
+        }
+    }
+
+    /// Direct routing: straight line between source and target
+    fn calculate_direct_segments(&mut self, source_bounds: &Rect, target_bounds: &Rect) {
         let source_point = self.get_side_point(source_bounds, self.source_side, self.source_offset);
         let target_point = self.get_side_point(target_bounds, self.target_side, self.target_offset);
 
-        // Calculate stub points
+        self.segments.push(LineSegment::new(source_point, target_point));
+    }
+
+    /// L-shape routing: single right-angle turn
+    fn calculate_lshape_segments(&mut self, source_bounds: &Rect, target_bounds: &Rect) {
+        let source_point = self.get_side_point(source_bounds, self.source_side, self.source_offset);
+        let target_point = self.get_side_point(target_bounds, self.target_side, self.target_offset);
+
+        // Determine corner point based on source side orientation
+        let corner = if self.source_side.is_vertical() {
+            // Source exits top/bottom, turn horizontally to reach target
+            Point::new(source_point.x, target_point.y)
+        } else {
+            // Source exits left/right, turn vertically to reach target
+            Point::new(target_point.x, source_point.y)
+        };
+
+        self.segments.push(LineSegment::new(source_point, corner));
+        self.segments.push(LineSegment::new(corner, target_point));
+    }
+
+    /// S-shape routing: two right-angle turns (stub-based)
+    fn calculate_sshape_segments(&mut self, source_bounds: &Rect, target_bounds: &Rect, stub_len: f32) {
+        let source_point = self.get_side_point(source_bounds, self.source_side, self.source_offset);
+        let target_point = self.get_side_point(target_bounds, self.target_side, self.target_offset);
         let source_stub = self.get_stub_point(source_point, self.source_side, stub_len);
         let target_stub = self.get_stub_point(target_point, self.target_side, stub_len);
 
-        // Create segments: source -> source_stub -> target_stub -> target
         self.segments.push(LineSegment::new(source_point, source_stub));
         self.segments.push(LineSegment::new(source_stub, target_stub));
         self.segments.push(LineSegment::new(target_stub, target_point));
+    }
+
+    /// U-shape routing: exits and returns from same direction
+    fn calculate_ushape_segments(&mut self, source_bounds: &Rect, target_bounds: &Rect, stub_len: f32) {
+        let source_point = self.get_side_point(source_bounds, self.source_side, self.source_offset);
+        let target_point = self.get_side_point(target_bounds, self.target_side, self.target_offset);
+        let source_stub = self.get_stub_point(source_point, self.source_side, stub_len);
+        let target_stub = self.get_stub_point(target_point, self.target_side, stub_len);
+
+        let bulge_distance = stub_len * 2.0;
+
+        let (mid1, mid2) = match self.source_side {
+            Side::Top => {
+                let y = source_stub.y.min(target_stub.y) - bulge_distance;
+                (Point::new(source_stub.x, y), Point::new(target_stub.x, y))
+            }
+            Side::Bottom => {
+                let y = source_stub.y.max(target_stub.y) + bulge_distance;
+                (Point::new(source_stub.x, y), Point::new(target_stub.x, y))
+            }
+            Side::Left => {
+                let x = source_stub.x.min(target_stub.x) - bulge_distance;
+                (Point::new(x, source_stub.y), Point::new(x, target_stub.y))
+            }
+            Side::Right => {
+                let x = source_stub.x.max(target_stub.x) + bulge_distance;
+                (Point::new(x, source_stub.y), Point::new(x, target_stub.y))
+            }
+            Side::None => (source_stub, target_stub),
+        };
+
+        self.segments.push(LineSegment::new(source_point, source_stub));
+        self.segments.push(LineSegment::new(source_stub, mid1));
+        self.segments.push(LineSegment::new(mid1, mid2));
+        self.segments.push(LineSegment::new(mid2, target_stub));
+        self.segments.push(LineSegment::new(target_stub, target_point));
+    }
+
+    /// Arc routing: smooth quadratic Bezier curve
+    fn calculate_arc_segments(&mut self, source_bounds: &Rect, target_bounds: &Rect, stub_len: f32) {
+        let source_point = self.get_side_point(source_bounds, self.source_side, self.source_offset);
+        let target_point = self.get_side_point(target_bounds, self.target_side, self.target_offset);
+
+        // Calculate control point from stub directions
+        let source_stub = self.get_stub_point(source_point, self.source_side, stub_len * 2.0);
+        let target_stub = self.get_stub_point(target_point, self.target_side, stub_len * 2.0);
+
+        // Control point at the intersection of stub directions (midpoint for smooth curve)
+        let control = Point::new(
+            (source_stub.x + target_stub.x) / 2.0,
+            (source_stub.y + target_stub.y) / 2.0,
+        );
+
+        // Add the Bezier curve to path
+        self.path.push(PathSegment::QuadraticBezier {
+            start: source_point,
+            control,
+            end: target_point,
+        });
+
+        // Approximate as line segments for hit testing
+        self.approximate_bezier_as_lines(source_point, control, target_point, 8);
+    }
+
+    /// Approximate a quadratic Bezier as line segments for hit testing
+    fn approximate_bezier_as_lines(&mut self, start: Point, control: Point, end: Point, steps: usize) {
+        for i in 0..steps {
+            let t0 = i as f32 / steps as f32;
+            let t1 = (i + 1) as f32 / steps as f32;
+
+            let p0 = Self::quadratic_bezier_point(start, control, end, t0);
+            let p1 = Self::quadratic_bezier_point(start, control, end, t1);
+
+            self.segments.push(LineSegment::new(p0, p1));
+        }
+    }
+
+    /// Calculate point on quadratic Bezier curve at parameter t
+    fn quadratic_bezier_point(start: Point, control: Point, end: Point, t: f32) -> Point {
+        let inv_t = 1.0 - t;
+        Point::new(
+            inv_t * inv_t * start.x + 2.0 * inv_t * t * control.x + t * t * end.x,
+            inv_t * inv_t * start.y + 2.0 * inv_t * t * control.y + t * t * end.y,
+        )
+    }
+
+    /// Calculate segments with obstacle avoidance for OrthogonalAuto routing
+    pub fn calculate_segments_with_obstacles(
+        &mut self,
+        source_bounds: &Rect,
+        target_bounds: &Rect,
+        obstacles: &[Rect],
+        stub_len: f32,
+    ) {
+        self.segments.clear();
+        self.path.clear();
+
+        let source_point = self.get_side_point(source_bounds, self.source_side, self.source_offset);
+        let target_point = self.get_side_point(target_bounds, self.target_side, self.target_offset);
+        let source_stub = self.get_stub_point(source_point, self.source_side, stub_len);
+        let target_stub = self.get_stub_point(target_point, self.target_side, stub_len);
+
+        // Try simple S-shape first
+        let simple_segments = vec![
+            LineSegment::new(source_point, source_stub),
+            LineSegment::new(source_stub, target_stub),
+            LineSegment::new(target_stub, target_point),
+        ];
+
+        // Check if the middle segment (stub to stub) intersects any obstacle
+        let middle_seg = &simple_segments[1];
+        let has_obstacle = obstacles.iter().any(|obs| middle_seg.intersects_rect(obs));
+
+        if !has_obstacle {
+            // No obstacle, use simple S-shape
+            self.segments = simple_segments;
+        } else {
+            // Need to route around obstacles
+            self.calculate_obstacle_avoiding_route(
+                source_point, source_stub, target_stub, target_point,
+                obstacles, stub_len
+            );
+        }
+
+        // Populate path from segments
+        for seg in &self.segments {
+            self.path.push(PathSegment::Line(*seg));
+        }
+    }
+
+    /// Route around obstacles using waypoints
+    fn calculate_obstacle_avoiding_route(
+        &mut self,
+        source_point: Point,
+        source_stub: Point,
+        target_stub: Point,
+        target_point: Point,
+        obstacles: &[Rect],
+        stub_len: f32,
+    ) {
+        const MARGIN: f32 = 15.0;
+
+        // Collect potential waypoints from obstacle corners (with margin)
+        let mut waypoints = Vec::new();
+        for obs in obstacles {
+            waypoints.push(Point::new(obs.x1 - MARGIN, obs.y1 - MARGIN)); // top-left
+            waypoints.push(Point::new(obs.x2 + MARGIN, obs.y1 - MARGIN)); // top-right
+            waypoints.push(Point::new(obs.x1 - MARGIN, obs.y2 + MARGIN)); // bottom-left
+            waypoints.push(Point::new(obs.x2 + MARGIN, obs.y2 + MARGIN)); // bottom-right
+        }
+
+        // Add stub endpoints as potential points
+        waypoints.push(source_stub);
+        waypoints.push(target_stub);
+
+        // Find the best path through waypoints using a greedy approach
+        // This is a simplified A* - for better results, a full pathfinding could be used
+        let path = self.find_orthogonal_path(
+            source_stub, target_stub, &waypoints, obstacles, stub_len
+        );
+
+        // Build segments: source -> source_stub -> path -> target_stub -> target
+        self.segments.push(LineSegment::new(source_point, source_stub));
+
+        if path.is_empty() {
+            // No path found, fall back to direct stub-to-stub
+            self.segments.push(LineSegment::new(source_stub, target_stub));
+        } else {
+            let mut prev = source_stub;
+            for &wp in &path {
+                // Route orthogonally to waypoint
+                if (prev.x - wp.x).abs() > 0.5 && (prev.y - wp.y).abs() > 0.5 {
+                    // Need two segments for orthogonal routing
+                    let mid = Point::new(wp.x, prev.y);
+                    self.segments.push(LineSegment::new(prev, mid));
+                    self.segments.push(LineSegment::new(mid, wp));
+                } else {
+                    self.segments.push(LineSegment::new(prev, wp));
+                }
+                prev = wp;
+            }
+            // Final leg to target_stub
+            if (prev.x - target_stub.x).abs() > 0.5 && (prev.y - target_stub.y).abs() > 0.5 {
+                let mid = Point::new(target_stub.x, prev.y);
+                self.segments.push(LineSegment::new(prev, mid));
+                self.segments.push(LineSegment::new(mid, target_stub));
+            } else if prev != target_stub {
+                self.segments.push(LineSegment::new(prev, target_stub));
+            }
+        }
+
+        self.segments.push(LineSegment::new(target_stub, target_point));
+    }
+
+    /// Find an orthogonal path from start to end avoiding obstacles
+    /// Returns a list of waypoints to visit
+    fn find_orthogonal_path(
+        &self,
+        start: Point,
+        end: Point,
+        waypoints: &[Point],
+        obstacles: &[Rect],
+        _stub_len: f32,
+    ) -> Vec<Point> {
+        // Simple greedy approach: find the waypoint that gets us closest to the end
+        // while avoiding obstacles
+
+        let mut path = Vec::new();
+        let mut current = start;
+        let mut visited = std::collections::HashSet::new();
+
+        const MAX_ITERATIONS: usize = 10;
+
+        for _ in 0..MAX_ITERATIONS {
+            // Check if we can go directly to end
+            if self.can_reach_orthogonally(current, end, obstacles) {
+                return path;
+            }
+
+            // Find best waypoint
+            let mut best_waypoint = None;
+            let mut best_distance = f32::MAX;
+
+            for &wp in waypoints {
+                // Skip if already visited or same as current
+                let key = (wp.x as i32, wp.y as i32);
+                if visited.contains(&key) {
+                    continue;
+                }
+                if (wp.x - current.x).abs() < 1.0 && (wp.y - current.y).abs() < 1.0 {
+                    continue;
+                }
+
+                // Check if we can reach this waypoint
+                if self.can_reach_orthogonally(current, wp, obstacles) {
+                    let dist_to_wp = current.distance_to(wp);
+                    let dist_from_wp = wp.distance_to(end);
+                    let total_dist = dist_to_wp + dist_from_wp;
+
+                    if total_dist < best_distance {
+                        best_distance = total_dist;
+                        best_waypoint = Some(wp);
+                    }
+                }
+            }
+
+            match best_waypoint {
+                Some(wp) => {
+                    path.push(wp);
+                    visited.insert((wp.x as i32, wp.y as i32));
+                    current = wp;
+                }
+                None => break, // No valid waypoint found
+            }
+        }
+
+        path
+    }
+
+    /// Check if two points can be connected orthogonally without hitting obstacles
+    fn can_reach_orthogonally(&self, from: Point, to: Point, obstacles: &[Rect]) -> bool {
+        // Try horizontal then vertical
+        let mid1 = Point::new(to.x, from.y);
+        let seg1a = LineSegment::new(from, mid1);
+        let seg1b = LineSegment::new(mid1, to);
+        let path1_clear = !obstacles.iter().any(|o| seg1a.intersects_rect(o) || seg1b.intersects_rect(o));
+
+        if path1_clear {
+            return true;
+        }
+
+        // Try vertical then horizontal
+        let mid2 = Point::new(from.x, to.y);
+        let seg2a = LineSegment::new(from, mid2);
+        let seg2b = LineSegment::new(mid2, to);
+        let path2_clear = !obstacles.iter().any(|o| seg2a.intersects_rect(o) || seg2b.intersects_rect(o));
+
+        path2_clear
     }
 
     /// Get the point on a side of a rectangle for connection attachment

@@ -17,7 +17,7 @@ pub mod activity;
 
 pub use geometry::{Point, Rect, Color, point_in_polygon};
 pub use node::{NodeType, Side, Corner, Node, NodeId};
-pub use connection::{Connection, ConnectionId, LineSegment};
+pub use connection::{Connection, ConnectionId, LineSegment, RoutingStyle, PathSegment};
 pub use diagram::{Diagram, TitleStyle};
 pub use diagram_type::DiagramType;
 pub use edit_mode::EditMode;

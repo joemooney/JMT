@@ -1,7 +1,8 @@
 //! Diagram rendering using egui Painter
 
 use eframe::egui::{self, Color32, Pos2, Rect, Rounding, Stroke, Vec2};
-use jmt_core::{Diagram, Node, Connection, DiagramType, TitleStyle};
+use jmt_core::{Diagram, Node, Connection, DiagramType, TitleStyle, RoutingStyle};
+use jmt_core::connection::PathSegment;
 use jmt_core::node::{PseudoStateKind, Side};
 use jmt_core::geometry::Color;
 use jmt_core::sequence::{Lifeline, Message, CombinedFragment};
@@ -485,22 +486,47 @@ impl DiagramCanvas {
             Stroke::new(zoom, Color32::BLACK)
         };
 
-        // Draw line segments
-        for segment in &conn.segments {
-            painter.line_segment(
-                [
-                    self.scale_pos(segment.start.x, segment.start.y, zoom),
-                    self.scale_pos(segment.end.x, segment.end.y, zoom),
-                ],
-                stroke,
-            );
+        // Draw path segments (supports both lines and curves)
+        for segment in &conn.path {
+            match segment {
+                PathSegment::Line(line) => {
+                    painter.line_segment(
+                        [
+                            self.scale_pos(line.start.x, line.start.y, zoom),
+                            self.scale_pos(line.end.x, line.end.y, zoom),
+                        ],
+                        stroke,
+                    );
+                }
+                PathSegment::QuadraticBezier { start, control, end } => {
+                    self.render_quadratic_bezier(
+                        painter,
+                        self.scale_pos(start.x, start.y, zoom),
+                        self.scale_pos(control.x, control.y, zoom),
+                        self.scale_pos(end.x, end.y, zoom),
+                        stroke,
+                    );
+                }
+            }
         }
 
         // Draw arrowhead at target
         if let Some(end_point) = conn.end_point() {
+            // For Arc style, calculate arrow direction from curve tangent
+            let arrow_side = if conn.routing_style == RoutingStyle::Arc {
+                // Use the last segment's direction for arrow orientation
+                if let Some(last_seg) = conn.segments.last() {
+                    Self::side_from_direction(last_seg.start, last_seg.end)
+                } else {
+                    conn.target_side
+                }
+            } else {
+                conn.target_side
+            };
+
             self.render_arrowhead(
                 self.scale_pos(end_point.x, end_point.y, zoom),
-                conn.target_side,
+                arrow_side,
                 painter,
                 settings,
                 stroke,
@@ -588,6 +614,48 @@ impl DiagramCanvas {
 
             current_pos = end_pos;
             drawing = !drawing;
+        }
+    }
+
+    /// Render a quadratic Bezier curve
+    fn render_quadratic_bezier(
+        &self,
+        painter: &egui::Painter,
+        start: Pos2,
+        control: Pos2,
+        end: Pos2,
+        stroke: Stroke,
+    ) {
+        // Convert quadratic Bezier to cubic for egui
+        // Cubic control points: CP1 = P0 + 2/3*(QCP - P0), CP2 = P2 + 2/3*(QCP - P2)
+        let cp1 = Pos2::new(
+            start.x + 2.0 / 3.0 * (control.x - start.x),
+            start.y + 2.0 / 3.0 * (control.y - start.y),
+        );
+        let cp2 = Pos2::new(
+            end.x + 2.0 / 3.0 * (control.x - end.x),
+            end.y + 2.0 / 3.0 * (control.y - end.y),
+        );
+
+        let bezier = egui::epaint::CubicBezierShape::from_points_stroke(
+            [start, cp1, cp2, end],
+            false,  // not closed
+            Color32::TRANSPARENT,  // no fill
+            stroke,
+        );
+
+        painter.add(egui::Shape::CubicBezier(bezier));
+    }
+
+    /// Determine arrow side from the direction between two points
+    fn side_from_direction(from: jmt_core::Point, to: jmt_core::Point) -> Side {
+        let dx = to.x - from.x;
+        let dy = to.y - from.y;
+
+        if dx.abs() > dy.abs() {
+            if dx > 0.0 { Side::Right } else { Side::Left }
+        } else {
+            if dy > 0.0 { Side::Bottom } else { Side::Top }
         }
     }
 

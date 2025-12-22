@@ -1,7 +1,7 @@
 //! Properties panel for editing selected elements
 
 use eframe::egui;
-use jmt_core::{Node, TitleStyle};
+use jmt_core::{Node, TitleStyle, RoutingStyle};
 use crate::app::JmtApp;
 
 pub struct PropertiesPanel;
@@ -218,6 +218,26 @@ impl PropertiesPanel {
             conn.set_text_adjoined(text_adjoined);
             *modified = true;
         }
+
+        ui.separator();
+
+        // Routing style dropdown
+        ui.horizontal(|ui| {
+            ui.label("Routing:");
+            egui::ComboBox::from_id_salt("routing_style")
+                .selected_text(conn.routing_style.display_name())
+                .show_ui(ui, |ui| {
+                    for style in RoutingStyle::all() {
+                        if ui.selectable_value(
+                            &mut conn.routing_style,
+                            *style,
+                            style.display_name(),
+                        ).clicked() {
+                            *modified = true;
+                        }
+                    }
+                });
+        });
     }
 
     fn show_diagram_properties(ui: &mut egui::Ui, state: &mut crate::app::DiagramState) {

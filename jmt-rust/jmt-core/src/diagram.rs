@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use crate::geometry::{Point, Rect};
 use crate::node::{Node, NodeId, NodeType, State, PseudoState, PseudoStateKind, Region};
-use crate::connection::{Connection, ConnectionId};
+use crate::connection::{Connection, ConnectionId, RoutingStyle};
 use crate::settings::DiagramSettings;
 use crate::diagram_type::DiagramType;
 
@@ -1685,21 +1685,32 @@ impl Diagram {
         // Second pass: calculate slot offsets to prevent overlap
         self.recalculate_connection_slots();
 
+        // Collect all node bounds for obstacle avoidance
+        let all_bounds: Vec<(NodeId, Rect)> = self.nodes
+            .iter()
+            .map(|n| (n.id(), n.bounds().clone()))
+            .collect();
+
         // Third pass: recalculate segments with updated offsets
         for conn in &mut self.connections {
-            let source_bounds = self
-                .nodes
-                .iter()
-                .find(|n| n.id() == conn.source_id)
-                .map(|n| n.bounds().clone());
-            let target_bounds = self
-                .nodes
-                .iter()
-                .find(|n| n.id() == conn.target_id)
-                .map(|n| n.bounds().clone());
+            let source_bounds = all_bounds.iter()
+                .find(|(id, _)| *id == conn.source_id)
+                .map(|(_, b)| b.clone());
+            let target_bounds = all_bounds.iter()
+                .find(|(id, _)| *id == conn.target_id)
+                .map(|(_, b)| b.clone());
 
             if let (Some(sb), Some(tb)) = (source_bounds, target_bounds) {
-                conn.calculate_segments(&sb, &tb, stub_len);
+                if conn.routing_style == RoutingStyle::OrthogonalAuto {
+                    // Get obstacles (all nodes except source and target)
+                    let obstacles: Vec<Rect> = all_bounds.iter()
+                        .filter(|(id, _)| *id != conn.source_id && *id != conn.target_id)
+                        .map(|(_, b)| b.clone())
+                        .collect();
+                    conn.calculate_segments_with_obstacles(&sb, &tb, &obstacles, stub_len);
+                } else {
+                    conn.calculate_segments(&sb, &tb, stub_len);
+                }
             }
         }
     }
