@@ -305,17 +305,21 @@ impl JmtApp {
 
         let min_dist = dist_top.min(dist_bottom).min(dist_left).min(dist_right);
 
+        // Calculate max offset (ensure it's never negative)
+        let max_h_offset = (bounds.width() / 2.0 - 10.0).max(0.0);
+        let max_v_offset = (bounds.height() / 2.0 - 10.0).max(0.0);
+
         if min_dist == dist_top {
-            let offset = (pos.x - center_x).clamp(-(bounds.width()/2.0 - 10.0), bounds.width()/2.0 - 10.0);
+            let offset = (pos.x - center_x).clamp(-max_h_offset, max_h_offset);
             (Side::Top, offset)
         } else if min_dist == dist_bottom {
-            let offset = (pos.x - center_x).clamp(-(bounds.width()/2.0 - 10.0), bounds.width()/2.0 - 10.0);
+            let offset = (pos.x - center_x).clamp(-max_h_offset, max_h_offset);
             (Side::Bottom, offset)
         } else if min_dist == dist_left {
-            let offset = (pos.y - center_y).clamp(-(bounds.height()/2.0 - 10.0), bounds.height()/2.0 - 10.0);
+            let offset = (pos.y - center_y).clamp(-max_v_offset, max_v_offset);
             (Side::Left, offset)
         } else {
-            let offset = (pos.y - center_y).clamp(-(bounds.height()/2.0 - 10.0), bounds.height()/2.0 - 10.0);
+            let offset = (pos.y - center_y).clamp(-max_v_offset, max_v_offset);
             (Side::Right, offset)
         }
     }
@@ -394,19 +398,34 @@ impl JmtApp {
     }
 
     /// Open an embedded sub-statemachine as a new tab
-    fn open_embedded_substatemachine(&mut self, _state_id: NodeId, state_name: &str, title: &str) {
-        // For embedded sub-statemachines, we create a new diagram view
-        // In a future implementation, this would show the child states from the parent state's regions
+    fn open_embedded_substatemachine(&mut self, state_id: NodeId, state_name: &str, title: &str) {
+        // Extract child nodes and connections from the parent state
+        let (nodes, connections) = if let Some(diagram_state) = self.current_diagram() {
+            diagram_state.diagram.extract_substatemachine_contents(state_id)
+        } else {
+            (Vec::new(), Vec::new())
+        };
+
+        // Create a new diagram with the extracted contents
         let display_name = if title.is_empty() { state_name } else { title };
         let name = format!("{} (sub)", display_name);
         let mut diagram = Diagram::new(&name);
         diagram.title = display_name.to_string();
         diagram.diagram_type = DiagramType::StateMachine;
 
+        // Import the extracted nodes and connections
+        let node_count = nodes.len();
+        diagram.import_nodes_and_connections(nodes, connections);
+
         self.diagrams.push(DiagramState::new(diagram));
         self.active_diagram = self.diagrams.len() - 1;
         self.edit_mode = EditMode::Arrow;
-        self.status_message = format!("Opened sub-statemachine: {}", display_name);
+
+        if node_count > 0 {
+            self.status_message = format!("Opened sub-statemachine: {} ({} nodes)", display_name, node_count);
+        } else {
+            self.status_message = format!("Opened sub-statemachine: {} (empty)", display_name);
+        }
     }
 
     /// Open a diagram file at the given path

@@ -314,10 +314,43 @@ impl Diagram {
         &self.nodes
     }
 
+    /// Check if a node is visible (not hidden inside a collapsed sub-statemachine)
+    pub fn is_node_visible(&self, node_id: NodeId) -> bool {
+        let Some(node) = self.find_node(node_id) else {
+            return false;
+        };
+
+        // Check if this node's parent region belongs to a collapsed sub-statemachine
+        if let Some(region_id) = node.parent_region_id() {
+            if let Some(parent_state) = self.find_region_parent_state(region_id) {
+                // If parent has sub-statemachine and is not expanded, hide this node
+                if parent_state.has_substatemachine() && !parent_state.show_expanded {
+                    return false;
+                }
+            }
+        }
+        true
+    }
+
+    /// Check if a connection is visible (both endpoints are visible)
+    pub fn is_connection_visible(&self, conn: &Connection) -> bool {
+        self.is_node_visible(conn.source_id) && self.is_node_visible(conn.target_id)
+    }
+
+    /// Get connections in render order, excluding those to hidden nodes
+    pub fn connections_in_render_order(&self) -> Vec<&Connection> {
+        self.connections.iter()
+            .filter(|c| self.is_connection_visible(c))
+            .collect()
+    }
+
     /// Get nodes in proper render order (largest first, smallest last)
     /// This ensures smaller nodes are drawn on top of larger nodes
+    /// Excludes children of collapsed sub-statemachines
     pub fn nodes_in_render_order(&self) -> Vec<&Node> {
-        let mut sorted_nodes: Vec<&Node> = self.nodes.iter().collect();
+        let mut sorted_nodes: Vec<&Node> = self.nodes.iter()
+            .filter(|n| self.is_node_visible(n.id()))
+            .collect();
         // Sort by area descending (largest first = rendered in background)
         sorted_nodes.sort_by(|a, b| {
             let area_a = a.bounds().width() * a.bounds().height();
@@ -736,6 +769,82 @@ impl Diagram {
     pub fn is_descendant_of(&self, node_id: NodeId, ancestor_id: NodeId) -> bool {
         let descendants = self.get_all_descendants(ancestor_id);
         descendants.contains(&node_id)
+    }
+
+    /// Extract child nodes and connections for a state's sub-statemachine.
+    /// Returns (nodes, connections) with positions translated so the bounding box starts at (margin, margin).
+    /// The nodes are cloned with their parent_region_id cleared (they become top-level nodes).
+    pub fn extract_substatemachine_contents(&self, state_id: NodeId) -> (Vec<Node>, Vec<Connection>) {
+        use std::collections::HashSet;
+
+        // Get all child node IDs (direct children only, not descendants)
+        let child_ids: HashSet<NodeId> = self.get_children_of_node(state_id)
+            .into_iter()
+            .collect();
+
+        if child_ids.is_empty() {
+            return (Vec::new(), Vec::new());
+        }
+
+        // Clone the child nodes
+        let mut nodes: Vec<Node> = child_ids.iter()
+            .filter_map(|&id| self.find_node(id).cloned())
+            .collect();
+
+        // Calculate the bounding box of all child nodes
+        let min_x = nodes.iter().map(|n| n.bounds().x1).fold(f32::MAX, f32::min);
+        let min_y = nodes.iter().map(|n| n.bounds().y1).fold(f32::MAX, f32::min);
+
+        // Translate nodes so they start at a margin from origin
+        let margin = 50.0;
+        let offset_x = margin - min_x;
+        let offset_y = margin - min_y;
+
+        for node in &mut nodes {
+            // Translate bounds
+            let bounds = node.bounds_mut();
+            bounds.x1 += offset_x;
+            bounds.y1 += offset_y;
+            bounds.x2 += offset_x;
+            bounds.y2 += offset_y;
+
+            // Clear parent region ID (they become top-level nodes in the sub-diagram)
+            node.set_parent_region_id(None);
+        }
+
+        // Clone connections where both source and target are in the child set
+        // Note: segments are recalculated via recalculate_connections() so we don't translate them
+        let connections: Vec<Connection> = self.connections.iter()
+            .filter(|c| child_ids.contains(&c.source_id) && child_ids.contains(&c.target_id))
+            .cloned()
+            .collect();
+
+        (nodes, connections)
+    }
+
+    /// Import nodes and connections into this diagram.
+    /// Nodes are added to the root region.
+    pub fn import_nodes_and_connections(&mut self, nodes: Vec<Node>, connections: Vec<Connection>) {
+        let root_region_id = self.root_region_id();
+
+        for mut node in nodes {
+            let node_id = node.id();
+            // Assign to root region
+            node.set_parent_region_id(Some(root_region_id));
+            self.nodes.push(node);
+
+            // Add to root region's children
+            if let Some(region) = self.root_state.regions.iter_mut().find(|r| r.id == root_region_id) {
+                region.children.push(node_id);
+            }
+        }
+
+        for conn in connections {
+            self.connections.push(conn);
+        }
+
+        // Recalculate connections to ensure proper rendering
+        self.recalculate_connections();
     }
 
     /// Check if an adjoined label overlaps target node and shift target if needed
@@ -1485,13 +1594,14 @@ impl Diagram {
                 .unwrap_or(0.0);
 
             if parent_area > node_area {
-                // Check if this state has any regions
-                let needs_region = self.find_node(state_id)
+                // Check if this state has any regions AND is not a non-expanded sub-statemachine
+                let (needs_region, is_collapsed_substatemachine) = self.find_node(state_id)
                     .and_then(|n| n.as_state())
-                    .map(|s| s.regions.is_empty())
-                    .unwrap_or(false);
+                    .map(|s| (s.regions.is_empty(), s.has_substatemachine() && !s.show_expanded))
+                    .unwrap_or((false, false));
 
-                if needs_region {
+                // Don't create a region in a non-expanded sub-statemachine
+                if needs_region && !is_collapsed_substatemachine {
                     // Create a default region for this state
                     if let Some(Node::State(state)) = self.find_node_mut(state_id) {
                         state.add_region("default");
@@ -1530,6 +1640,11 @@ impl Diagram {
                 // Only consider states that are larger than the node being parented
                 let state_area = state.bounds.width() * state.bounds.height();
                 if state_area <= node_area {
+                    continue;
+                }
+                // Skip states with non-expanded sub-statemachines
+                // (don't allow dragging nodes into collapsed sub-statemachines)
+                if state.has_substatemachine() && !state.show_expanded {
                     continue;
                 }
                 for region in &state.regions {

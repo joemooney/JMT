@@ -161,8 +161,8 @@ impl DiagramCanvas {
             self.render_node(node, painter, &diagram.settings, zoom);
         }
 
-        // Render all connections
-        for conn in diagram.connections() {
+        // Render all visible connections (exclude connections to hidden nodes)
+        for conn in diagram.connections_in_render_order() {
             self.render_connection(conn, painter, &diagram.settings, zoom);
         }
     }
@@ -231,7 +231,7 @@ impl DiagramCanvas {
         }
 
         // Also render state machine connections for activity diagrams
-        for conn in diagram.connections() {
+        for conn in diagram.connections_in_render_order() {
             self.render_connection(conn, painter, &diagram.settings, zoom);
         }
     }
