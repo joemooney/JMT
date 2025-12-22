@@ -92,6 +92,24 @@ enum PivotDragType {
     Target,
 }
 
+/// Represents a clickable/selectable candidate at a point
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum ClickCandidate {
+    /// A node
+    Node(NodeId),
+    /// A connection endpoint (connection_id, is_source)
+    Endpoint(uuid::Uuid, bool),
+    /// A pivot point (connection_id, pivot_index)
+    Pivot(uuid::Uuid, usize),
+    /// A connection label
+    Label(uuid::Uuid),
+    /// A connection line
+    Connection(uuid::Uuid),
+}
+
+/// Maximum distance from last click to consider it a "same location" click for cycling
+const CLICK_CYCLE_DISTANCE: f32 = 15.0;
+
 /// State for a single open diagram
 pub struct DiagramState {
     pub diagram: Diagram,
@@ -186,6 +204,12 @@ pub struct JmtApp {
     pub zoom_level: f32,
     /// State ID for sub-statemachine preview popup (None = no preview shown)
     preview_substatemachine: Option<uuid::Uuid>,
+    /// Click cycling: list of candidates at the last click position
+    click_cycle_candidates: Vec<ClickCandidate>,
+    /// Click cycling: current index in the candidates list
+    click_cycle_index: usize,
+    /// Click cycling: position where the cycle started (in diagram coordinates)
+    click_cycle_pos: Option<Point>,
 }
 
 impl Default for JmtApp {
@@ -214,6 +238,9 @@ impl Default for JmtApp {
             last_click_pos: None,
             zoom_level: 1.0,
             preview_substatemachine: None,
+            click_cycle_candidates: Vec::new(),
+            click_cycle_index: 0,
+            click_cycle_pos: None,
         }
     }
 }
@@ -288,6 +315,248 @@ impl JmtApp {
         }
 
         None
+    }
+
+    /// Find all clickable candidates at a point for selection cycling
+    /// Returns candidates in priority order (endpoints first, then nodes sorted by size)
+    fn find_all_candidates_at(&self, pos: Point) -> Vec<ClickCandidate> {
+        let mut candidates = Vec::new();
+        let Some(state) = self.current_diagram() else {
+            return candidates;
+        };
+
+        // 1. Check pivot points on selected connection
+        if let Some(conn_id) = state.diagram.selected_connection() {
+            if let Some(conn) = state.diagram.find_connection(conn_id) {
+                for (idx, pivot) in conn.pivot_points.iter().enumerate() {
+                    let dx = pos.x - pivot.x;
+                    let dy = pos.y - pivot.y;
+                    if (dx * dx + dy * dy).sqrt() <= PIVOT_HIT_TOLERANCE {
+                        candidates.push(ClickCandidate::Pivot(conn_id, idx));
+                    }
+                }
+            }
+        }
+
+        // 2. Check connection endpoints
+        for conn in state.diagram.connections() {
+            if let (Some(source_node), Some(target_node)) = (
+                state.diagram.find_node(conn.source_id),
+                state.diagram.find_node(conn.target_id),
+            ) {
+                let source_bounds = source_node.bounds();
+                let target_bounds = target_node.bounds();
+
+                // Check source endpoint
+                let source_pt = conn.get_side_point(source_bounds, conn.source_side, conn.source_offset);
+                let dx = pos.x - source_pt.x;
+                let dy = pos.y - source_pt.y;
+                if (dx * dx + dy * dy).sqrt() <= PIVOT_HIT_TOLERANCE {
+                    candidates.push(ClickCandidate::Endpoint(conn.id, true));
+                }
+
+                // Check target endpoint
+                let target_pt = conn.get_side_point(target_bounds, conn.target_side, conn.target_offset);
+                let dx = pos.x - target_pt.x;
+                let dy = pos.y - target_pt.y;
+                if (dx * dx + dy * dy).sqrt() <= PIVOT_HIT_TOLERANCE {
+                    candidates.push(ClickCandidate::Endpoint(conn.id, false));
+                }
+            }
+        }
+
+        // 3. Check connection labels
+        for conn in state.diagram.connections() {
+            if let Some(bounds) = conn.label_bounds() {
+                if bounds.contains_point(pos) {
+                    candidates.push(ClickCandidate::Label(conn.id));
+                }
+            }
+        }
+
+        // 4. Check nodes - collect all containing nodes with their areas
+        let mut node_candidates: Vec<(NodeId, f32)> = Vec::new();
+        for node in state.diagram.nodes() {
+            if node.contains_point(pos) {
+                let bounds = node.bounds();
+                let area = bounds.width() * bounds.height();
+                node_candidates.push((node.id(), area));
+            }
+        }
+        // Sort by area (smallest first) so innermost nodes come first
+        node_candidates.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+        for (node_id, _) in node_candidates {
+            candidates.push(ClickCandidate::Node(node_id));
+        }
+
+        // 5. Check connection lines (lowest priority)
+        for conn in state.diagram.connections() {
+            if conn.is_near_point(pos, CONNECTION_HIT_TOLERANCE) {
+                // Only add if not already in candidates as endpoint or label
+                let already_has = candidates.iter().any(|c| matches!(c,
+                    ClickCandidate::Endpoint(id, _) | ClickCandidate::Label(id) if *id == conn.id));
+                if !already_has {
+                    candidates.push(ClickCandidate::Connection(conn.id));
+                }
+            }
+        }
+
+        candidates
+    }
+
+    /// Select a click candidate and set up appropriate state for dragging/selection
+    /// Returns true if the candidate was successfully selected
+    fn select_candidate(&mut self, candidate: ClickCandidate) -> bool {
+        match candidate {
+            ClickCandidate::Pivot(conn_id, idx) => {
+                if let Some(state) = self.current_diagram_mut() {
+                    if state.diagram.selected_connection() != Some(conn_id) {
+                        state.diagram.select_connection(conn_id);
+                    }
+                    state.diagram.push_undo();
+                }
+                self.dragging_pivot = Some((conn_id, idx));
+                self.selected_pivot = Some((conn_id, idx));
+                self.dragging_nodes = false;
+                self.dragging_label = None;
+                self.dragging_endpoint = None;
+                self.selection_rect.clear();
+                self.status_message = format!("Pivot point {} (Delete to remove)", idx + 1);
+                true
+            }
+            ClickCandidate::Endpoint(conn_id, is_source) => {
+                if let Some(state) = self.current_diagram_mut() {
+                    if state.diagram.selected_connection() != Some(conn_id) {
+                        state.diagram.select_connection(conn_id);
+                    }
+                    state.diagram.push_undo();
+                }
+                self.dragging_endpoint = Some((conn_id, is_source));
+                self.dragging_pivot = None;
+                self.selected_pivot = None;
+                self.dragging_nodes = false;
+                self.dragging_label = None;
+                self.selection_rect.clear();
+                self.status_message = if is_source {
+                    "Source endpoint".to_string()
+                } else {
+                    "Target endpoint".to_string()
+                };
+                true
+            }
+            ClickCandidate::Label(conn_id) => {
+                if let Some(state) = self.current_diagram_mut() {
+                    state.diagram.select_connection_label(conn_id);
+                    state.diagram.push_undo();
+                    // Mark label as no longer adjoined when user starts dragging
+                    if let Some(conn) = state.diagram.find_connection_mut(conn_id) {
+                        if conn.text_adjoined {
+                            conn.text_adjoined = false;
+                            if conn.label_offset.is_none() {
+                                conn.label_offset = Some((0.0, -15.0));
+                            }
+                        }
+                    }
+                }
+                self.dragging_label = Some(conn_id);
+                self.dragging_nodes = false;
+                self.dragging_pivot = None;
+                self.dragging_endpoint = None;
+                self.selected_pivot = None;
+                self.selection_rect.clear();
+                self.status_message = "Connection label".to_string();
+                true
+            }
+            ClickCandidate::Node(node_id) => {
+                if self.edit_mode != EditMode::Arrow {
+                    self.set_edit_mode(EditMode::Arrow);
+                }
+                if let Some(state) = self.current_diagram_mut() {
+                    let already_selected = state.diagram.selected_nodes().contains(&node_id);
+                    if !already_selected {
+                        state.diagram.clear_selection();
+                        state.diagram.select_node(node_id);
+                    }
+                    state.diagram.push_undo();
+                }
+                self.dragging_nodes = true;
+                self.dragging_label = None;
+                self.dragging_pivot = None;
+                self.dragging_endpoint = None;
+                self.selected_pivot = None;
+                self.selection_rect.clear();
+                // Get node name for status
+                let name = self.current_diagram()
+                    .and_then(|s| s.diagram.find_node(node_id))
+                    .map(|n| n.name().to_string())
+                    .unwrap_or_else(|| "Node".to_string());
+                self.status_message = name;
+                true
+            }
+            ClickCandidate::Connection(conn_id) => {
+                if let Some(state) = self.current_diagram_mut() {
+                    state.diagram.select_connection(conn_id);
+                }
+                self.dragging_nodes = false;
+                self.dragging_label = None;
+                self.dragging_pivot = None;
+                self.dragging_endpoint = None;
+                self.selected_pivot = None;
+                self.selection_rect.clear();
+                self.status_message = "Connection".to_string();
+                true
+            }
+        }
+    }
+
+    /// Handle click with cycling support for overlapping items
+    /// Returns true if a candidate was selected
+    fn handle_click_with_cycling(&mut self, pos: Point) -> bool {
+        // Check if this is a "same location" click for cycling
+        let is_same_location = self.click_cycle_pos
+            .map(|prev| {
+                let dx = pos.x - prev.x;
+                let dy = pos.y - prev.y;
+                (dx * dx + dy * dy).sqrt() <= CLICK_CYCLE_DISTANCE
+            })
+            .unwrap_or(false);
+
+        if is_same_location && !self.click_cycle_candidates.is_empty() {
+            // Cycle to next candidate
+            self.click_cycle_index = (self.click_cycle_index + 1) % self.click_cycle_candidates.len();
+            let candidate = self.click_cycle_candidates[self.click_cycle_index];
+            let count = self.click_cycle_candidates.len();
+            let idx = self.click_cycle_index + 1;
+            self.select_candidate(candidate);
+            self.status_message = format!("{} ({}/{})", self.status_message, idx, count);
+            return true;
+        }
+
+        // New location - find all candidates
+        let candidates = self.find_all_candidates_at(pos);
+        if candidates.is_empty() {
+            // Clear cycling state
+            self.click_cycle_candidates.clear();
+            self.click_cycle_index = 0;
+            self.click_cycle_pos = None;
+            return false;
+        }
+
+        // Store cycling state
+        self.click_cycle_candidates = candidates.clone();
+        self.click_cycle_index = 0;
+        self.click_cycle_pos = Some(pos);
+
+        // Select the first candidate
+        let candidate = candidates[0];
+        self.select_candidate(candidate);
+
+        // Show count if multiple candidates
+        if candidates.len() > 1 {
+            self.status_message = format!("{} (1/{}) - click again to cycle", self.status_message, candidates.len());
+        }
+
+        true
     }
 
     /// Find the nearest side and offset on a node bounds for a given point
@@ -2529,110 +2798,31 @@ impl eframe::App for JmtApp {
                             self.dragging_label = None;
                             self.selection_rect.clear();
                         } else {
-                            // Check if we clicked on a pivot point or endpoint (for dragging)
-                            let pivot_or_endpoint = self.check_pivot_or_endpoint_at(point);
-                            if let Some((conn_id, drag_type)) = pivot_or_endpoint {
-                                if let Some(state) = self.current_diagram_mut() {
-                                    // Select the connection if not already selected
-                                    if state.diagram.selected_connection() != Some(conn_id) {
-                                        state.diagram.select_connection(conn_id);
-                                    }
-                                    state.diagram.push_undo();
-                                }
-                                match drag_type {
-                                    PivotDragType::Pivot(idx) => {
-                                        self.dragging_pivot = Some((conn_id, idx));
-                                        self.selected_pivot = Some((conn_id, idx));
-                                        self.status_message = format!("Dragging pivot point {} (Delete to remove)", idx + 1);
-                                    }
-                                    PivotDragType::Source => {
-                                        self.dragging_endpoint = Some((conn_id, true));
-                                        self.selected_pivot = None;
-                                        self.status_message = "Dragging source endpoint".to_string();
-                                    }
-                                    PivotDragType::Target => {
-                                        self.dragging_endpoint = Some((conn_id, false));
-                                        self.selected_pivot = None;
-                                        self.status_message = "Dragging target endpoint".to_string();
-                                    }
-                                }
-                                self.dragging_nodes = false;
-                                self.dragging_label = None;
-                                self.selection_rect.clear();
-                            } else {
-                                // First check if we clicked on a connection label (for label dragging)
-                                let clicked_label = self.current_diagram()
-                                    .and_then(|state| state.diagram.find_connection_label_at(point));
-
-                                if let Some(conn_id) = clicked_label {
-                                    // Start dragging a label
-                                    if let Some(state) = self.current_diagram_mut() {
-                                        state.diagram.select_connection_label(conn_id);
-                                        state.diagram.push_undo();
-
-                                        // Mark label as no longer adjoined when user starts dragging
-                                        if let Some(conn) = state.diagram.find_connection_mut(conn_id) {
-                                            if conn.text_adjoined {
-                                                conn.text_adjoined = false;
-                                                // Initialize label_offset from current default position
-                                                if conn.label_offset.is_none() {
-                                                    conn.label_offset = Some((0.0, -15.0));
-                                                }
-                                            }
-                                        }
-                                    }
-                                    self.dragging_label = Some(conn_id);
+                            // Use click cycling to handle overlapping items
+                            // This allows clicking multiple times to cycle through items at the same location
+                            if !self.handle_click_with_cycling(point) {
+                                // Nothing to select - start marquee or lasso selection
+                                if self.edit_mode == EditMode::Arrow {
+                                    // We're starting a marquee selection (only in Arrow mode)
                                     self.dragging_nodes = false;
+                                    self.dragging_label = None;
                                     self.selected_pivot = None;
-                                    self.selection_rect.clear();
-                                } else {
-                                    // Check if we clicked on any element (for dragging)
-                                    let clicked_element_id = self.current_diagram()
-                                        .and_then(|state| state.diagram.find_element_at(point));
-
-                                    if let Some(element_id) = clicked_element_id {
-                                        // Dragging on an element - switch to Arrow mode and start dragging
-                                        if self.edit_mode != EditMode::Arrow {
-                                            self.set_edit_mode(EditMode::Arrow);
-                                        }
-
-                                        // Select the element if not already selected
-                                        if let Some(state) = self.current_diagram_mut() {
-                                            let already_selected = state.diagram.selected_elements_in_order().contains(&element_id);
-                                            if !already_selected {
-                                                // Select this element (this allows click-and-drag in one motion)
-                                                state.diagram.select_element(element_id);
-                                            }
-                                            // Push undo before we start moving
-                                            state.diagram.push_undo();
-                                        }
-                                        self.dragging_nodes = true;
-                                        self.dragging_label = None;
-                                        self.selected_pivot = None;
-                                        self.selection_rect.clear();
-                                    } else if self.edit_mode == EditMode::Arrow {
-                                        // We're starting a marquee selection (only in Arrow mode)
-                                        // Store screen coordinates for the selection rectangle
-                                        self.dragging_nodes = false;
-                                        self.dragging_label = None;
-                                        self.selected_pivot = None;
-                                        self.selection_rect.start = Some(diagram_pos);
-                                        self.selection_rect.current = Some(diagram_pos);
-                                        // Clear current selection when starting a new marquee
-                                        if let Some(state) = self.current_diagram_mut() {
-                                            state.diagram.clear_selection();
-                                        }
-                                    } else if self.edit_mode == EditMode::Lasso {
-                                        // We're starting a lasso selection
-                                        self.dragging_nodes = false;
-                                        self.dragging_label = None;
-                                        self.selected_pivot = None;
-                                        self.lasso_points.clear();
-                                        self.lasso_points.push(diagram_pos);
-                                        // Clear current selection when starting a new lasso
-                                        if let Some(state) = self.current_diagram_mut() {
-                                            state.diagram.clear_selection();
-                                        }
+                                    self.selection_rect.start = Some(diagram_pos);
+                                    self.selection_rect.current = Some(diagram_pos);
+                                    // Clear current selection when starting a new marquee
+                                    if let Some(state) = self.current_diagram_mut() {
+                                        state.diagram.clear_selection();
+                                    }
+                                } else if self.edit_mode == EditMode::Lasso {
+                                    // We're starting a lasso selection
+                                    self.dragging_nodes = false;
+                                    self.dragging_label = None;
+                                    self.selected_pivot = None;
+                                    self.lasso_points.clear();
+                                    self.lasso_points.push(diagram_pos);
+                                    // Clear current selection when starting a new lasso
+                                    if let Some(state) = self.current_diagram_mut() {
+                                        state.diagram.clear_selection();
                                     }
                                 }
                             }
