@@ -94,7 +94,7 @@ impl Toolbar {
                 egui::menu::menu_button(ui, "⬚ Arrange", |ui| {
                     ui.set_min_width(180.0);
 
-                    ui.label("Align Horizontal (+ distribute vertical)");
+                    ui.label("Align Vertical (+ distribute vertical)");
                     if ui.button("⫷ Align Left").clicked() {
                         Self::align_and_distribute(app, AlignMode::Left);
                         ui.close_menu();
@@ -109,7 +109,7 @@ impl Toolbar {
                     }
 
                     ui.separator();
-                    ui.label("Align Vertical (+ distribute horizontal)");
+                    ui.label("Align Horizontal (+ distribute horizontal)");
                     if ui.button("⫠ Align Top").clicked() {
                         Self::align_and_distribute(app, AlignMode::Top);
                         ui.close_menu();

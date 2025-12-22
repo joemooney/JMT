@@ -227,9 +227,53 @@ requirements:
   status: Completed
   priority: Medium
   owner: joe
-  feature: User Interface
+  feature: 18-User Interface
   created_at: 2025-12-20T21:38:57.098573444Z
   modified_at: 2025-12-20T21:38:57.098573444Z
+  req_type: Functional
+- id: f5e41614-6728-4d3d-b97a-769261669d2b
+  spec_id: FR-021
+  title: Grab/Grabbing cursor feedback
+  description: Show open hand (Grab) cursor when hovering over draggable elements (nodes, pivot points, endpoints, labels). Show closed fist (Grabbing) cursor when mouse button is pressed, providing immediate visual feedback that the element has been grabbed.
+  status: Completed
+  priority: Medium
+  owner: joe
+  feature: 19-Uncategorized
+  created_at: 2025-12-22T20:24:31.230755133Z
+  modified_at: 2025-12-22T20:24:31.230755133Z
+  req_type: Functional
+- id: 0dfb9610-71bb-422e-b092-93b43ec87a99
+  spec_id: FR-022
+  title: Placement error tooltip shows overlapping node
+  description: When hovering over red (error) nodes, tooltip shows which specific node is being overlapped and how many corners are inside (e.g., 'Sign In (2/4 corners inside)'). Status bar shows same info when clicking on error node.
+  status: Completed
+  priority: Medium
+  owner: joe
+  feature: 20-Uncategorized
+  created_at: 2025-12-22T20:24:38.359735924Z
+  modified_at: 2025-12-22T20:24:38.359735924Z
+  req_type: Functional
+- id: 42a0b4ef-9283-4a90-8b99-52dc4c0500ec
+  spec_id: FR-023
+  title: Auto-expand state for show_expanded
+  description: When enabling 'Show Expanded' for a sub-statemachine, the parent state automatically expands to contain all child states with proper margins (15px) and header space (30px). Prevents children from being displayed outside parent bounds.
+  status: Completed
+  priority: Medium
+  owner: joe
+  feature: 21-Uncategorized
+  created_at: 2025-12-22T20:24:52.442645158Z
+  modified_at: 2025-12-22T20:24:52.442645158Z
+  req_type: Functional
+- id: 3a0a7b93-ebc9-4ceb-b7b8-f26f2a0cbaca
+  spec_id: FR-024
+  title: Push siblings when expanding sub-statemachine
+  description: When a sub-statemachine expands (show_expanded enabled), sibling nodes that would overlap are automatically pushed out of the way. Pushes in the direction of expansion with a 20px gap. Updates parent states and recalculates connections.
+  status: Completed
+  priority: Medium
+  owner: joe
+  feature: Uncategorized
+  created_at: 2025-12-22T20:25:03.463789658Z
+  modified_at: 2025-12-22T20:25:03.463789658Z
   req_type: Functional
 id_config:
   format: SingleLevel
@@ -273,8 +317,8 @@ id_config:
     prefix: FOLDER
     description: Organizational folders
 features: []
-next_feature_number: 18
-next_spec_number: 21
+next_feature_number: 22
+next_spec_number: 25
 prefix_counters: {}
 relationship_definitions:
 - name: parent
