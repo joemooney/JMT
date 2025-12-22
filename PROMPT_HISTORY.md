@@ -1749,3 +1749,53 @@ When a node was dragged into a state that had no regions, the node would be assi
 - Full parent references tracking and navigation
 
 ---
+
+## Session 11 - Click Cycling/Loupe Fix (2025-12-22)
+
+### Prompt: Fix click cycling and loupe selection not working
+
+**User Request:**
+"Multiple single clicks does not cycle through the Properties for the items in the selection radius; With Loupe select a single click does not show the loupe"
+
+The user reported that despite the status bar showing `[3] tgtEndpoint, Final, Conn` (proving 3 items were detected within the selection radius), clicking did not:
+1. Cycle through items in Cycle mode
+2. Show the loupe in Loupe mode
+
+**Root Cause Analysis:**
+The issue was in the click event handling flow in `app.rs`:
+- `response.clicked()` (line 3141) was calling `handle_canvas_click` (OLD handler without cycling/loupe)
+- `response.drag_started()` (line 3226) was calling `handle_click_with_cycling` (NEW handler with cycling/loupe)
+
+In egui, `clicked()` fires for simple clicks (mouse release without drag), while `drag_started()` fires when dragging begins. These are mutually exclusive - a simple click only triggers `clicked()`, which bypassed the cycling/loupe logic entirely.
+
+**Fix Applied:**
+Modified the single-click handling in `response.clicked()` block to use the cycling logic for Arrow mode:
+
+```rust
+} else if self.edit_mode == EditMode::Arrow && !ctrl_held {
+    // Arrow mode without Ctrl: use cycling/loupe for disambiguation
+    if !self.handle_click_with_cycling(click_point) {
+        // No candidates found - clear selection
+        if let Some(state) = self.current_diagram_mut() {
+            state.diagram.clear_selection();
+        }
+        self.status_message = "Ready".to_string();
+    }
+} else {
+    // Other modes or Ctrl+click: use original click handler
+    self.handle_canvas_click(diagram_pos, false, ctrl_held);
+}
+```
+
+**Logic:**
+- Arrow mode without Ctrl: Uses `handle_click_with_cycling` for proper cycling/loupe behavior
+- Arrow mode with Ctrl: Uses old handler for Ctrl+click multi-select toggle
+- Other edit modes (AddState, Connect, etc.): Uses old handler for node creation/connection
+
+**Files Modified:**
+- `jmt-client/src/app.rs` - Changed single-click handling to use cycling for Arrow mode
+
+**Build Status:**
+- Successfully compiles with `cargo build`
+
+---

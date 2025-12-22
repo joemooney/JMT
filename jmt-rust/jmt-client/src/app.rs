@@ -3137,7 +3137,17 @@ impl eframe::App for JmtApp {
                             // Show preview popup
                             self.preview_substatemachine = Some(state_id);
                             self.status_message = "Sub-statemachine preview".to_string();
+                        } else if self.edit_mode == EditMode::Arrow && !ctrl_held {
+                            // Arrow mode without Ctrl: use cycling/loupe for disambiguation
+                            if !self.handle_click_with_cycling(click_point) {
+                                // No candidates found - clear selection
+                                if let Some(state) = self.current_diagram_mut() {
+                                    state.diagram.clear_selection();
+                                }
+                                self.status_message = "Ready".to_string();
+                            }
                         } else {
+                            // Other modes or Ctrl+click: use original click handler
                             self.handle_canvas_click(diagram_pos, false, ctrl_held);
                         }
                     }
