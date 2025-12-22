@@ -2615,6 +2615,44 @@ impl Diagram {
         self.undo_stack.len()
     }
 
+    /// Find which nodes a given node is overlapping with (for error display)
+    /// Returns a list of (node_name, overlap_type) where overlap_type describes the overlap
+    pub fn find_overlapping_nodes(&self, node_id: NodeId) -> Vec<(String, String)> {
+        let mut overlaps = Vec::new();
+
+        let Some(node) = self.find_node(node_id) else {
+            return overlaps;
+        };
+        let bounds = node.bounds();
+        let corners = [
+            Point::new(bounds.x1, bounds.y1),
+            Point::new(bounds.x2, bounds.y1),
+            Point::new(bounds.x1, bounds.y2),
+            Point::new(bounds.x2, bounds.y2),
+        ];
+
+        for other in &self.nodes {
+            if other.id() == node_id {
+                continue;
+            }
+            let other_bounds = other.bounds();
+            let contained_count = corners.iter()
+                .filter(|c| other_bounds.contains_point(**c))
+                .count();
+
+            if contained_count > 0 && contained_count < 4 {
+                let name = match other {
+                    Node::State(s) => s.name.clone(),
+                    Node::Pseudo(p) => format!("{:?}", p.kind),
+                };
+                let overlap_desc = format!("{}/4 corners inside", contained_count);
+                overlaps.push((name, overlap_desc));
+            }
+        }
+
+        overlaps
+    }
+
     /// Delete all selected nodes and connections
     pub fn delete_selected(&mut self) {
         let selected_nodes: Vec<NodeId> = self.selected_nodes();

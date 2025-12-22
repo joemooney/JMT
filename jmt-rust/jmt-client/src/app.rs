@@ -1337,7 +1337,15 @@ impl JmtApp {
                         // Regular click: Select only this element
                         state.diagram.select_element(element_id);
                         if has_error {
-                            self.status_message = format!("Selected: {} ⚠ PLACEMENT ERROR: This node is partially overlapping another state. Move it fully inside or fully outside.", name);
+                            let overlaps = state.diagram.find_overlapping_nodes(element_id);
+                            if overlaps.is_empty() {
+                                self.status_message = format!("Selected: {} ⚠ PLACEMENT ERROR: Unknown overlap", name);
+                            } else {
+                                let overlap_names: Vec<_> = overlaps.iter()
+                                    .map(|(n, d)| format!("{} ({})", n, d))
+                                    .collect();
+                                self.status_message = format!("Selected: {} ⚠ PLACEMENT ERROR: Overlapping: {}", name, overlap_names.join(", "));
+                            }
                         } else {
                             self.status_message = format!("Selected: {}", name);
                         }
@@ -2240,14 +2248,22 @@ impl eframe::App for JmtApp {
                                 // Show error tooltip if node has placement error
                                 if let Some(node) = state.diagram.find_node(node_id) {
                                     if node.has_error() {
+                                        let overlaps = state.diagram.find_overlapping_nodes(node_id);
                                         egui::show_tooltip_at_pointer(
                                             ui.ctx(),
                                             egui::LayerId::new(egui::Order::Foreground, egui::Id::new("error_tooltip")),
                                             egui::Id::new("placement_error"),
                                             |ui| {
                                                 ui.colored_label(egui::Color32::RED, "⚠ Placement Error");
-                                                ui.label("This node is partially overlapping another state.");
-                                                ui.label("Move it fully inside or fully outside the other state.");
+                                                if overlaps.is_empty() {
+                                                    ui.label("This node has an unknown overlap error.");
+                                                } else {
+                                                    ui.label("This node is partially overlapping:");
+                                                    for (name, desc) in &overlaps {
+                                                        ui.label(format!("  • {} ({})", name, desc));
+                                                    }
+                                                }
+                                                ui.label("Move it fully inside or fully outside.");
                                             }
                                         );
                                     }
