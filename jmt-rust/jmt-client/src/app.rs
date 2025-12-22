@@ -199,6 +199,8 @@ pub struct AppSettings {
     pub show_debug_info: bool,
     /// Highlight nodes on hover
     pub highlight_on_hover: bool,
+    /// Show selection radius circle around cursor
+    pub show_selection_radius: bool,
 
     // Grid settings
     /// Enable grid snapping
@@ -229,6 +231,7 @@ impl Default for AppSettings {
             // Visual
             show_debug_info: false,
             highlight_on_hover: true,
+            show_selection_radius: false,
 
             // Grid
             snap_to_grid: false,
@@ -2440,6 +2443,8 @@ impl JmtApp {
 
                     ui.checkbox(&mut self.settings.show_debug_info, "Show debug info in status bar");
                     ui.checkbox(&mut self.settings.highlight_on_hover, "Highlight elements on hover");
+                    ui.checkbox(&mut self.settings.show_selection_radius, "Show selection radius around cursor")
+                        .on_hover_text("Shows a circle around the cursor indicating the selection sensitivity area");
 
                     ui.separator();
                     ui.heading("Grid");
@@ -3376,6 +3381,38 @@ impl eframe::App for JmtApp {
                             egui::Stroke::new(zoom, egui::Color32::from_rgba_unmultiplied(100, 150, 255, 128)),
                         );
                     }
+                }
+            }
+
+            // Draw selection radius circle around cursor if enabled
+            if self.settings.show_selection_radius {
+                if let Some(cursor_pos) = self.cursor_pos {
+                    // The selection sensitivity is in diagram space, so scale it to screen space
+                    let radius_screen = self.settings.selection_sensitivity * zoom;
+
+                    // Draw a semi-transparent circle showing the selection area
+                    painter.circle_stroke(
+                        cursor_pos,
+                        radius_screen,
+                        egui::Stroke::new(1.5, egui::Color32::from_rgba_unmultiplied(255, 100, 100, 180)),
+                    );
+
+                    // Draw crosshair at center
+                    let cross_size = 5.0;
+                    painter.line_segment(
+                        [
+                            egui::Pos2::new(cursor_pos.x - cross_size, cursor_pos.y),
+                            egui::Pos2::new(cursor_pos.x + cross_size, cursor_pos.y),
+                        ],
+                        egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(255, 100, 100, 150)),
+                    );
+                    painter.line_segment(
+                        [
+                            egui::Pos2::new(cursor_pos.x, cursor_pos.y - cross_size),
+                            egui::Pos2::new(cursor_pos.x, cursor_pos.y + cross_size),
+                        ],
+                        egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(255, 100, 100, 150)),
+                    );
                 }
             }
 

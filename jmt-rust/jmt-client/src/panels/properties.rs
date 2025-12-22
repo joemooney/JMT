@@ -564,6 +564,9 @@ impl PropertiesPanel {
             ui.checkbox(&mut settings.highlight_on_hover, "Highlight on Hover")
                 .on_hover_text("Highlight nodes when hovering over them");
 
+            ui.checkbox(&mut settings.show_selection_radius, "Show Selection Radius")
+                .on_hover_text("Show circle around cursor indicating selection area");
+
             ui.checkbox(&mut settings.show_grid, "Show Grid")
                 .on_hover_text("Display grid in diagram");
 
