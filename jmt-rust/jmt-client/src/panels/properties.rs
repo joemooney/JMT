@@ -1,7 +1,7 @@
 //! Properties panel for editing selected elements
 
 use eframe::egui;
-use jmt_core::Node;
+use jmt_core::{Node, TitleStyle};
 use crate::app::JmtApp;
 
 pub struct PropertiesPanel;
@@ -217,6 +217,36 @@ impl PropertiesPanel {
                 state.modified = true;
             }
         });
+
+        ui.separator();
+
+        // Title settings
+        ui.label("Title:");
+        ui.horizontal(|ui| {
+            ui.label("Text:");
+            if ui.text_edit_singleline(&mut state.diagram.title).changed() {
+                state.modified = true;
+            }
+        });
+
+        ui.horizontal(|ui| {
+            ui.label("Style:");
+            egui::ComboBox::from_id_salt("title_style")
+                .selected_text(state.diagram.title_style.display_name())
+                .show_ui(ui, |ui| {
+                    for style in TitleStyle::all() {
+                        if ui.selectable_value(
+                            &mut state.diagram.title_style,
+                            *style,
+                            style.display_name(),
+                        ).clicked() {
+                            state.modified = true;
+                        }
+                    }
+                });
+        });
+
+        ui.separator();
 
         if let Some(path) = &state.diagram.settings.file_path {
             ui.label(format!("Path: {}", path));

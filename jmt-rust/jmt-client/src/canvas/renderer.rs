@@ -1,7 +1,7 @@
 //! Diagram rendering using egui Painter
 
 use eframe::egui::{self, Color32, Pos2, Rect, Rounding, Stroke, Vec2};
-use jmt_core::{Diagram, Node, Connection, DiagramType};
+use jmt_core::{Diagram, Node, Connection, DiagramType, TitleStyle};
 use jmt_core::node::{PseudoStateKind, Side};
 use jmt_core::geometry::Color;
 use jmt_core::sequence::{Lifeline, Message, CombinedFragment};
@@ -31,12 +31,111 @@ impl DiagramCanvas {
         // Store offset for use by scale_pos and scale_rect
         self.offset = rect.min;
 
+        // Render title first (background layer)
+        self.render_title(diagram, painter, zoom);
+
         match diagram.diagram_type {
             DiagramType::StateMachine => self.render_state_machine(diagram, painter, zoom),
             DiagramType::Sequence => self.render_sequence_diagram(diagram, painter, zoom),
             DiagramType::UseCase => self.render_use_case_diagram(diagram, painter, zoom),
             DiagramType::Activity => self.render_activity_diagram(diagram, painter, zoom),
         }
+    }
+
+    /// Render the diagram title based on title_style
+    fn render_title(&self, diagram: &Diagram, painter: &egui::Painter, zoom: f32) {
+        if diagram.title.is_empty() {
+            return;
+        }
+
+        match diagram.title_style {
+            TitleStyle::None => {}
+            TitleStyle::Header => {
+                self.render_title_header(diagram, painter, zoom);
+            }
+            TitleStyle::Frame => {
+                self.render_title_frame(diagram, painter, zoom);
+            }
+        }
+    }
+
+    /// Render title as a simple header at the top
+    fn render_title_header(&self, diagram: &Diagram, painter: &egui::Painter, zoom: f32) {
+        let font_size = 16.0 * zoom;
+        let font = egui::FontId::proportional(font_size);
+
+        // Position at top-left with some padding
+        let pos = self.scale_pos(60.0, 20.0, zoom);
+
+        painter.text(
+            pos,
+            egui::Align2::LEFT_TOP,
+            &diagram.title,
+            font,
+            Color32::BLACK,
+        );
+    }
+
+    /// Render title in UML frame notation (dog-eared pentagon in top-left)
+    fn render_title_frame(&self, diagram: &Diagram, painter: &egui::Painter, zoom: f32) {
+        let font_size = 14.0 * zoom;
+        let font = egui::FontId::proportional(font_size);
+
+        // Calculate text size
+        let galley = painter.layout_no_wrap(
+            diagram.title.clone(),
+            font.clone(),
+            Color32::BLACK,
+        );
+        let text_width = galley.size().x;
+        let text_height = galley.size().y;
+
+        // Frame dimensions
+        let padding_h = 10.0 * zoom;
+        let padding_v = 6.0 * zoom;
+        let dog_ear_size = 12.0 * zoom;
+
+        let frame_left = 50.0 * zoom + self.offset.x;
+        let frame_top = 50.0 * zoom + self.offset.y;
+        let frame_right = frame_left + text_width + padding_h * 2.0;
+        let frame_bottom = frame_top + text_height + padding_v * 2.0;
+
+        // Draw the dog-eared pentagon shape
+        // Points: top-left, bottom-left, bottom-right (with dog-ear), top-right
+        let points = vec![
+            Pos2::new(frame_left, frame_top),                           // top-left
+            Pos2::new(frame_left, frame_bottom),                        // bottom-left
+            Pos2::new(frame_right - dog_ear_size, frame_bottom),        // bottom before dog-ear
+            Pos2::new(frame_right, frame_bottom - dog_ear_size),        // dog-ear corner
+            Pos2::new(frame_right, frame_top),                          // top-right
+        ];
+
+        // Fill
+        painter.add(egui::Shape::convex_polygon(
+            points.clone(),
+            Color32::from_rgb(255, 255, 240), // Light yellow/cream
+            Stroke::new(zoom, Color32::BLACK),
+        ));
+
+        // Draw the dog-ear fold line
+        painter.line_segment(
+            [
+                Pos2::new(frame_right - dog_ear_size, frame_bottom),
+                Pos2::new(frame_right - dog_ear_size, frame_bottom - dog_ear_size),
+            ],
+            Stroke::new(zoom * 0.5, Color32::GRAY),
+        );
+        painter.line_segment(
+            [
+                Pos2::new(frame_right - dog_ear_size, frame_bottom - dog_ear_size),
+                Pos2::new(frame_right, frame_bottom - dog_ear_size),
+            ],
+            Stroke::new(zoom * 0.5, Color32::GRAY),
+        );
+
+        // Draw the text
+        let text_pos = Pos2::new(frame_left + padding_h, frame_top + padding_v);
+        painter.galley(text_pos, galley, Color32::BLACK);
     }
 
     /// Scale a position by zoom factor and add screen offset

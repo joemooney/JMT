@@ -17,11 +17,45 @@ use crate::usecase::{Actor, UseCase, SystemBoundary, UseCaseRelationship};
 // Activity diagram imports
 use crate::activity::{Action, Swimlane, ControlFlow, ObjectNode, ActivityPartition};
 
+/// How to display the diagram title
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub enum TitleStyle {
+    /// Don't display the title
+    #[default]
+    None,
+    /// Display as a simple header at the top
+    Header,
+    /// Display in a UML frame notation (dog-eared rectangle in top-left)
+    Frame,
+}
+
+impl TitleStyle {
+    /// Get display name for UI
+    pub fn display_name(&self) -> &'static str {
+        match self {
+            TitleStyle::None => "None",
+            TitleStyle::Header => "Header",
+            TitleStyle::Frame => "Frame (UML)",
+        }
+    }
+
+    /// Get all variants for UI iteration
+    pub fn all() -> &'static [TitleStyle] {
+        &[TitleStyle::None, TitleStyle::Header, TitleStyle::Frame]
+    }
+}
+
 /// A complete UML diagram (state machine, sequence, use case, or activity)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Diagram {
     /// Unique identifier
     pub id: Uuid,
+    /// Diagram title
+    #[serde(default)]
+    pub title: String,
+    /// How to display the title
+    #[serde(default)]
+    pub title_style: TitleStyle,
     /// Diagram type
     #[serde(default)]
     pub diagram_type: DiagramType,
@@ -110,6 +144,8 @@ impl Diagram {
 
         Self {
             id: Uuid::new_v4(),
+            title: String::new(),
+            title_style: TitleStyle::None,
             diagram_type,
             settings: DiagramSettings::new(name),
             root_state,
@@ -2082,6 +2118,8 @@ impl Diagram {
 
     /// Restore all diagram state from another diagram
     fn restore_from(&mut self, other: &Diagram) {
+        self.title = other.title.clone();
+        self.title_style = other.title_style;
         self.diagram_type = other.diagram_type;
         self.settings = other.settings.clone();
         self.root_state = other.root_state.clone();
