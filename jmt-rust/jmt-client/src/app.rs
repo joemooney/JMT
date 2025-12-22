@@ -107,8 +107,126 @@ enum ClickCandidate {
     Connection(uuid::Uuid),
 }
 
-/// Maximum distance from last click to consider it a "same location" click for cycling
-const CLICK_CYCLE_DISTANCE: f32 = 15.0;
+/// Selection disambiguation mode when multiple items overlap
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub enum SelectionMode {
+    /// Click repeatedly to cycle through overlapping items
+    #[default]
+    Cycle,
+    /// Show a magnifying loupe to pick from overlapping items
+    Loupe,
+}
+
+/// State for the magnifying loupe
+#[derive(Debug, Clone, Default)]
+pub struct LoupeState {
+    /// Whether the loupe is currently visible
+    pub visible: bool,
+    /// Center position of the loupe in diagram coordinates
+    pub center: Option<Point>,
+    /// Candidates available for selection in the loupe
+    pub candidates: Vec<ClickCandidate>,
+    /// Radius of the source area being magnified (in diagram coordinates)
+    pub source_radius: f32,
+    /// Radius of the loupe display (in screen coordinates)
+    pub display_radius: f32,
+    /// Magnification factor
+    pub magnification: f32,
+}
+
+impl LoupeState {
+    pub fn new() -> Self {
+        Self {
+            visible: false,
+            center: None,
+            candidates: Vec::new(),
+            source_radius: 30.0,  // Area to magnify
+            display_radius: 120.0, // Size of loupe on screen
+            magnification: 4.0,
+        }
+    }
+
+    pub fn show(&mut self, center: Point, candidates: Vec<ClickCandidate>) {
+        self.visible = true;
+        self.center = Some(center);
+        self.candidates = candidates;
+    }
+
+    pub fn hide(&mut self) {
+        self.visible = false;
+        self.center = None;
+        self.candidates.clear();
+    }
+}
+
+/// Application-wide settings (configurable by user)
+#[derive(Debug, Clone)]
+pub struct AppSettings {
+    // Selection settings
+    /// Radius for detecting overlapping items (pixels in diagram space)
+    pub selection_sensitivity: f32,
+    /// Hit tolerance for pivot points and endpoints
+    pub pivot_hit_tolerance: f32,
+    /// Hit tolerance for connection lines
+    pub connection_hit_tolerance: f32,
+    /// Hit margin for resize corners
+    pub corner_hit_margin: f32,
+    /// Distance threshold for click cycling
+    pub click_cycle_distance: f32,
+
+    // Loupe settings
+    /// Size of the loupe popup (screen pixels)
+    pub loupe_display_radius: f32,
+
+    // Double-click settings
+    /// Double-click time threshold (milliseconds)
+    pub double_click_time_ms: u128,
+    /// Maximum distance for double-click detection
+    pub double_click_distance: f32,
+
+    // Visual settings
+    /// Show debug info in status bar
+    pub show_debug_info: bool,
+    /// Highlight nodes on hover
+    pub highlight_on_hover: bool,
+
+    // Grid settings
+    /// Enable grid snapping
+    pub snap_to_grid: bool,
+    /// Grid size (pixels)
+    pub grid_size: f32,
+    /// Show grid
+    pub show_grid: bool,
+}
+
+impl Default for AppSettings {
+    fn default() -> Self {
+        Self {
+            // Selection
+            selection_sensitivity: 12.0,
+            pivot_hit_tolerance: 12.0,
+            connection_hit_tolerance: 12.0,
+            corner_hit_margin: 15.0,
+            click_cycle_distance: 15.0,
+
+            // Loupe
+            loupe_display_radius: 120.0,
+
+            // Double-click
+            double_click_time_ms: 500,
+            double_click_distance: 10.0,
+
+            // Visual
+            show_debug_info: false,
+            highlight_on_hover: true,
+
+            // Grid
+            snap_to_grid: false,
+            grid_size: 10.0,
+            show_grid: false,
+        }
+    }
+}
 
 /// State for a single open diagram
 pub struct DiagramState {
@@ -142,10 +260,6 @@ impl DiagramState {
     }
 }
 
-/// Double-click detection threshold in milliseconds
-const DOUBLE_CLICK_TIME_MS: u128 = 500;
-/// Maximum distance (in pixels) between clicks to count as double-click
-const DOUBLE_CLICK_DISTANCE: f32 = 10.0;
 /// Minimum zoom level (25%)
 const MIN_ZOOM: f32 = 0.25;
 /// Maximum zoom level (400%)
@@ -154,19 +268,13 @@ const MAX_ZOOM: f32 = 4.0;
 const ZOOM_STEP: f32 = 0.1;
 /// Zoom step for mouse wheel
 const ZOOM_WHEEL_STEP: f32 = 0.1;
-/// Hit tolerance for pivot points and endpoints (in diagram coordinates)
-const PIVOT_HIT_TOLERANCE: f32 = 12.0;
-/// Hit tolerance for resize corners (in diagram coordinates)
-const CORNER_HIT_MARGIN: f32 = 15.0;
-/// Hit tolerance for connections (in diagram coordinates)
-const CONNECTION_HIT_TOLERANCE: f32 = 12.0;
 /// Minimum distance between pivot points
 const MIN_PIVOT_DISTANCE: f32 = 20.0;
 
 /// The main JMT application
 pub struct JmtApp {
     /// Open diagrams
-    diagrams: Vec<DiagramState>,
+    pub diagrams: Vec<DiagramState>,
     /// Currently active diagram index
     active_diagram: usize,
     /// Current edit mode
@@ -210,6 +318,14 @@ pub struct JmtApp {
     click_cycle_index: usize,
     /// Click cycling: position where the cycle started (in diagram coordinates)
     click_cycle_pos: Option<Point>,
+    /// Selection disambiguation mode
+    pub selection_mode: SelectionMode,
+    /// Magnifying loupe state
+    loupe: LoupeState,
+    /// Application settings
+    pub settings: AppSettings,
+    /// Whether to show the settings window
+    pub show_settings_window: bool,
 }
 
 impl Default for JmtApp {
@@ -241,6 +357,10 @@ impl Default for JmtApp {
             click_cycle_candidates: Vec::new(),
             click_cycle_index: 0,
             click_cycle_pos: None,
+            selection_mode: SelectionMode::default(),
+            loupe: LoupeState::new(),
+            settings: AppSettings::default(),
+            show_settings_window: false,
         }
     }
 }
@@ -261,17 +381,28 @@ impl JmtApp {
         self.diagrams.get_mut(self.active_diagram)
     }
 
+    /// Get the current diagram index (if any diagrams are open)
+    pub fn current_diagram_idx(&self) -> Option<usize> {
+        if self.diagrams.is_empty() {
+            None
+        } else {
+            Some(self.active_diagram)
+        }
+    }
+
     /// Check if a point is on a pivot point or endpoint of a connection
     /// Returns (connection_id, drag_type) if found
     /// First checks the selected connection, then checks all connections for endpoints
     fn check_pivot_or_endpoint_at(&self, pos: Point) -> Option<(uuid::Uuid, PivotDragType)> {
         let state = self.current_diagram()?;
 
+        let pivot_tolerance = self.settings.pivot_hit_tolerance;
+
         // First, check the selected connection for pivot points and endpoints
         if let Some(conn_id) = state.diagram.selected_connection() {
             if let Some(conn) = state.diagram.find_connection(conn_id) {
                 // First check pivot points (gold circles) - only for selected connection
-                if let Some(pivot_idx) = conn.find_pivot_at(pos, PIVOT_HIT_TOLERANCE) {
+                if let Some(pivot_idx) = conn.find_pivot_at(pos, pivot_tolerance) {
                     return Some((conn_id, PivotDragType::Pivot(pivot_idx)));
                 }
 
@@ -283,7 +414,7 @@ impl JmtApp {
                     let source_bounds = source_node.bounds();
                     let target_bounds = target_node.bounds();
 
-                    if let Some(is_source) = conn.find_endpoint_at(pos, source_bounds, target_bounds, PIVOT_HIT_TOLERANCE) {
+                    if let Some(is_source) = conn.find_endpoint_at(pos, source_bounds, target_bounds, pivot_tolerance) {
                         if is_source {
                             return Some((conn_id, PivotDragType::Source));
                         } else {
@@ -304,7 +435,7 @@ impl JmtApp {
                 let source_bounds = source_node.bounds();
                 let target_bounds = target_node.bounds();
 
-                if let Some(is_source) = conn.find_endpoint_at(pos, source_bounds, target_bounds, PIVOT_HIT_TOLERANCE) {
+                if let Some(is_source) = conn.find_endpoint_at(pos, source_bounds, target_bounds, pivot_tolerance) {
                     if is_source {
                         return Some((conn.id, PivotDragType::Source));
                     } else {
@@ -325,13 +456,20 @@ impl JmtApp {
             return candidates;
         };
 
+        let pivot_tolerance = self.settings.pivot_hit_tolerance;
+        let connection_tolerance = self.settings.connection_hit_tolerance;
+
+        eprintln!("[CANDIDATES] Checking at ({:.1}, {:.1})", pos.x, pos.y);
+
         // 1. Check pivot points on selected connection
         if let Some(conn_id) = state.diagram.selected_connection() {
             if let Some(conn) = state.diagram.find_connection(conn_id) {
                 for (idx, pivot) in conn.pivot_points.iter().enumerate() {
                     let dx = pos.x - pivot.x;
                     let dy = pos.y - pivot.y;
-                    if (dx * dx + dy * dy).sqrt() <= PIVOT_HIT_TOLERANCE {
+                    let dist = (dx * dx + dy * dy).sqrt();
+                    if dist <= pivot_tolerance {
+                        eprintln!("[CANDIDATES] Pivot {} hit (dist: {:.1})", idx, dist);
                         candidates.push(ClickCandidate::Pivot(conn_id, idx));
                     }
                 }
@@ -351,7 +489,10 @@ impl JmtApp {
                 let source_pt = conn.get_side_point(source_bounds, conn.source_side, conn.source_offset);
                 let dx = pos.x - source_pt.x;
                 let dy = pos.y - source_pt.y;
-                if (dx * dx + dy * dy).sqrt() <= PIVOT_HIT_TOLERANCE {
+                let dist = (dx * dx + dy * dy).sqrt();
+                eprintln!("[CANDIDATES] Source endpoint at ({:.1}, {:.1}), dist: {:.1}, tolerance: {}",
+                    source_pt.x, source_pt.y, dist, pivot_tolerance);
+                if dist <= pivot_tolerance {
                     candidates.push(ClickCandidate::Endpoint(conn.id, true));
                 }
 
@@ -359,7 +500,10 @@ impl JmtApp {
                 let target_pt = conn.get_side_point(target_bounds, conn.target_side, conn.target_offset);
                 let dx = pos.x - target_pt.x;
                 let dy = pos.y - target_pt.y;
-                if (dx * dx + dy * dy).sqrt() <= PIVOT_HIT_TOLERANCE {
+                let dist = (dx * dx + dy * dy).sqrt();
+                eprintln!("[CANDIDATES] Target endpoint at ({:.1}, {:.1}), dist: {:.1}, tolerance: {}",
+                    target_pt.x, target_pt.y, dist, pivot_tolerance);
+                if dist <= pivot_tolerance {
                     candidates.push(ClickCandidate::Endpoint(conn.id, false));
                 }
             }
@@ -375,23 +519,27 @@ impl JmtApp {
         }
 
         // 4. Check nodes - collect all containing nodes with their areas
-        let mut node_candidates: Vec<(NodeId, f32)> = Vec::new();
+        let mut node_candidates: Vec<(NodeId, f32, String)> = Vec::new();
         for node in state.diagram.nodes() {
-            if node.contains_point(pos) {
-                let bounds = node.bounds();
+            let bounds = node.bounds();
+            let contains = node.contains_point(pos);
+            eprintln!("[CANDIDATES] Node '{}' bounds: ({:.1},{:.1})-({:.1},{:.1}), contains: {}",
+                node.name(), bounds.x1, bounds.y1, bounds.x2, bounds.y2, contains);
+            if contains {
                 let area = bounds.width() * bounds.height();
-                node_candidates.push((node.id(), area));
+                node_candidates.push((node.id(), area, node.name().to_string()));
             }
         }
         // Sort by area (smallest first) so innermost nodes come first
         node_candidates.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
-        for (node_id, _) in node_candidates {
+        for (node_id, area, name) in node_candidates {
+            eprintln!("[CANDIDATES] Adding node '{}' (area: {:.0})", name, area);
             candidates.push(ClickCandidate::Node(node_id));
         }
 
         // 5. Check connection lines (lowest priority)
         for conn in state.diagram.connections() {
-            if conn.is_near_point(pos, CONNECTION_HIT_TOLERANCE) {
+            if conn.is_near_point(pos, connection_tolerance) {
                 // Only add if not already in candidates as endpoint or label
                 let already_has = candidates.iter().any(|c| matches!(c,
                     ClickCandidate::Endpoint(id, _) | ClickCandidate::Label(id) if *id == conn.id));
@@ -509,54 +657,94 @@ impl JmtApp {
         }
     }
 
-    /// Handle click with cycling support for overlapping items
-    /// Returns true if a candidate was selected
-    fn handle_click_with_cycling(&mut self, pos: Point) -> bool {
-        // Check if this is a "same location" click for cycling
-        let is_same_location = self.click_cycle_pos
-            .map(|prev| {
-                let dx = pos.x - prev.x;
-                let dy = pos.y - prev.y;
-                (dx * dx + dy * dy).sqrt() <= CLICK_CYCLE_DISTANCE
-            })
-            .unwrap_or(false);
+    /// Handle click with disambiguation for overlapping items
+    /// Returns true if a candidate was selected (or loupe was shown)
+    fn handle_click_with_disambiguation(&mut self, pos: Point) -> bool {
+        eprintln!("[CLICK] Position: ({:.1}, {:.1}), mode: {:?}", pos.x, pos.y, self.selection_mode);
 
-        if is_same_location && !self.click_cycle_candidates.is_empty() {
-            // Cycle to next candidate
-            self.click_cycle_index = (self.click_cycle_index + 1) % self.click_cycle_candidates.len();
-            let candidate = self.click_cycle_candidates[self.click_cycle_index];
-            let count = self.click_cycle_candidates.len();
-            let idx = self.click_cycle_index + 1;
-            self.select_candidate(candidate);
-            self.status_message = format!("{} ({}/{})", self.status_message, idx, count);
-            return true;
-        }
-
-        // New location - find all candidates
-        let candidates = self.find_all_candidates_at(pos);
-        if candidates.is_empty() {
-            // Clear cycling state
-            self.click_cycle_candidates.clear();
-            self.click_cycle_index = 0;
-            self.click_cycle_pos = None;
+        // If loupe is visible and we clicked outside it, hide it
+        if self.loupe.visible {
+            // Loupe click handling is done separately
             return false;
         }
 
-        // Store cycling state
-        self.click_cycle_candidates = candidates.clone();
-        self.click_cycle_index = 0;
-        self.click_cycle_pos = Some(pos);
-
-        // Select the first candidate
-        let candidate = candidates[0];
-        self.select_candidate(candidate);
-
-        // Show count if multiple candidates
-        if candidates.len() > 1 {
-            self.status_message = format!("{} (1/{}) - click again to cycle", self.status_message, candidates.len());
+        // Find all candidates at this position
+        let candidates = self.find_all_candidates_at(pos);
+        eprintln!("[CLICK] Found {} candidates at position:", candidates.len());
+        for (i, c) in candidates.iter().enumerate() {
+            eprintln!("[CLICK]   {}: {:?}", i + 1, c);
         }
 
-        true
+        if candidates.is_empty() {
+            eprintln!("[CLICK] No candidates found - clearing state");
+            self.click_cycle_candidates.clear();
+            self.click_cycle_index = 0;
+            self.click_cycle_pos = None;
+            self.loupe.hide();
+            return false;
+        }
+
+        // If only one candidate, select it directly regardless of mode
+        if candidates.len() == 1 {
+            let candidate = candidates[0];
+            eprintln!("[CLICK] Single candidate - selecting: {:?}", candidate);
+            self.select_candidate(candidate);
+            self.click_cycle_candidates.clear();
+            self.click_cycle_pos = None;
+            return true;
+        }
+
+        // Multiple candidates - use disambiguation mode
+        let cycle_distance = self.settings.click_cycle_distance;
+        match self.selection_mode {
+            SelectionMode::Cycle => {
+                // Check if this is a "same location" click for cycling
+                let is_same_location = self.click_cycle_pos
+                    .map(|prev| {
+                        let dx = pos.x - prev.x;
+                        let dy = pos.y - prev.y;
+                        let dist = (dx * dx + dy * dy).sqrt();
+                        eprintln!("[CLICK] Distance from last click: {:.1} (threshold: {})", dist, cycle_distance);
+                        dist <= cycle_distance
+                    })
+                    .unwrap_or(false);
+
+                if is_same_location && !self.click_cycle_candidates.is_empty() {
+                    // Cycle to next candidate
+                    self.click_cycle_index = (self.click_cycle_index + 1) % self.click_cycle_candidates.len();
+                    let candidate = self.click_cycle_candidates[self.click_cycle_index];
+                    let count = self.click_cycle_candidates.len();
+                    let idx = self.click_cycle_index + 1;
+                    eprintln!("[CLICK] Cycling to candidate {}/{}: {:?}", idx, count, candidate);
+                    self.select_candidate(candidate);
+                    self.status_message = format!("{} ({}/{})", self.status_message, idx, count);
+                    return true;
+                }
+
+                // New location - store cycling state and select first
+                self.click_cycle_candidates = candidates.clone();
+                self.click_cycle_index = 0;
+                self.click_cycle_pos = Some(pos);
+
+                let candidate = candidates[0];
+                eprintln!("[CLICK] Selecting first candidate: {:?}", candidate);
+                self.select_candidate(candidate);
+                self.status_message = format!("{} (1/{}) - click again to cycle", self.status_message, candidates.len());
+                true
+            }
+            SelectionMode::Loupe => {
+                // Show the magnifying loupe
+                eprintln!("[CLICK] Showing loupe with {} candidates", candidates.len());
+                self.loupe.show(pos, candidates);
+                self.status_message = format!("Select from {} items in loupe", self.loupe.candidates.len());
+                true
+            }
+        }
+    }
+
+    /// Handle click with cycling support for overlapping items (legacy name)
+    fn handle_click_with_cycling(&mut self, pos: Point) -> bool {
+        self.handle_click_with_disambiguation(pos)
     }
 
     /// Find the nearest side and offset on a node bounds for a given point
@@ -1568,6 +1756,7 @@ impl JmtApp {
         let point = Point::new(pos.x, pos.y);
         let edit_mode = self.edit_mode;
         let pending_source = self.pending_connection_source;
+        let connection_tolerance = self.settings.connection_hit_tolerance;
 
         let Some(state) = self.current_diagram_mut() else {
             return;
@@ -1584,7 +1773,7 @@ impl JmtApp {
 
                 // Check connections before nodes - connections are thin lines so if user
                 // clicks on one, that's what they intended (even if inside a state)
-                if let Some(conn_id) = state.diagram.find_connection_at(point, CONNECTION_HIT_TOLERANCE) {
+                if let Some(conn_id) = state.diagram.find_connection_at(point, connection_tolerance) {
                     state.diagram.select_connection(conn_id);
                     self.status_message = "Selected connection".to_string();
                 } else if let Some(element_id) = state.diagram.find_element_at(point) {
@@ -2149,6 +2338,127 @@ impl JmtApp {
         }
     }
 
+    /// Show the settings window
+    fn show_settings_window(&mut self, ctx: &egui::Context) {
+        let mut open = self.show_settings_window;
+
+        egui::Window::new("⚙ Settings")
+            .open(&mut open)
+            .resizable(true)
+            .default_width(400.0)
+            .show(ctx, |ui| {
+                egui::ScrollArea::vertical().show(ui, |ui| {
+                    ui.heading("Selection");
+                    ui.add_space(4.0);
+
+                    ui.horizontal(|ui| {
+                        ui.label("Selection sensitivity:");
+                        ui.add(egui::Slider::new(&mut self.settings.selection_sensitivity, 5.0..=30.0)
+                            .suffix(" px"));
+                    });
+                    ui.label("  ↳ Radius for detecting overlapping items");
+
+                    ui.add_space(8.0);
+
+                    ui.horizontal(|ui| {
+                        ui.label("Pivot/endpoint hit tolerance:");
+                        ui.add(egui::Slider::new(&mut self.settings.pivot_hit_tolerance, 5.0..=25.0)
+                            .suffix(" px"));
+                    });
+                    ui.label("  ↳ How close you need to click to grab a pivot point");
+
+                    ui.add_space(8.0);
+
+                    ui.horizontal(|ui| {
+                        ui.label("Connection hit tolerance:");
+                        ui.add(egui::Slider::new(&mut self.settings.connection_hit_tolerance, 5.0..=25.0)
+                            .suffix(" px"));
+                    });
+                    ui.label("  ↳ How close you need to click to select a connection");
+
+                    ui.add_space(8.0);
+
+                    ui.horizontal(|ui| {
+                        ui.label("Corner resize margin:");
+                        ui.add(egui::Slider::new(&mut self.settings.corner_hit_margin, 5.0..=30.0)
+                            .suffix(" px"));
+                    });
+                    ui.label("  ↳ Size of resize handles at node corners");
+
+                    ui.add_space(8.0);
+
+                    ui.horizontal(|ui| {
+                        ui.label("Click cycle distance:");
+                        ui.add(egui::Slider::new(&mut self.settings.click_cycle_distance, 5.0..=30.0)
+                            .suffix(" px"));
+                    });
+                    ui.label("  ↳ Max distance between clicks for cycling");
+
+                    ui.separator();
+                    ui.heading("Loupe");
+                    ui.add_space(4.0);
+
+                    ui.horizontal(|ui| {
+                        ui.label("Loupe size:");
+                        ui.add(egui::Slider::new(&mut self.settings.loupe_display_radius, 80.0..=200.0)
+                            .suffix(" px"));
+                    });
+                    // Update loupe state when setting changes
+                    self.loupe.display_radius = self.settings.loupe_display_radius;
+
+                    ui.separator();
+                    ui.heading("Double-Click");
+                    ui.add_space(4.0);
+
+                    let mut dc_time = self.settings.double_click_time_ms as f32;
+                    ui.horizontal(|ui| {
+                        ui.label("Double-click time:");
+                        ui.add(egui::Slider::new(&mut dc_time, 200.0..=800.0)
+                            .suffix(" ms"));
+                    });
+                    self.settings.double_click_time_ms = dc_time as u128;
+
+                    ui.horizontal(|ui| {
+                        ui.label("Double-click distance:");
+                        ui.add(egui::Slider::new(&mut self.settings.double_click_distance, 5.0..=20.0)
+                            .suffix(" px"));
+                    });
+
+                    ui.separator();
+                    ui.heading("Visual");
+                    ui.add_space(4.0);
+
+                    ui.checkbox(&mut self.settings.show_debug_info, "Show debug info in status bar");
+                    ui.checkbox(&mut self.settings.highlight_on_hover, "Highlight elements on hover");
+
+                    ui.separator();
+                    ui.heading("Grid");
+                    ui.add_space(4.0);
+
+                    ui.checkbox(&mut self.settings.show_grid, "Show grid");
+                    ui.checkbox(&mut self.settings.snap_to_grid, "Snap to grid");
+
+                    ui.horizontal(|ui| {
+                        ui.label("Grid size:");
+                        ui.add(egui::Slider::new(&mut self.settings.grid_size, 5.0..=50.0)
+                            .suffix(" px"));
+                    });
+
+                    ui.separator();
+                    ui.add_space(8.0);
+
+                    ui.horizontal(|ui| {
+                        if ui.button("Reset to Defaults").clicked() {
+                            self.settings = AppSettings::default();
+                            self.loupe.display_radius = self.settings.loupe_display_radius;
+                        }
+                    });
+                });
+            });
+
+        self.show_settings_window = open;
+    }
+
     /// Handle keyboard input
     fn handle_keyboard(&mut self, ctx: &egui::Context) {
         // Don't handle Delete/Backspace if a text field has focus (e.g., properties panel)
@@ -2288,6 +2598,11 @@ impl eframe::App for JmtApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         // Handle keyboard input
         self.handle_keyboard(ctx);
+
+        // Settings window
+        if self.show_settings_window {
+            self.show_settings_window(ctx);
+        }
 
         // Top panel - Menu bar
         egui::TopBottomPanel::top("menu_bar").show(ctx, |ui| {
@@ -2440,8 +2755,8 @@ impl eframe::App for JmtApp {
                         (hover_pos.x - canvas_origin.x) / zoom,
                         (hover_pos.y - canvas_origin.y) / zoom
                     );
-                    let corner_margin = CORNER_HIT_MARGIN;
-                    let connection_tolerance = CONNECTION_HIT_TOLERANCE;
+                    let corner_margin = self.settings.corner_hit_margin;
+                    let connection_tolerance = self.settings.connection_hit_tolerance;
 
                     // Check: corners of resizable nodes (highest priority)
                     if let Some(state) = self.current_diagram() {
@@ -2585,12 +2900,14 @@ impl eframe::App for JmtApp {
                         (pos.y - canvas_origin.y) / zoom
                     );
                     let now = Instant::now();
+                    let double_click_time = self.settings.double_click_time_ms;
+                    let double_click_dist = self.settings.double_click_distance;
 
                     // Check if this is a double-click (within time and distance threshold)
                     let is_double_click = if let (Some(last_time), Some(last_pos)) = (self.last_click_time, self.last_click_pos) {
                         let time_diff = now.duration_since(last_time).as_millis();
                         let distance = ((pos.x - last_pos.x).powi(2) + (pos.y - last_pos.y).powi(2)).sqrt();
-                        time_diff <= DOUBLE_CLICK_TIME_MS && distance <= DOUBLE_CLICK_DISTANCE
+                        time_diff <= double_click_time && distance <= double_click_dist
                     } else {
                         false
                     };
@@ -2599,6 +2916,10 @@ impl eframe::App for JmtApp {
                         // Double-click detected
                         self.last_click_time = None;
                         self.last_click_pos = None;
+
+                        // Cache settings for use in closures
+                        let connection_tolerance = self.settings.connection_hit_tolerance;
+                        let pivot_tolerance = self.settings.pivot_hit_tolerance;
 
                         // First check if double-clicked on a connection label - re-adjoin it
                         let point = Point::new(diagram_pos.x, diagram_pos.y);
@@ -2619,13 +2940,13 @@ impl eframe::App for JmtApp {
                         } else {
                             // Check if double-clicked on a connection to add pivot point
                             let conn_clicked = self.current_diagram()
-                                .and_then(|state| state.diagram.find_connection_at(point, CONNECTION_HIT_TOLERANCE));
+                                .and_then(|state| state.diagram.find_connection_at(point, connection_tolerance));
 
                             if let Some(conn_id) = conn_clicked {
                                 // Check if we're clicking on an existing pivot point - delete it
                                 let existing_pivot = self.current_diagram()
                                     .and_then(|state| state.diagram.find_connection(conn_id))
-                                    .and_then(|conn| conn.find_pivot_at(point, PIVOT_HIT_TOLERANCE));
+                                    .and_then(|conn| conn.find_pivot_at(point, pivot_tolerance));
 
                                 if let Some(pivot_idx) = existing_pivot {
                                     // Delete the pivot point
@@ -2667,7 +2988,7 @@ impl eframe::App for JmtApp {
                                             state.diagram.push_undo();
                                             if let Some(conn) = state.diagram.find_connection_mut(conn_id) {
                                                 // Find which segment was clicked and insert pivot there
-                                                let insert_idx = conn.find_segment_at(point, CONNECTION_HIT_TOLERANCE);
+                                                let insert_idx = conn.find_segment_at(point, connection_tolerance);
                                                 conn.pivot_points.insert(insert_idx, point);
                                                 // Also insert a curve flag for the new segment created
                                                 conn.segment_curves.insert(insert_idx, false);
@@ -2730,7 +3051,7 @@ impl eframe::App for JmtApp {
                         (pos.y - canvas_origin.y) / zoom
                     );
                     let point = Point::new(diagram_pos.x, diagram_pos.y);
-                    let corner_margin = CORNER_HIT_MARGIN; // Size of corner hit area
+                    let corner_margin = self.settings.corner_hit_margin;
 
                     // First, check if we clicked on a corner of ANY resizable node
                     // (prioritize selected nodes, then check all nodes)
@@ -2992,6 +3313,36 @@ impl eframe::App for JmtApp {
                         egui::Stroke::new(zoom, egui::Color32::from_rgb(100, 150, 255)),
                     );
                 }
+
+                // Draw all pivot points during marquee selection so user can see what they can select
+                if let Some(state) = self.current_diagram() {
+                    let handle_radius = 5.0 * zoom;
+                    let handle_stroke = egui::Stroke::new(zoom, egui::Color32::BLACK);
+                    let selection_rect = self.selection_rect.to_core_rect();
+
+                    for conn in state.diagram.connections() {
+                        for pivot in &conn.pivot_points {
+                            let screen_pos = egui::Pos2::new(
+                                pivot.x * zoom + canvas_origin.x,
+                                pivot.y * zoom + canvas_origin.y,
+                            );
+
+                            // Check if pivot is inside selection rect - highlight it
+                            let is_inside = selection_rect.as_ref()
+                                .map(|r| r.contains_point(*pivot))
+                                .unwrap_or(false);
+
+                            let fill_color = if is_inside {
+                                egui::Color32::from_rgb(100, 200, 100) // Green when inside selection
+                            } else {
+                                egui::Color32::from_rgba_unmultiplied(255, 215, 0, 180) // Semi-transparent gold
+                            };
+
+                            painter.circle_filled(screen_pos, handle_radius, fill_color);
+                            painter.circle_stroke(screen_pos, handle_radius, handle_stroke);
+                        }
+                    }
+                }
             }
 
             // Draw lasso path if active (scale to screen space)
@@ -3015,6 +3366,187 @@ impl eframe::App for JmtApp {
                             egui::Stroke::new(zoom, egui::Color32::from_rgba_unmultiplied(100, 150, 255, 128)),
                         );
                     }
+                }
+            }
+
+            // Handle loupe interactions (before drawing so we can modify state)
+            let mut loupe_selection: Option<ClickCandidate> = None;
+            let mut loupe_clicked_outside = false;
+
+            if self.loupe.visible {
+                // Check for Escape key to close loupe
+                if ui.ctx().input(|i| i.key_pressed(egui::Key::Escape)) {
+                    self.loupe.hide();
+                    self.status_message = "Selection cancelled".to_string();
+                }
+
+                // Check for clicks on loupe items
+                if let Some(center) = self.loupe.center {
+                    let loupe_screen_center = egui::Pos2::new(
+                        center.x * zoom + canvas_origin.x,
+                        center.y * zoom + canvas_origin.y,
+                    );
+                    let loupe_offset = egui::vec2(self.loupe.display_radius + 20.0, -self.loupe.display_radius - 20.0);
+                    let loupe_center = loupe_screen_center + loupe_offset;
+                    let loupe_center = egui::Pos2::new(
+                        loupe_center.x.clamp(self.loupe.display_radius, response.rect.max.x - self.loupe.display_radius),
+                        loupe_center.y.clamp(self.loupe.display_radius + response.rect.min.y, response.rect.max.y - self.loupe.display_radius),
+                    );
+
+                    let item_spacing = 35.0;
+                    let start_y = loupe_center.y - (self.loupe.candidates.len() as f32 - 1.0) * item_spacing / 2.0;
+
+                    // Check if click is on a loupe item
+                    if ui.ctx().input(|i| i.pointer.primary_clicked()) {
+                        if let Some(mouse_pos) = ui.ctx().input(|i| i.pointer.hover_pos()) {
+                            // Check if click is inside loupe circle
+                            let dist_to_loupe = ((mouse_pos.x - loupe_center.x).powi(2) + (mouse_pos.y - loupe_center.y).powi(2)).sqrt();
+                            if dist_to_loupe <= self.loupe.display_radius {
+                                // Check each item
+                                for (i, candidate) in self.loupe.candidates.iter().enumerate() {
+                                    let item_y = start_y + i as f32 * item_spacing;
+                                    let item_center = egui::Pos2::new(loupe_center.x, item_y);
+                                    let button_rect = egui::Rect::from_center_size(
+                                        item_center,
+                                        egui::vec2(self.loupe.display_radius * 1.6, 28.0),
+                                    );
+                                    if button_rect.contains(mouse_pos) {
+                                        loupe_selection = Some(*candidate);
+                                        break;
+                                    }
+                                }
+                            } else {
+                                // Clicked outside loupe - close it
+                                loupe_clicked_outside = true;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Process loupe selection (after the borrow ends)
+            if let Some(candidate) = loupe_selection {
+                eprintln!("[LOUPE] Selecting: {:?}", candidate);
+                self.select_candidate(candidate);
+                self.loupe.hide();
+            } else if loupe_clicked_outside {
+                self.loupe.hide();
+                self.status_message = "Selection cancelled".to_string();
+            }
+
+            // Draw magnifying loupe if visible
+            if self.loupe.visible {
+                if let Some(center) = self.loupe.center {
+                    let loupe_screen_center = egui::Pos2::new(
+                        center.x * zoom + canvas_origin.x,
+                        center.y * zoom + canvas_origin.y,
+                    );
+
+                    // Position loupe slightly offset from click point so user can see both
+                    let loupe_offset = egui::vec2(self.loupe.display_radius + 20.0, -self.loupe.display_radius - 20.0);
+                    let loupe_center = loupe_screen_center + loupe_offset;
+
+                    // Keep loupe on screen
+                    let loupe_center = egui::Pos2::new(
+                        loupe_center.x.clamp(self.loupe.display_radius, response.rect.max.x - self.loupe.display_radius),
+                        loupe_center.y.clamp(self.loupe.display_radius + response.rect.min.y, response.rect.max.y - self.loupe.display_radius),
+                    );
+
+                    // Draw loupe background (dark circle with border)
+                    painter.circle_filled(
+                        loupe_center,
+                        self.loupe.display_radius,
+                        egui::Color32::from_rgb(40, 40, 50),
+                    );
+                    painter.circle_stroke(
+                        loupe_center,
+                        self.loupe.display_radius,
+                        egui::Stroke::new(3.0, egui::Color32::from_rgb(100, 150, 255)),
+                    );
+
+                    // Draw crosshair at center
+                    let cross_size = 10.0;
+                    painter.line_segment(
+                        [loupe_center - egui::vec2(cross_size, 0.0), loupe_center + egui::vec2(cross_size, 0.0)],
+                        egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(255, 255, 255, 100)),
+                    );
+                    painter.line_segment(
+                        [loupe_center - egui::vec2(0.0, cross_size), loupe_center + egui::vec2(0.0, cross_size)],
+                        egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(255, 255, 255, 100)),
+                    );
+
+                    // Draw candidates as labeled items
+                    let item_spacing = 35.0;
+                    let start_y = loupe_center.y - (self.loupe.candidates.len() as f32 - 1.0) * item_spacing / 2.0;
+
+                    for (i, candidate) in self.loupe.candidates.iter().enumerate() {
+                        let item_y = start_y + i as f32 * item_spacing;
+                        let item_center = egui::Pos2::new(loupe_center.x, item_y);
+
+                        // Get candidate info
+                        let (label, color) = match candidate {
+                            ClickCandidate::Node(id) => {
+                                let name = self.current_diagram()
+                                    .and_then(|s| s.diagram.find_node(*id))
+                                    .map(|n| n.name().to_string())
+                                    .unwrap_or_else(|| "Node".to_string());
+                                (format!("📦 {}", name), egui::Color32::from_rgb(255, 220, 150))
+                            }
+                            ClickCandidate::Endpoint(_, is_source) => {
+                                let label = if *is_source { "⬤ Source" } else { "⬤ Target" };
+                                (label.to_string(), egui::Color32::from_rgb(100, 149, 237))
+                            }
+                            ClickCandidate::Pivot(_, idx) => {
+                                (format!("◉ Pivot {}", idx + 1), egui::Color32::GOLD)
+                            }
+                            ClickCandidate::Label(_) => {
+                                ("📝 Label".to_string(), egui::Color32::WHITE)
+                            }
+                            ClickCandidate::Connection(_) => {
+                                ("➜ Connection".to_string(), egui::Color32::LIGHT_GRAY)
+                            }
+                        };
+
+                        // Draw selection button background
+                        let button_rect = egui::Rect::from_center_size(
+                            item_center,
+                            egui::vec2(self.loupe.display_radius * 1.6, 28.0),
+                        );
+
+                        // Check if mouse is over this item for highlight
+                        let mouse_over = ui.ctx().input(|i| {
+                            i.pointer.hover_pos()
+                                .map(|p| button_rect.contains(p))
+                                .unwrap_or(false)
+                        });
+
+                        let bg_color = if mouse_over {
+                            egui::Color32::from_rgb(80, 100, 140)
+                        } else {
+                            egui::Color32::from_rgb(60, 60, 70)
+                        };
+
+                        painter.rect_filled(button_rect, egui::Rounding::same(4.0), bg_color);
+                        painter.rect_stroke(button_rect, egui::Rounding::same(4.0), egui::Stroke::new(1.0, color));
+
+                        // Draw label
+                        painter.text(
+                            item_center,
+                            egui::Align2::CENTER_CENTER,
+                            &label,
+                            egui::FontId::proportional(14.0),
+                            color,
+                        );
+                    }
+
+                    // Draw instruction text
+                    painter.text(
+                        egui::Pos2::new(loupe_center.x, loupe_center.y + self.loupe.display_radius - 15.0),
+                        egui::Align2::CENTER_CENTER,
+                        "Click to select, Esc to cancel",
+                        egui::FontId::proportional(10.0),
+                        egui::Color32::from_rgba_unmultiplied(200, 200, 200, 180),
+                    );
                 }
             }
 
@@ -3060,14 +3592,59 @@ impl eframe::App for JmtApp {
                     } else {
                         // Complete marquee selection
                         if let Some(rect) = self.selection_rect.to_core_rect() {
+                            // First pass: find pivot points in rect (immutable borrow)
+                            let pivot_info: Option<(uuid::Uuid, usize, usize)> = self.current_diagram()
+                                .map(|state| {
+                                    let mut pivots_selected = 0;
+                                    let mut conn_to_select = None;
+                                    for conn in state.diagram.connections() {
+                                        for (idx, pivot) in conn.pivot_points.iter().enumerate() {
+                                            if rect.contains_point(*pivot) {
+                                                conn_to_select = Some((conn.id, idx));
+                                                pivots_selected += 1;
+                                            }
+                                        }
+                                    }
+                                    conn_to_select.map(|(id, idx)| (id, idx, pivots_selected))
+                                })
+                                .flatten();
+
+                            // Second pass: do the selection (mutable borrow)
                             if let Some(state) = self.current_diagram_mut() {
                                 state.diagram.select_elements_in_rect(&rect);
-                                let count = state.diagram.selected_elements_in_order().len();
-                                if count > 0 {
-                                    self.status_message = format!("Selected {} node(s)", count);
-                                } else {
-                                    self.status_message = "Ready".to_string();
+
+                                // Select connection with pivot points
+                                if let Some((conn_id, _, _)) = pivot_info {
+                                    state.diagram.select_connection(conn_id);
                                 }
+                            }
+
+                            // Set selected pivot (no borrow conflict now)
+                            if let Some((conn_id, pivot_idx, _)) = pivot_info {
+                                self.selected_pivot = Some((conn_id, pivot_idx));
+                            }
+
+                            // Build status message
+                            let (node_count, conn_selected) = self.current_diagram()
+                                .map(|state| (
+                                    state.diagram.selected_nodes().len(),
+                                    state.diagram.selected_connection().is_some()
+                                ))
+                                .unwrap_or((0, false));
+
+                            let pivots_selected = pivot_info.map(|(_, _, count)| count).unwrap_or(0);
+
+                            if node_count > 0 || conn_selected {
+                                let mut parts = Vec::new();
+                                if node_count > 0 {
+                                    parts.push(format!("{} node(s)", node_count));
+                                }
+                                if pivots_selected > 0 {
+                                    parts.push(format!("{} pivot(s)", pivots_selected));
+                                }
+                                self.status_message = format!("Selected {}", parts.join(", "));
+                            } else {
+                                self.status_message = "Ready".to_string();
                             }
                         }
                     }

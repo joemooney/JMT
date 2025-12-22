@@ -91,6 +91,13 @@ impl MenuBar {
                     }
                     ui.close_menu();
                 }
+
+                ui.separator();
+
+                if ui.button("⚙ Settings...").clicked() {
+                    app.show_settings_window = true;
+                    ui.close_menu();
+                }
             });
 
             // Convert menu

@@ -159,6 +159,29 @@ impl Toolbar {
             if ui.button("+").on_hover_text("Zoom in (Ctrl+Scroll up)").clicked() {
                 app.zoom_in();
             }
+
+            ui.separator();
+
+            // Selection disambiguation mode
+            ui.label("Select:");
+            let mode_label = match app.selection_mode {
+                crate::app::SelectionMode::Cycle => "🔄 Cycle",
+                crate::app::SelectionMode::Loupe => "🔍 Loupe",
+            };
+            egui::ComboBox::from_id_salt("selection_mode")
+                .selected_text(mode_label)
+                .show_ui(ui, |ui| {
+                    ui.selectable_value(
+                        &mut app.selection_mode,
+                        crate::app::SelectionMode::Cycle,
+                        "🔄 Cycle - click repeatedly to cycle"
+                    );
+                    ui.selectable_value(
+                        &mut app.selection_mode,
+                        crate::app::SelectionMode::Loupe,
+                        "🔍 Loupe - popup menu to select"
+                    );
+                });
         });
     }
 

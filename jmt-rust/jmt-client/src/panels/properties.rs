@@ -1,8 +1,17 @@
 //! Properties panel for editing selected elements
 
 use eframe::egui;
-use jmt_core::{Node, NodeId, TitleStyle};
+use jmt_core::{Node, NodeId, TitleStyle, ConnectionId};
 use crate::app::JmtApp;
+
+/// What to display in the properties panel
+enum ShowMode {
+    SingleNode(NodeId),
+    Connection(ConnectionId),
+    MultipleNodes(usize),
+    DiagramProperties,
+    NoDiagram,
+}
 
 /// Actions that the properties panel can request
 #[derive(Debug, Clone)]
@@ -24,48 +33,68 @@ impl PropertiesPanel {
 
         let mut action: Option<PropertiesAction> = None;
 
-        if let Some(state) = app.current_diagram_mut() {
-            let selected_nodes = state.diagram.selected_nodes();
-            let selected_conn = state.diagram.selected_connection();
+        // Check what to show first (to avoid borrow issues)
+        let show_mode = {
+            if let Some(state) = app.current_diagram() {
+                let selected_nodes = state.diagram.selected_nodes();
+                let selected_conn = state.diagram.selected_connection();
 
-            if selected_nodes.len() == 1 {
-                // Show node properties
-                let node_id = selected_nodes[0];
-
-                // Get region info before getting mutable reference
-                let region_info = state.diagram.find_node(node_id)
-                    .and_then(|n| n.parent_region_id())
-                    .map(|rid| {
-                        let name = state.diagram.find_region_name(rid)
-                            .unwrap_or_else(|| "Unknown".to_string());
-                        let parent_state = state.diagram.find_region_parent_state(rid)
-                            .map(|s| s.name.clone());
-                        (name, parent_state)
-                    });
-
-                if let Some(node) = state.diagram.find_node_mut(node_id) {
-                    action = Self::show_node_properties(ui, node, &mut state.modified, region_info);
+                if selected_nodes.len() == 1 {
+                    ShowMode::SingleNode(selected_nodes[0])
+                } else if let Some(conn_id) = selected_conn {
+                    ShowMode::Connection(conn_id)
+                } else if selected_nodes.len() > 1 {
+                    ShowMode::MultipleNodes(selected_nodes.len())
+                } else {
+                    ShowMode::DiagramProperties
                 }
-            } else if let Some(conn_id) = selected_conn {
-                // Show connection properties
-                let mut needs_recalculate = false;
-                if let Some(conn) = state.diagram.find_connection_mut(conn_id) {
-                    needs_recalculate = Self::show_connection_properties(ui, conn, &mut state.modified);
-                }
-
-                if needs_recalculate {
-                    state.diagram.recalculate_connections();
-                }
-            } else if selected_nodes.len() > 1 {
-                // Multiple nodes selected
-                ui.label(format!("{} nodes selected", selected_nodes.len()));
-                ui.label("Select a single node to edit properties");
             } else {
-                // Nothing selected - show diagram properties
-                Self::show_diagram_properties(ui, state);
+                ShowMode::NoDiagram
             }
-        } else {
-            ui.label("No diagram open");
+        };
+
+        match show_mode {
+            ShowMode::SingleNode(node_id) => {
+                if let Some(state) = app.current_diagram_mut() {
+                    // Get region info before getting mutable reference
+                    let region_info = state.diagram.find_node(node_id)
+                        .and_then(|n| n.parent_region_id())
+                        .map(|rid| {
+                            let name = state.diagram.find_region_name(rid)
+                                .unwrap_or_else(|| "Unknown".to_string());
+                            let parent_state = state.diagram.find_region_parent_state(rid)
+                                .map(|s| s.name.clone());
+                            (name, parent_state)
+                        });
+
+                    if let Some(node) = state.diagram.find_node_mut(node_id) {
+                        action = Self::show_node_properties(ui, node, &mut state.modified, region_info);
+                    }
+                }
+            }
+            ShowMode::Connection(conn_id) => {
+                if let Some(state) = app.current_diagram_mut() {
+                    let mut needs_recalculate = false;
+                    if let Some(conn) = state.diagram.find_connection_mut(conn_id) {
+                        needs_recalculate = Self::show_connection_properties(ui, conn, &mut state.modified);
+                    }
+
+                    if needs_recalculate {
+                        state.diagram.recalculate_connections();
+                    }
+                }
+            }
+            ShowMode::MultipleNodes(count) => {
+                ui.label(format!("{} nodes selected", count));
+                ui.label("Select a single node to edit properties");
+            }
+            ShowMode::DiagramProperties => {
+                // Handle diagram properties separately to access both diagram and settings
+                Self::show_diagram_properties_with_settings(ui, app);
+            }
+            ShowMode::NoDiagram => {
+                ui.label("No diagram open");
+            }
         }
 
         // Handle actions from properties panel
@@ -423,7 +452,21 @@ impl PropertiesPanel {
         needs_recalculate
     }
 
-    fn show_diagram_properties(ui: &mut egui::Ui, state: &mut crate::app::DiagramState) {
+    /// Wrapper to access both diagram state and app settings
+    fn show_diagram_properties_with_settings(ui: &mut egui::Ui, app: &mut JmtApp) {
+        // Access diagram properties directly on the app
+        // We need to split the borrows carefully
+        if let Some(idx) = app.current_diagram_idx() {
+            // Get mutable access to both diagram and settings
+            let diagrams = &mut app.diagrams;
+            let settings = &mut app.settings;
+            if let Some(state) = diagrams.get_mut(idx) {
+                Self::show_diagram_properties(ui, state, settings);
+            }
+        }
+    }
+
+    fn show_diagram_properties(ui: &mut egui::Ui, state: &mut crate::app::DiagramState, settings: &mut crate::app::AppSettings) {
         ui.label("Diagram");
 
         ui.horizontal(|ui| {
@@ -474,5 +517,66 @@ impl PropertiesPanel {
         ui.label("Statistics:");
         ui.label(format!("  Nodes: {}", state.diagram.nodes().len()));
         ui.label(format!("  Connections: {}", state.diagram.connections().len()));
+
+        // App Settings section
+        ui.separator();
+        ui.collapsing("⚙ Selection Settings", |ui| {
+            ui.horizontal(|ui| {
+                ui.label("Sensitivity:");
+                ui.add(egui::Slider::new(&mut settings.selection_sensitivity, 4.0..=30.0)
+                    .suffix(" px"))
+                    .on_hover_text("Radius for detecting overlapping items");
+            });
+
+            ui.horizontal(|ui| {
+                ui.label("Pivot Hit:");
+                ui.add(egui::Slider::new(&mut settings.pivot_hit_tolerance, 4.0..=25.0)
+                    .suffix(" px"))
+                    .on_hover_text("Hit tolerance for pivot points");
+            });
+
+            ui.horizontal(|ui| {
+                ui.label("Connection Hit:");
+                ui.add(egui::Slider::new(&mut settings.connection_hit_tolerance, 4.0..=25.0)
+                    .suffix(" px"))
+                    .on_hover_text("Hit tolerance for connection lines");
+            });
+
+            ui.horizontal(|ui| {
+                ui.label("Corner Margin:");
+                ui.add(egui::Slider::new(&mut settings.corner_hit_margin, 5.0..=30.0)
+                    .suffix(" px"))
+                    .on_hover_text("Hit margin for resize corners");
+            });
+
+            ui.horizontal(|ui| {
+                ui.label("Loupe Size:");
+                ui.add(egui::Slider::new(&mut settings.loupe_display_radius, 60.0..=200.0)
+                    .suffix(" px"))
+                    .on_hover_text("Size of loupe popup");
+            });
+        });
+
+        ui.collapsing("⚙ Visual Settings", |ui| {
+            ui.checkbox(&mut settings.show_debug_info, "Show Debug Info")
+                .on_hover_text("Show debug info in status bar");
+
+            ui.checkbox(&mut settings.highlight_on_hover, "Highlight on Hover")
+                .on_hover_text("Highlight nodes when hovering over them");
+
+            ui.checkbox(&mut settings.show_grid, "Show Grid")
+                .on_hover_text("Display grid in diagram");
+
+            if settings.show_grid {
+                ui.horizontal(|ui| {
+                    ui.label("Grid Size:");
+                    ui.add(egui::Slider::new(&mut settings.grid_size, 5.0..=50.0)
+                        .suffix(" px"));
+                });
+            }
+
+            ui.checkbox(&mut settings.snap_to_grid, "Snap to Grid")
+                .on_hover_text("Snap elements to grid when moving");
+        });
     }
 }
