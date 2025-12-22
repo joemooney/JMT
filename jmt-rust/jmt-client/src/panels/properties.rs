@@ -1,7 +1,7 @@
 //! Properties panel for editing selected elements
 
 use eframe::egui;
-use jmt_core::{Node, TitleStyle, RoutingStyle};
+use jmt_core::{Node, TitleStyle};
 use crate::app::JmtApp;
 
 pub struct PropertiesPanel;
@@ -35,17 +35,9 @@ impl PropertiesPanel {
                 }
             } else if let Some(conn_id) = selected_conn {
                 // Show connection properties
-                // Capture old routing style to detect changes
-                let old_routing_style = state.diagram.find_connection(conn_id)
-                    .map(|c| c.routing_style);
-
                 let mut needs_recalculate = false;
                 if let Some(conn) = state.diagram.find_connection_mut(conn_id) {
-                    Self::show_connection_properties(ui, conn, &mut state.modified);
-                    // Check if routing style changed
-                    if old_routing_style != Some(conn.routing_style) {
-                        needs_recalculate = true;
-                    }
+                    needs_recalculate = Self::show_connection_properties(ui, conn, &mut state.modified);
                 }
 
                 if needs_recalculate {
@@ -179,7 +171,10 @@ impl PropertiesPanel {
         ui.label(format!("  Size: {:.0} x {:.0}", bounds.width(), bounds.height()));
     }
 
-    fn show_connection_properties(ui: &mut egui::Ui, conn: &mut jmt_core::Connection, modified: &mut bool) {
+    /// Show connection properties. Returns true if segments need recalculation.
+    fn show_connection_properties(ui: &mut egui::Ui, conn: &mut jmt_core::Connection, modified: &mut bool) -> bool {
+        let mut needs_recalculate = false;
+
         ui.label("Transition");
 
         ui.horizontal(|ui| {
@@ -234,23 +229,60 @@ impl PropertiesPanel {
 
         ui.separator();
 
-        // Routing style dropdown
-        ui.horizontal(|ui| {
-            ui.label("Routing:");
-            egui::ComboBox::from_id_salt("routing_style")
-                .selected_text(conn.routing_style.display_name())
-                .show_ui(ui, |ui| {
-                    for style in RoutingStyle::all() {
-                        if ui.selectable_value(
-                            &mut conn.routing_style,
-                            *style,
-                            style.display_name(),
-                        ).clicked() {
-                            *modified = true;
+        // Show pivot points info
+        let num_pivots = conn.pivot_points.len();
+        if num_pivots > 0 {
+            ui.label(format!("Pivot Points: {}", num_pivots));
+
+            // Segment curve toggles
+            let num_segments = num_pivots + 1;
+            ui.label("Segments:");
+
+            // Ensure segment_curves has correct length
+            while conn.segment_curves.len() < num_segments {
+                conn.segment_curves.push(false);
+            }
+            conn.segment_curves.truncate(num_segments);
+
+            for i in 0..num_segments {
+                let label = if num_segments == 1 {
+                    "Direct".to_string()
+                } else if i == 0 {
+                    "Start → P1".to_string()
+                } else if i == num_segments - 1 {
+                    format!("P{} → End", i)
+                } else {
+                    format!("P{} → P{}", i, i + 1)
+                };
+
+                ui.horizontal(|ui| {
+                    let was_curved = conn.segment_curves[i];
+                    if ui.checkbox(&mut conn.segment_curves[i], "").changed() {
+                        *modified = true;
+                        if was_curved != conn.segment_curves[i] {
+                            needs_recalculate = true;
                         }
                     }
+                    let style = if conn.segment_curves[i] { "Curved" } else { "Straight" };
+                    ui.label(format!("{}: {}", label, style));
                 });
-        });
+            }
+
+            ui.separator();
+
+            // Clear pivot points button
+            if ui.button("Clear Pivot Points").clicked() {
+                conn.pivot_points.clear();
+                conn.segment_curves.clear();
+                *modified = true;
+                needs_recalculate = true;
+            }
+        } else {
+            ui.label("Pivot Points: 0");
+            ui.label("Double-click on connection to add pivot points");
+        }
+
+        needs_recalculate
     }
 
     fn show_diagram_properties(ui: &mut egui::Ui, state: &mut crate::app::DiagramState) {

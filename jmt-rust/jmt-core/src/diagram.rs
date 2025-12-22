@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use crate::geometry::{Point, Rect};
 use crate::node::{Node, NodeId, NodeType, State, PseudoState, PseudoStateKind, Region};
-use crate::connection::{Connection, ConnectionId, RoutingStyle};
+use crate::connection::{Connection, ConnectionId};
 use crate::settings::DiagramSettings;
 use crate::diagram_type::DiagramType;
 
@@ -1701,16 +1701,7 @@ impl Diagram {
                 .map(|(_, b)| b.clone());
 
             if let (Some(sb), Some(tb)) = (source_bounds, target_bounds) {
-                if conn.routing_style == RoutingStyle::OrthogonalAuto {
-                    // Get obstacles (all nodes except source and target)
-                    let obstacles: Vec<Rect> = all_bounds.iter()
-                        .filter(|(id, _)| *id != conn.source_id && *id != conn.target_id)
-                        .map(|(_, b)| b.clone())
-                        .collect();
-                    conn.calculate_segments_with_obstacles(&sb, &tb, &obstacles, stub_len);
-                } else {
-                    conn.calculate_segments(&sb, &tb, stub_len);
-                }
+                conn.calculate_segments(&sb, &tb, stub_len);
             }
         }
     }

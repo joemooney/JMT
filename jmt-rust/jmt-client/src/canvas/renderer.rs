@@ -1,7 +1,7 @@
 //! Diagram rendering using egui Painter
 
 use eframe::egui::{self, Color32, Pos2, Rect, Rounding, Stroke, Vec2};
-use jmt_core::{Diagram, Node, Connection, DiagramType, TitleStyle, RoutingStyle};
+use jmt_core::{Diagram, Node, Connection, DiagramType, TitleStyle};
 use jmt_core::connection::PathSegment;
 use jmt_core::node::{PseudoStateKind, Side};
 use jmt_core::geometry::Color;
@@ -512,14 +512,10 @@ impl DiagramCanvas {
 
         // Draw arrowhead at target
         if let Some(end_point) = conn.end_point() {
-            // For Arc style, calculate arrow direction from curve tangent
-            let arrow_side = if conn.routing_style == RoutingStyle::Arc {
-                // Use the last segment's direction for arrow orientation
-                if let Some(last_seg) = conn.segments.last() {
-                    Self::side_from_direction(last_seg.start, last_seg.end)
-                } else {
-                    conn.target_side
-                }
+            // For curved segments, calculate arrow direction from curve tangent
+            // Use the last segment's direction for arrow orientation
+            let arrow_side = if let Some(last_seg) = conn.segments.last() {
+                Self::side_from_direction(last_seg.start, last_seg.end)
             } else {
                 conn.target_side
             };
@@ -532,6 +528,51 @@ impl DiagramCanvas {
                 stroke,
                 zoom,
             );
+        }
+
+        // Draw pivot point handles when connection is selected
+        if conn.selected {
+            let handle_radius = 5.0 * zoom;
+            let handle_stroke = Stroke::new(zoom, Color32::BLACK);
+
+            // Draw source endpoint handle (square, blue)
+            if let Some(start) = conn.start_point() {
+                let src_screen = self.scale_pos(start.x, start.y, zoom);
+                let handle_size = egui::vec2(handle_radius * 2.0, handle_radius * 2.0);
+                painter.rect_filled(
+                    egui::Rect::from_center_size(src_screen, handle_size),
+                    0.0,
+                    Color32::from_rgb(100, 149, 237), // Cornflower blue
+                );
+                painter.rect_stroke(
+                    egui::Rect::from_center_size(src_screen, handle_size),
+                    0.0,
+                    handle_stroke,
+                );
+            }
+
+            // Draw target endpoint handle (square, blue)
+            if let Some(end) = conn.end_point() {
+                let tgt_screen = self.scale_pos(end.x, end.y, zoom);
+                let handle_size = egui::vec2(handle_radius * 2.0, handle_radius * 2.0);
+                painter.rect_filled(
+                    egui::Rect::from_center_size(tgt_screen, handle_size),
+                    0.0,
+                    Color32::from_rgb(100, 149, 237), // Cornflower blue
+                );
+                painter.rect_stroke(
+                    egui::Rect::from_center_size(tgt_screen, handle_size),
+                    0.0,
+                    handle_stroke,
+                );
+            }
+
+            // Draw pivot point handles (circles, gold)
+            for pivot in &conn.pivot_points {
+                let screen_pos = self.scale_pos(pivot.x, pivot.y, zoom);
+                painter.circle_filled(screen_pos, handle_radius, Color32::GOLD);
+                painter.circle_stroke(screen_pos, handle_radius, handle_stroke);
+            }
         }
 
         // Draw label if present

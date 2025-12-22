@@ -81,6 +81,17 @@ impl ResizeState {
     }
 }
 
+/// Type of pivot/endpoint drag operation
+#[derive(Debug, Clone, Copy)]
+enum PivotDragType {
+    /// Dragging a pivot point (index in pivot_points)
+    Pivot(usize),
+    /// Dragging the source endpoint
+    Source,
+    /// Dragging the target endpoint
+    Target,
+}
+
 /// State for a single open diagram
 pub struct DiagramState {
     pub diagram: Diagram,
@@ -147,6 +158,12 @@ pub struct JmtApp {
     /// Region separator being dragged: (state_id, region_index)
     /// region_index refers to the region whose top edge is being dragged
     dragging_separator: Option<(uuid::Uuid, usize)>,
+    /// Pivot point being dragged: (connection_id, pivot_index)
+    dragging_pivot: Option<(uuid::Uuid, usize)>,
+    /// Endpoint being dragged: (connection_id, is_source)
+    dragging_endpoint: Option<(uuid::Uuid, bool)>,
+    /// Selected pivot point for deletion: (connection_id, pivot_index)
+    selected_pivot: Option<(uuid::Uuid, usize)>,
     /// Current cursor position on canvas (for preview rendering)
     pub cursor_pos: Option<egui::Pos2>,
     /// Active resize state (when resizing a node by corner)
@@ -177,6 +194,9 @@ impl Default for JmtApp {
             dragging_nodes: false,
             dragging_label: None,
             dragging_separator: None,
+            dragging_pivot: None,
+            dragging_endpoint: None,
+            selected_pivot: None,
             cursor_pos: None,
             resize_state: ResizeState::default(),
             lasso_points: Vec::new(),
@@ -201,6 +221,67 @@ impl JmtApp {
     /// Get the current diagram mutably
     pub fn current_diagram_mut(&mut self) -> Option<&mut DiagramState> {
         self.diagrams.get_mut(self.active_diagram)
+    }
+
+    /// Check if a point is on a pivot point or endpoint of a selected connection
+    /// Returns (connection_id, drag_type) if found
+    fn check_pivot_or_endpoint_at(&self, pos: Point) -> Option<(uuid::Uuid, PivotDragType)> {
+        let state = self.current_diagram()?;
+
+        // Check only the selected connection
+        let conn_id = state.diagram.selected_connection()?;
+        let conn = state.diagram.find_connection(conn_id)?;
+
+        // First check pivot points (gold circles)
+        if let Some(pivot_idx) = conn.find_pivot_at(pos, 8.0) {
+            return Some((conn_id, PivotDragType::Pivot(pivot_idx)));
+        }
+
+        // Check endpoints
+        let source_node = state.diagram.find_node(conn.source_id)?;
+        let target_node = state.diagram.find_node(conn.target_id)?;
+        let source_bounds = source_node.bounds();
+        let target_bounds = target_node.bounds();
+
+        if let Some(is_source) = conn.find_endpoint_at(pos, source_bounds, target_bounds, 8.0) {
+            if is_source {
+                return Some((conn_id, PivotDragType::Source));
+            } else {
+                return Some((conn_id, PivotDragType::Target));
+            }
+        }
+
+        None
+    }
+
+    /// Find the nearest side and offset on a node bounds for a given point
+    fn find_nearest_side_and_offset(bounds: &Rect, pos: Point) -> (jmt_core::node::Side, f32) {
+        use jmt_core::node::Side;
+
+        let center_x = (bounds.x1 + bounds.x2) / 2.0;
+        let center_y = (bounds.y1 + bounds.y2) / 2.0;
+
+        // Distance to each side
+        let dist_top = (pos.y - bounds.y1).abs();
+        let dist_bottom = (pos.y - bounds.y2).abs();
+        let dist_left = (pos.x - bounds.x1).abs();
+        let dist_right = (pos.x - bounds.x2).abs();
+
+        let min_dist = dist_top.min(dist_bottom).min(dist_left).min(dist_right);
+
+        if min_dist == dist_top {
+            let offset = (pos.x - center_x).clamp(-(bounds.width()/2.0 - 10.0), bounds.width()/2.0 - 10.0);
+            (Side::Top, offset)
+        } else if min_dist == dist_bottom {
+            let offset = (pos.x - center_x).clamp(-(bounds.width()/2.0 - 10.0), bounds.width()/2.0 - 10.0);
+            (Side::Bottom, offset)
+        } else if min_dist == dist_left {
+            let offset = (pos.y - center_y).clamp(-(bounds.height()/2.0 - 10.0), bounds.height()/2.0 - 10.0);
+            (Side::Left, offset)
+        } else {
+            let offset = (pos.y - center_y).clamp(-(bounds.height()/2.0 - 10.0), bounds.height()/2.0 - 10.0);
+            (Side::Right, offset)
+        }
     }
 
     /// Create a new diagram
@@ -1543,11 +1624,31 @@ impl JmtApp {
         let text_edit_has_focus = ctx.memory(|m| m.focused().is_some()) && ctx.wants_keyboard_input();
 
         if !text_edit_has_focus && ctx.input(|i| i.key_pressed(egui::Key::Delete) || i.key_pressed(egui::Key::Backspace)) {
-            if let Some(state) = self.current_diagram_mut() {
-                state.diagram.push_undo();
-                state.diagram.delete_selected();
-                state.modified = true;
-                self.status_message = "Deleted".to_string();
+            // First check if we have a selected pivot point to delete
+            if let Some((conn_id, pivot_idx)) = self.selected_pivot.take() {
+                if let Some(state) = self.current_diagram_mut() {
+                    state.diagram.push_undo();
+                    if let Some(conn) = state.diagram.find_connection_mut(conn_id) {
+                        if pivot_idx < conn.pivot_points.len() {
+                            conn.pivot_points.remove(pivot_idx);
+                            // Also remove the corresponding segment curve flag
+                            if pivot_idx < conn.segment_curves.len() {
+                                conn.segment_curves.remove(pivot_idx);
+                            }
+                        }
+                    }
+                    state.diagram.recalculate_connections();
+                    state.modified = true;
+                    self.status_message = "Pivot point deleted".to_string();
+                }
+            } else {
+                // No pivot selected, delete selected elements as before
+                if let Some(state) = self.current_diagram_mut() {
+                    state.diagram.push_undo();
+                    state.diagram.delete_selected();
+                    state.modified = true;
+                    self.status_message = "Deleted".to_string();
+                }
             }
         }
 
@@ -1884,13 +1985,34 @@ impl eframe::App for JmtApp {
                                 state.diagram.adjust_for_label_overlap(conn_id);
                             }
                             self.status_message = "Label adjoined to connection".to_string();
-                        } else if self.edit_mode.is_add_node() {
-                            // Double-click in add mode: first click already added node, switch to Arrow
-                            self.set_edit_mode(EditMode::Arrow);
-                            self.status_message = "Switched to Arrow mode".to_string();
                         } else {
-                            // For non-add modes, handle normally (e.g., Arrow mode selection)
-                            self.handle_canvas_click(diagram_pos, true, ctrl_held);
+                            // Check if double-clicked on a connection to add pivot point
+                            let conn_clicked = self.current_diagram()
+                                .and_then(|state| state.diagram.find_connection_at(point, 10.0));
+
+                            if let Some(conn_id) = conn_clicked {
+                                // Add pivot point at click location
+                                if let Some(state) = self.current_diagram_mut() {
+                                    state.diagram.push_undo();
+                                    if let Some(conn) = state.diagram.find_connection_mut(conn_id) {
+                                        // Find which segment was clicked and insert pivot there
+                                        let insert_idx = conn.find_segment_at(point, 10.0);
+                                        conn.pivot_points.insert(insert_idx, point);
+                                        // Also insert a curve flag for the new segment created
+                                        conn.segment_curves.insert(insert_idx, false);
+                                        state.modified = true;
+                                    }
+                                    state.diagram.recalculate_connections();
+                                }
+                                self.status_message = "Pivot point added".to_string();
+                            } else if self.edit_mode.is_add_node() {
+                                // Double-click in add mode: first click already added node, switch to Arrow
+                                self.set_edit_mode(EditMode::Arrow);
+                                self.status_message = "Switched to Arrow mode".to_string();
+                            } else {
+                                // For non-add modes, handle normally (e.g., Arrow mode selection)
+                                self.handle_canvas_click(diagram_pos, true, ctrl_held);
+                            }
                         }
                     } else {
                         // Single click: record time/pos for potential double-click detection
@@ -1978,78 +2100,110 @@ impl eframe::App for JmtApp {
                             self.dragging_label = None;
                             self.selection_rect.clear();
                         } else {
-                        // First check if we clicked on a connection label (for label dragging)
-                        let clicked_label = self.current_diagram()
-                            .and_then(|state| state.diagram.find_connection_label_at(point));
+                            // Check if we clicked on a pivot point or endpoint (for dragging)
+                            let pivot_or_endpoint = self.check_pivot_or_endpoint_at(point);
+                            if let Some((conn_id, drag_type)) = pivot_or_endpoint {
+                                if let Some(state) = self.current_diagram_mut() {
+                                    state.diagram.push_undo();
+                                }
+                                match drag_type {
+                                    PivotDragType::Pivot(idx) => {
+                                        self.dragging_pivot = Some((conn_id, idx));
+                                        self.selected_pivot = Some((conn_id, idx));
+                                        self.status_message = format!("Dragging pivot point {} (Delete to remove)", idx + 1);
+                                    }
+                                    PivotDragType::Source => {
+                                        self.dragging_endpoint = Some((conn_id, true));
+                                        self.selected_pivot = None;
+                                        self.status_message = "Dragging source endpoint".to_string();
+                                    }
+                                    PivotDragType::Target => {
+                                        self.dragging_endpoint = Some((conn_id, false));
+                                        self.selected_pivot = None;
+                                        self.status_message = "Dragging target endpoint".to_string();
+                                    }
+                                }
+                                self.dragging_nodes = false;
+                                self.dragging_label = None;
+                                self.selection_rect.clear();
+                            } else {
+                                // First check if we clicked on a connection label (for label dragging)
+                                let clicked_label = self.current_diagram()
+                                    .and_then(|state| state.diagram.find_connection_label_at(point));
 
-                        if let Some(conn_id) = clicked_label {
-                            // Start dragging a label
-                            if let Some(state) = self.current_diagram_mut() {
-                                state.diagram.select_connection_label(conn_id);
-                                state.diagram.push_undo();
+                                if let Some(conn_id) = clicked_label {
+                                    // Start dragging a label
+                                    if let Some(state) = self.current_diagram_mut() {
+                                        state.diagram.select_connection_label(conn_id);
+                                        state.diagram.push_undo();
 
-                                // Mark label as no longer adjoined when user starts dragging
-                                if let Some(conn) = state.diagram.find_connection_mut(conn_id) {
-                                    if conn.text_adjoined {
-                                        conn.text_adjoined = false;
-                                        // Initialize label_offset from current default position
-                                        if conn.label_offset.is_none() {
-                                            conn.label_offset = Some((0.0, -15.0));
+                                        // Mark label as no longer adjoined when user starts dragging
+                                        if let Some(conn) = state.diagram.find_connection_mut(conn_id) {
+                                            if conn.text_adjoined {
+                                                conn.text_adjoined = false;
+                                                // Initialize label_offset from current default position
+                                                if conn.label_offset.is_none() {
+                                                    conn.label_offset = Some((0.0, -15.0));
+                                                }
+                                            }
+                                        }
+                                    }
+                                    self.dragging_label = Some(conn_id);
+                                    self.dragging_nodes = false;
+                                    self.selected_pivot = None;
+                                    self.selection_rect.clear();
+                                } else {
+                                    // Check if we clicked on any element (for dragging)
+                                    let clicked_element_id = self.current_diagram()
+                                        .and_then(|state| state.diagram.find_element_at(point));
+
+                                    if let Some(element_id) = clicked_element_id {
+                                        // Dragging on an element - switch to Arrow mode and start dragging
+                                        if self.edit_mode != EditMode::Arrow {
+                                            self.set_edit_mode(EditMode::Arrow);
+                                        }
+
+                                        // Select the element if not already selected
+                                        if let Some(state) = self.current_diagram_mut() {
+                                            let already_selected = state.diagram.selected_elements_in_order().contains(&element_id);
+                                            if !already_selected {
+                                                // Select this element (this allows click-and-drag in one motion)
+                                                state.diagram.select_element(element_id);
+                                            }
+                                            // Push undo before we start moving
+                                            state.diagram.push_undo();
+                                        }
+                                        self.dragging_nodes = true;
+                                        self.dragging_label = None;
+                                        self.selected_pivot = None;
+                                        self.selection_rect.clear();
+                                    } else if self.edit_mode == EditMode::Arrow {
+                                        // We're starting a marquee selection (only in Arrow mode)
+                                        // Store screen coordinates for the selection rectangle
+                                        self.dragging_nodes = false;
+                                        self.dragging_label = None;
+                                        self.selected_pivot = None;
+                                        self.selection_rect.start = Some(diagram_pos);
+                                        self.selection_rect.current = Some(diagram_pos);
+                                        // Clear current selection when starting a new marquee
+                                        if let Some(state) = self.current_diagram_mut() {
+                                            state.diagram.clear_selection();
+                                        }
+                                    } else if self.edit_mode == EditMode::Lasso {
+                                        // We're starting a lasso selection
+                                        self.dragging_nodes = false;
+                                        self.dragging_label = None;
+                                        self.selected_pivot = None;
+                                        self.lasso_points.clear();
+                                        self.lasso_points.push(diagram_pos);
+                                        // Clear current selection when starting a new lasso
+                                        if let Some(state) = self.current_diagram_mut() {
+                                            state.diagram.clear_selection();
                                         }
                                     }
                                 }
                             }
-                            self.dragging_label = Some(conn_id);
-                            self.dragging_nodes = false;
-                            self.selection_rect.clear();
-                        } else {
-                            // Check if we clicked on any element (for dragging)
-                            let clicked_element_id = self.current_diagram()
-                                .and_then(|state| state.diagram.find_element_at(point));
-
-                            if let Some(element_id) = clicked_element_id {
-                                // Dragging on an element - switch to Arrow mode and start dragging
-                                if self.edit_mode != EditMode::Arrow {
-                                    self.set_edit_mode(EditMode::Arrow);
-                                }
-
-                                // Select the element if not already selected
-                                if let Some(state) = self.current_diagram_mut() {
-                                    let already_selected = state.diagram.selected_elements_in_order().contains(&element_id);
-                                    if !already_selected {
-                                        // Select this element (this allows click-and-drag in one motion)
-                                        state.diagram.select_element(element_id);
-                                    }
-                                    // Push undo before we start moving
-                                    state.diagram.push_undo();
-                                }
-                                self.dragging_nodes = true;
-                                self.dragging_label = None;
-                                self.selection_rect.clear();
-                            } else if self.edit_mode == EditMode::Arrow {
-                                // We're starting a marquee selection (only in Arrow mode)
-                                // Store screen coordinates for the selection rectangle
-                                self.dragging_nodes = false;
-                                self.dragging_label = None;
-                                self.selection_rect.start = Some(diagram_pos);
-                                self.selection_rect.current = Some(diagram_pos);
-                                // Clear current selection when starting a new marquee
-                                if let Some(state) = self.current_diagram_mut() {
-                                    state.diagram.clear_selection();
-                                }
-                            } else if self.edit_mode == EditMode::Lasso {
-                                // We're starting a lasso selection
-                                self.dragging_nodes = false;
-                                self.dragging_label = None;
-                                self.lasso_points.clear();
-                                self.lasso_points.push(diagram_pos);
-                                // Clear current selection when starting a new lasso
-                                if let Some(state) = self.current_diagram_mut() {
-                                    state.diagram.clear_selection();
-                                }
-                            }
                         }
-                        } // Close separator else block
                     }
                 }
             }
@@ -2102,6 +2256,47 @@ impl eframe::App for JmtApp {
                                     conn.set_label_offset(Some(new_offset));
                                 }
                             }
+                            state.modified = true;
+                        }
+                    } else if let Some((conn_id, pivot_idx)) = self.dragging_pivot {
+                        // Dragging a pivot point
+                        let point = Point::new(diagram_pos.x, diagram_pos.y);
+                        if let Some(state) = self.current_diagram_mut() {
+                            if let Some(conn) = state.diagram.find_connection_mut(conn_id) {
+                                if pivot_idx < conn.pivot_points.len() {
+                                    conn.pivot_points[pivot_idx] = point;
+                                }
+                            }
+                            state.diagram.recalculate_connections();
+                            state.modified = true;
+                        }
+                    } else if let Some((conn_id, is_source)) = self.dragging_endpoint {
+                        // Dragging an endpoint - snap to nearest side of connected node
+                        let point = Point::new(diagram_pos.x, diagram_pos.y);
+                        if let Some(state) = self.current_diagram_mut() {
+                            let node_id = if is_source {
+                                state.diagram.find_connection(conn_id).map(|c| c.source_id)
+                            } else {
+                                state.diagram.find_connection(conn_id).map(|c| c.target_id)
+                            };
+
+                            if let Some(nid) = node_id {
+                                if let Some(node) = state.diagram.find_node(nid) {
+                                    let bounds = node.bounds();
+                                    let (side, offset) = Self::find_nearest_side_and_offset(bounds, point);
+
+                                    if let Some(conn) = state.diagram.find_connection_mut(conn_id) {
+                                        if is_source {
+                                            conn.source_side = side;
+                                            conn.source_offset = offset;
+                                        } else {
+                                            conn.target_side = side;
+                                            conn.target_offset = offset;
+                                        }
+                                    }
+                                }
+                            }
+                            state.diagram.recalculate_connections();
                             state.modified = true;
                         }
                     } else if self.edit_mode == EditMode::Arrow {
@@ -2213,6 +2408,14 @@ impl eframe::App for JmtApp {
                     // Finished dragging a label
                     self.dragging_label = None;
                     self.status_message = "Label moved".to_string();
+                } else if self.dragging_pivot.is_some() {
+                    // Finished dragging a pivot point
+                    self.dragging_pivot = None;
+                    self.status_message = "Pivot point moved".to_string();
+                } else if self.dragging_endpoint.is_some() {
+                    // Finished dragging an endpoint
+                    self.dragging_endpoint = None;
+                    self.status_message = "Endpoint moved".to_string();
                 } else if self.resize_state.is_active() {
                     // Finished resizing - re-evaluate all node regions
                     // since resizing a state may affect containment
@@ -2271,6 +2474,8 @@ impl eframe::App for JmtApp {
                 self.selection_rect.clear();
                 self.dragging_nodes = false;
                 self.dragging_label = None;
+                self.dragging_pivot = None;
+                self.dragging_endpoint = None;
             }
             }); // End ScrollArea
         });
