@@ -693,10 +693,12 @@ impl DiagramCanvas {
         let dx = to.x - from.x;
         let dy = to.y - from.y;
 
+        // Return the side where the arrow wings should be drawn
+        // Wings on Left means arrow points Right, etc.
         if dx.abs() > dy.abs() {
-            if dx > 0.0 { Side::Right } else { Side::Left }
+            if dx > 0.0 { Side::Left } else { Side::Right }
         } else {
-            if dy > 0.0 { Side::Bottom } else { Side::Top }
+            if dy > 0.0 { Side::Top } else { Side::Bottom }
         }
     }
 

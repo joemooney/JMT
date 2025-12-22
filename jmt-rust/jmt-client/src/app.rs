@@ -136,6 +136,14 @@ const MAX_ZOOM: f32 = 4.0;
 const ZOOM_STEP: f32 = 0.1;
 /// Zoom step for mouse wheel
 const ZOOM_WHEEL_STEP: f32 = 0.1;
+/// Hit tolerance for pivot points and endpoints (in diagram coordinates)
+const PIVOT_HIT_TOLERANCE: f32 = 12.0;
+/// Hit tolerance for resize corners (in diagram coordinates)
+const CORNER_HIT_MARGIN: f32 = 15.0;
+/// Hit tolerance for connections (in diagram coordinates)
+const CONNECTION_HIT_TOLERANCE: f32 = 12.0;
+/// Minimum distance between pivot points
+const MIN_PIVOT_DISTANCE: f32 = 20.0;
 
 /// The main JMT application
 pub struct JmtApp {
@@ -223,31 +231,56 @@ impl JmtApp {
         self.diagrams.get_mut(self.active_diagram)
     }
 
-    /// Check if a point is on a pivot point or endpoint of a selected connection
+    /// Check if a point is on a pivot point or endpoint of a connection
     /// Returns (connection_id, drag_type) if found
+    /// First checks the selected connection, then checks all connections for endpoints
     fn check_pivot_or_endpoint_at(&self, pos: Point) -> Option<(uuid::Uuid, PivotDragType)> {
         let state = self.current_diagram()?;
 
-        // Check only the selected connection
-        let conn_id = state.diagram.selected_connection()?;
-        let conn = state.diagram.find_connection(conn_id)?;
+        // First, check the selected connection for pivot points and endpoints
+        if let Some(conn_id) = state.diagram.selected_connection() {
+            if let Some(conn) = state.diagram.find_connection(conn_id) {
+                // First check pivot points (gold circles) - only for selected connection
+                if let Some(pivot_idx) = conn.find_pivot_at(pos, PIVOT_HIT_TOLERANCE) {
+                    return Some((conn_id, PivotDragType::Pivot(pivot_idx)));
+                }
 
-        // First check pivot points (gold circles)
-        if let Some(pivot_idx) = conn.find_pivot_at(pos, 8.0) {
-            return Some((conn_id, PivotDragType::Pivot(pivot_idx)));
+                // Check endpoints
+                if let (Some(source_node), Some(target_node)) = (
+                    state.diagram.find_node(conn.source_id),
+                    state.diagram.find_node(conn.target_id),
+                ) {
+                    let source_bounds = source_node.bounds();
+                    let target_bounds = target_node.bounds();
+
+                    if let Some(is_source) = conn.find_endpoint_at(pos, source_bounds, target_bounds, PIVOT_HIT_TOLERANCE) {
+                        if is_source {
+                            return Some((conn_id, PivotDragType::Source));
+                        } else {
+                            return Some((conn_id, PivotDragType::Target));
+                        }
+                    }
+                }
+            }
         }
 
-        // Check endpoints
-        let source_node = state.diagram.find_node(conn.source_id)?;
-        let target_node = state.diagram.find_node(conn.target_id)?;
-        let source_bounds = source_node.bounds();
-        let target_bounds = target_node.bounds();
+        // If not found on selected connection, check all connections for endpoint hits
+        // This allows clicking directly on any connection's endpoint to start dragging
+        for conn in state.diagram.connections() {
+            if let (Some(source_node), Some(target_node)) = (
+                state.diagram.find_node(conn.source_id),
+                state.diagram.find_node(conn.target_id),
+            ) {
+                let source_bounds = source_node.bounds();
+                let target_bounds = target_node.bounds();
 
-        if let Some(is_source) = conn.find_endpoint_at(pos, source_bounds, target_bounds, 8.0) {
-            if is_source {
-                return Some((conn_id, PivotDragType::Source));
-            } else {
-                return Some((conn_id, PivotDragType::Target));
+                if let Some(is_source) = conn.find_endpoint_at(pos, source_bounds, target_bounds, PIVOT_HIT_TOLERANCE) {
+                    if is_source {
+                        return Some((conn.id, PivotDragType::Source));
+                    } else {
+                        return Some((conn.id, PivotDragType::Target));
+                    }
+                }
             }
         }
 
@@ -1070,7 +1103,7 @@ impl JmtApp {
 
                 // Check connections before nodes - connections are thin lines so if user
                 // clicks on one, that's what they intended (even if inside a state)
-                if let Some(conn_id) = state.diagram.find_connection_at(point, 10.0) {
+                if let Some(conn_id) = state.diagram.find_connection_at(point, CONNECTION_HIT_TOLERANCE) {
                     state.diagram.select_connection(conn_id);
                     self.status_message = "Selected connection".to_string();
                 } else if let Some(element_id) = state.diagram.find_element_at(point) {
@@ -1866,8 +1899,8 @@ impl eframe::App for JmtApp {
                     (hover_pos.x - canvas_origin.x) / zoom,
                     (hover_pos.y - canvas_origin.y) / zoom
                 );
-                let corner_margin = 10.0;
-                let connection_tolerance = 8.0;
+                let corner_margin = CORNER_HIT_MARGIN;
+                let connection_tolerance = CONNECTION_HIT_TOLERANCE;
 
                 let mut cursor_set = false;
 
@@ -1988,23 +2021,65 @@ impl eframe::App for JmtApp {
                         } else {
                             // Check if double-clicked on a connection to add pivot point
                             let conn_clicked = self.current_diagram()
-                                .and_then(|state| state.diagram.find_connection_at(point, 10.0));
+                                .and_then(|state| state.diagram.find_connection_at(point, CONNECTION_HIT_TOLERANCE));
 
                             if let Some(conn_id) = conn_clicked {
-                                // Add pivot point at click location
-                                if let Some(state) = self.current_diagram_mut() {
-                                    state.diagram.push_undo();
-                                    if let Some(conn) = state.diagram.find_connection_mut(conn_id) {
-                                        // Find which segment was clicked and insert pivot there
-                                        let insert_idx = conn.find_segment_at(point, 10.0);
-                                        conn.pivot_points.insert(insert_idx, point);
-                                        // Also insert a curve flag for the new segment created
-                                        conn.segment_curves.insert(insert_idx, false);
-                                        state.modified = true;
+                                // Check if we're clicking on an existing pivot point - delete it
+                                let existing_pivot = self.current_diagram()
+                                    .and_then(|state| state.diagram.find_connection(conn_id))
+                                    .and_then(|conn| conn.find_pivot_at(point, PIVOT_HIT_TOLERANCE));
+
+                                if let Some(pivot_idx) = existing_pivot {
+                                    // Delete the pivot point
+                                    if let Some(state) = self.current_diagram_mut() {
+                                        state.diagram.push_undo();
+                                        if let Some(conn) = state.diagram.find_connection_mut(conn_id) {
+                                            conn.pivot_points.remove(pivot_idx);
+                                            if pivot_idx < conn.segment_curves.len() {
+                                                conn.segment_curves.remove(pivot_idx);
+                                            }
+                                            state.modified = true;
+                                        }
+                                        state.diagram.recalculate_connections();
                                     }
-                                    state.diagram.recalculate_connections();
+                                    self.selected_pivot = None;
+                                    self.status_message = "Pivot point removed".to_string();
+                                } else {
+                                    // Check if too close to existing pivot or endpoint
+                                    let too_close = self.current_diagram()
+                                        .and_then(|state| state.diagram.find_connection(conn_id))
+                                        .map(|conn| {
+                                            // Check distance to all existing pivots
+                                            for pivot in &conn.pivot_points {
+                                                let dx = pivot.x - point.x;
+                                                let dy = pivot.y - point.y;
+                                                if (dx * dx + dy * dy).sqrt() < MIN_PIVOT_DISTANCE {
+                                                    return true;
+                                                }
+                                            }
+                                            false
+                                        })
+                                        .unwrap_or(false);
+
+                                    if too_close {
+                                        self.status_message = "Too close to existing pivot point".to_string();
+                                    } else {
+                                        // Add pivot point at click location
+                                        if let Some(state) = self.current_diagram_mut() {
+                                            state.diagram.push_undo();
+                                            if let Some(conn) = state.diagram.find_connection_mut(conn_id) {
+                                                // Find which segment was clicked and insert pivot there
+                                                let insert_idx = conn.find_segment_at(point, CONNECTION_HIT_TOLERANCE);
+                                                conn.pivot_points.insert(insert_idx, point);
+                                                // Also insert a curve flag for the new segment created
+                                                conn.segment_curves.insert(insert_idx, false);
+                                                state.modified = true;
+                                            }
+                                            state.diagram.recalculate_connections();
+                                        }
+                                        self.status_message = "Pivot point added".to_string();
+                                    }
                                 }
-                                self.status_message = "Pivot point added".to_string();
                             } else if self.edit_mode.is_add_node() {
                                 // Double-click in add mode: first click already added node, switch to Arrow
                                 self.set_edit_mode(EditMode::Arrow);
@@ -2032,7 +2107,7 @@ impl eframe::App for JmtApp {
                         (pos.y - canvas_origin.y) / zoom
                     );
                     let point = Point::new(diagram_pos.x, diagram_pos.y);
-                    let corner_margin = 10.0; // Size of corner hit area
+                    let corner_margin = CORNER_HIT_MARGIN; // Size of corner hit area
 
                     // First, check if we clicked on a corner of ANY resizable node
                     // (prioritize selected nodes, then check all nodes)
@@ -2104,6 +2179,10 @@ impl eframe::App for JmtApp {
                             let pivot_or_endpoint = self.check_pivot_or_endpoint_at(point);
                             if let Some((conn_id, drag_type)) = pivot_or_endpoint {
                                 if let Some(state) = self.current_diagram_mut() {
+                                    // Select the connection if not already selected
+                                    if state.diagram.selected_connection() != Some(conn_id) {
+                                        state.diagram.select_connection(conn_id);
+                                    }
                                     state.diagram.push_undo();
                                 }
                                 match drag_type {

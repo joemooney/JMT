@@ -298,7 +298,24 @@ impl Connection {
         }
     }
 
+    /// Determine the best side for a connection endpoint based on the direction to a reference point
+    /// Uses 45-degree quadrants: if the reference point is more above/below than left/right, use Top/Bottom
+    fn determine_side_from_direction(node_center: Point, reference_point: Point) -> Side {
+        let dx = reference_point.x - node_center.x;
+        let dy = reference_point.y - node_center.y;
+
+        // Use 45-degree quadrants
+        if dx.abs() > dy.abs() {
+            // More horizontal than vertical
+            if dx > 0.0 { Side::Right } else { Side::Left }
+        } else {
+            // More vertical than horizontal (or equal)
+            if dy > 0.0 { Side::Bottom } else { Side::Top }
+        }
+    }
+
     /// Calculate the line segments for this connection using pivot points
+    /// Auto-adjusts source/target side based on the direction to first/last pivot point
     pub fn calculate_segments(
         &mut self,
         source_bounds: &Rect,
@@ -307,6 +324,23 @@ impl Connection {
     ) {
         self.segments.clear();
         self.path.clear();
+
+        // Auto-adjust sides based on pivot points or target/source positions
+        if !self.pivot_points.is_empty() {
+            // Use first pivot to determine source side
+            let first_pivot = self.pivot_points[0];
+            self.source_side = Self::determine_side_from_direction(source_bounds.center(), first_pivot);
+            self.source_offset = 0.0; // Reset offset when auto-adjusting
+
+            // Use last pivot to determine target side
+            let last_pivot = self.pivot_points[self.pivot_points.len() - 1];
+            self.target_side = Self::determine_side_from_direction(target_bounds.center(), last_pivot);
+            self.target_offset = 0.0; // Reset offset when auto-adjusting
+        } else {
+            // No pivot points - use direction to opposite node
+            self.source_side = Self::determine_side_from_direction(source_bounds.center(), target_bounds.center());
+            self.target_side = Self::determine_side_from_direction(target_bounds.center(), source_bounds.center());
+        }
 
         let source_point = self.get_side_point(source_bounds, self.source_side, self.source_offset);
         let target_point = self.get_side_point(target_bounds, self.target_side, self.target_offset);
