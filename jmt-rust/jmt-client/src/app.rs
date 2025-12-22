@@ -132,6 +132,8 @@ pub struct LoupeState {
     pub display_radius: f32,
     /// Magnification factor
     pub magnification: f32,
+    /// Whether the loupe just opened this frame (skip click-outside detection)
+    pub just_opened: bool,
 }
 
 impl LoupeState {
@@ -143,6 +145,7 @@ impl LoupeState {
             source_radius: 30.0,  // Area to magnify
             display_radius: 120.0, // Size of loupe on screen
             magnification: 4.0,
+            just_opened: false,
         }
     }
 
@@ -150,12 +153,19 @@ impl LoupeState {
         self.visible = true;
         self.center = Some(center);
         self.candidates = candidates;
+        self.just_opened = true; // Skip click-outside detection this frame
     }
 
     pub fn hide(&mut self) {
         self.visible = false;
         self.center = None;
         self.candidates.clear();
+        self.just_opened = false;
+    }
+
+    /// Call at the start of each frame to clear the just_opened flag
+    pub fn begin_frame(&mut self) {
+        self.just_opened = false;
     }
 }
 
@@ -3396,8 +3406,8 @@ impl eframe::App for JmtApp {
                     let item_spacing = 35.0;
                     let start_y = loupe_center.y - (self.loupe.candidates.len() as f32 - 1.0) * item_spacing / 2.0;
 
-                    // Check if click is on a loupe item
-                    if ui.ctx().input(|i| i.pointer.primary_clicked()) {
+                    // Check if click is on a loupe item (but not if loupe just opened this frame)
+                    if ui.ctx().input(|i| i.pointer.primary_clicked()) && !self.loupe.just_opened {
                         if let Some(mouse_pos) = ui.ctx().input(|i| i.pointer.hover_pos()) {
                             // Check if click is inside loupe circle
                             let dist_to_loupe = ((mouse_pos.x - loupe_center.x).powi(2) + (mouse_pos.y - loupe_center.y).powi(2)).sqrt();
@@ -3422,6 +3432,9 @@ impl eframe::App for JmtApp {
                         }
                     }
                 }
+
+                // Clear just_opened flag at end of frame processing
+                self.loupe.just_opened = false;
             }
 
             // Process loupe selection (after the borrow ends)
