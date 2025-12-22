@@ -47,6 +47,11 @@ The original implementation uses Fantom (JVM) with FWT for the GUI. See `fan/` d
 12. **PNG Export** - Export diagrams as PNG images with optional autocrop
 13. **File Operations** - Open, Save, Save As with .jmt file format
 14. **Web Support** - WASM build for browser-based editing (planned)
+15. **Sub-Statemachines** - States can contain nested statemachine diagrams
+    - Visual icon indicator for states with sub-statemachines
+    - Click icon for preview popup, double-click to open in new tab
+    - Support for embedded or external file storage
+    - Properties panel controls for creating and managing sub-statemachines
 
 ## Project Structure
 

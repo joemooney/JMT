@@ -1664,3 +1664,88 @@ When a node was dragged into a state that had no regions, the node would be assi
 - `8272a74` - Remove debug statements from region assignment code
 
 ---
+
+## Session 10 - Sub-Statemachine Support (2025-12-21)
+
+### Prompt: Add sub-statemachine feature for hierarchical state machines
+
+**User Request:**
+"For a state, add a button in the properties to 'Create SubStateMachine' or (open) which will create/open a different diagram specifically for that state with a name and title of the state (add Title as a property of state also). Also have a checkbox to show(expand) the substatemachine in the current diagram. Double clicking on a state should open the sub-statemachine. Show a list of parent statemachines using that sub-statemachine that we can click on to jump to."
+
+**Actions Taken:**
+
+1. **Extended State struct with sub-statemachine fields:**
+   - Added `title: String` for display name separate from internal name
+   - Added `substatemachine_path: Option<String>` for storage reference:
+     - `Some("path/to/file.jmt")` = external file storage
+     - `Some("")` = embedded sub-statemachine (in regions)
+     - `None` = no sub-statemachine
+   - Added `show_expanded: bool` to control inline vs icon display
+   - Added `has_substatemachine()` and `is_external_substatemachine()` helper methods
+
+2. **Added ParentReference struct to Diagram:**
+   - Stores `diagram_path` and `state_name` for tracking parent diagrams
+   - Added `parent_references: Vec<ParentReference>` to Diagram struct
+
+3. **Added sub-statemachine controls to Properties panel:**
+   - Title text field for state display name
+   - "Show Expanded" checkbox (only when sub-statemachine exists)
+   - Storage mode selector: Embedded / External File
+   - Editable path field for external files
+   - "📂 Open SubStateMachine" button to open in new tab
+   - "🗑 Remove SubStateMachine" button to remove reference
+   - "➕ Create SubStateMachine" button to create new embedded sub-statemachine
+   - Added `PropertiesAction` enum for communicating actions back to app
+
+4. **Added sub-statemachine icon rendering:**
+   - When `show_expanded` is false, renders a small icon in bottom-right corner
+   - Icon shows mini diagram preview (small state, initial circle, arrow)
+   - Semi-transparent background with dark gray strokes
+   - Icon size is 16px with 4px margin from corner
+
+5. **Added double-click handler:**
+   - Double-clicking on a state with sub-statemachine opens it
+   - For embedded: creates new tab with sub-statemachine view
+   - For external: loads the external file into a new tab
+
+6. **Added icon click handler with preview popup:**
+   - Single-click on sub-statemachine icon shows preview popup
+   - Preview window with "Open in Tab" button
+   - Closes on X button or clicking outside
+
+7. **Added methods to JmtApp:**
+   - `open_substatemachine(node_id)` - Opens sub-statemachine for a state
+   - `create_substatemachine(node_id)` - Creates new embedded sub-statemachine
+   - `open_embedded_substatemachine()` - Opens embedded sub-statemachine as tab
+   - `open_file_at_path()` - Opens external sub-statemachine file
+   - `check_substatemachine_icon_at()` - Hit detection for icon clicks
+   - `render_substatemachine_preview()` - Renders preview popup window
+
+**Files Modified:**
+- `jmt-core/src/node/state.rs` - Added title, substatemachine_path, show_expanded fields and helpers
+- `jmt-core/src/diagram.rs` - Added ParentReference struct and parent_references field
+- `jmt-core/src/lib.rs` - Exported ParentReference
+- `jmt-client/src/panels/properties.rs` - Added PropertiesAction and sub-statemachine UI controls
+- `jmt-client/src/canvas/renderer.rs` - Added sub-statemachine icon rendering
+- `jmt-client/src/app.rs` - Added preview state, icon detection, double-click handler, preview popup
+
+**Build Status:**
+- Successfully compiles with `cargo build`
+
+**Git Operations:**
+- `d43ab9a` - Add sub-statemachine support for states
+- `db23c2d` - Add icon click handler for sub-statemachine preview popup
+
+**Features Implemented:**
+- States can have sub-statemachines (embedded or external file)
+- Visual icon indicator shows states with sub-statemachines
+- Click icon for preview popup, double-click to open in new tab
+- Properties panel controls for creating and managing sub-statemachines
+- Title field allows separate display name from internal name
+
+**Remaining Tasks (for future sessions):**
+- Inline expansion rendering (show child states within parent bounds)
+- External file synchronization and save support
+- Full parent references tracking and navigation
+
+---
