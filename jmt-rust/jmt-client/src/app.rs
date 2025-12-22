@@ -184,6 +184,8 @@ pub struct JmtApp {
     last_click_pos: Option<egui::Pos2>,
     /// Current zoom level (1.0 = 100%)
     pub zoom_level: f32,
+    /// State ID for sub-statemachine preview popup (None = no preview shown)
+    preview_substatemachine: Option<uuid::Uuid>,
 }
 
 impl Default for JmtApp {
@@ -211,6 +213,7 @@ impl Default for JmtApp {
             last_click_time: None,
             last_click_pos: None,
             zoom_level: 1.0,
+            preview_substatemachine: None,
         }
     }
 }
@@ -453,6 +456,85 @@ impl JmtApp {
     #[cfg(target_arch = "wasm32")]
     fn open_file_at_path(&mut self, path: &str) {
         self.status_message = format!("Cannot open external files in web mode: {}", path);
+    }
+
+    /// Check if a point is on a sub-statemachine icon and return the state ID
+    fn check_substatemachine_icon_at(&self, point: Point) -> Option<NodeId> {
+        let state = self.current_diagram()?;
+        let zoom = self.zoom_level;
+
+        for node in state.diagram.nodes() {
+            if let Some(state_node) = node.as_state() {
+                if state_node.has_substatemachine() && !state_node.show_expanded {
+                    // Check if click is in icon area (bottom-right corner)
+                    let bounds = node.bounds();
+                    let icon_size = 16.0 / zoom; // Unscale for diagram coords
+                    let margin = 4.0 / zoom;
+
+                    let icon_left = bounds.x2 - icon_size - margin;
+                    let icon_top = bounds.y2 - icon_size - margin;
+                    let icon_right = bounds.x2 - margin;
+                    let icon_bottom = bounds.y2 - margin;
+
+                    if point.x >= icon_left && point.x <= icon_right
+                        && point.y >= icon_top && point.y <= icon_bottom
+                    {
+                        return Some(node.id());
+                    }
+                }
+            }
+        }
+        None
+    }
+
+    /// Render the sub-statemachine preview popup
+    fn render_substatemachine_preview(&mut self, ctx: &egui::Context) {
+        if let Some(state_id) = self.preview_substatemachine {
+            let (state_name, title) = {
+                let Some(diagram_state) = self.current_diagram() else {
+                    self.preview_substatemachine = None;
+                    return;
+                };
+                let Some(node) = diagram_state.diagram.find_node(state_id) else {
+                    self.preview_substatemachine = None;
+                    return;
+                };
+                let Some(state) = node.as_state() else {
+                    self.preview_substatemachine = None;
+                    return;
+                };
+                (state.name.clone(), state.title.clone())
+            };
+
+            let display_name = if title.is_empty() { &state_name } else { &title };
+
+            let mut open = true;
+            egui::Window::new(format!("Sub-Statemachine: {}", display_name))
+                .collapsible(true)
+                .resizable(true)
+                .default_size([300.0, 200.0])
+                .open(&mut open)
+                .show(ctx, |ui| {
+                    ui.label("Preview of sub-statemachine contents");
+                    ui.separator();
+
+                    // Placeholder for actual preview rendering
+                    ui.label("(Diagram preview would be shown here)");
+
+                    ui.separator();
+                    ui.horizontal(|ui| {
+                        if ui.button("Open in Tab").clicked() {
+                            // Open the sub-statemachine in a new tab
+                            self.open_substatemachine(state_id);
+                            self.preview_substatemachine = None;
+                        }
+                    });
+                });
+
+            if !open {
+                self.preview_substatemachine = None;
+            }
+        }
     }
 
     /// Save the current diagram (prompts for path if not yet saved)
@@ -2220,7 +2302,16 @@ impl eframe::App for JmtApp {
                         // Single click: record time/pos for potential double-click detection
                         self.last_click_time = Some(now);
                         self.last_click_pos = Some(pos);
-                        self.handle_canvas_click(diagram_pos, false, ctrl_held);
+
+                        // Check if clicked on a sub-statemachine icon
+                        let click_point = Point::new(diagram_pos.x, diagram_pos.y);
+                        if let Some(state_id) = self.check_substatemachine_icon_at(click_point) {
+                            // Show preview popup
+                            self.preview_substatemachine = Some(state_id);
+                            self.status_message = "Sub-statemachine preview".to_string();
+                        } else {
+                            self.handle_canvas_click(diagram_pos, false, ctrl_held);
+                        }
                     }
                 }
             }
@@ -2685,5 +2776,8 @@ impl eframe::App for JmtApp {
             }
             }); // End ScrollArea
         });
+
+        // Render sub-statemachine preview popup if active
+        self.render_substatemachine_preview(ctx);
     }
 }
