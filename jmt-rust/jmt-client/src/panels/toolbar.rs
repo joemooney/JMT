@@ -1,7 +1,7 @@
 //! Toolbar panel with graphical icons
 
 use eframe::egui::{self, Color32, Pos2, Rounding, Stroke, Vec2};
-use jmt_core::{EditMode, DiagramType};
+use jmt_core::{EditMode, DiagramType, NodeId};
 use crate::app::JmtApp;
 
 /// Size of toolbar icons
@@ -772,8 +772,68 @@ impl Toolbar {
 
             state.diagram.push_undo();
 
-            // Collect node IDs with bounds
-            let mut nodes_with_bounds: Vec<_> = selected_ids.iter()
+            // Determine which nodes to align and which are parents whose children move with them
+            // Rule 1: If selection is exactly one parent + all its children, align only children
+            // Rule 2: Otherwise, exclude descendants of selected parents from alignment
+            //         (they move with their parent via translate_node_with_children)
+
+            let selected_set: std::collections::HashSet<_> = selected_ids.iter().copied().collect();
+
+            // Find which selected nodes are parents (have selected descendants)
+            let mut parent_ids: Vec<NodeId> = Vec::new();
+            let mut child_ids_of_parents: std::collections::HashSet<NodeId> = std::collections::HashSet::new();
+
+            for &id in &selected_ids {
+                let descendants = state.diagram.get_all_descendants(id);
+                let selected_descendants: Vec<_> = descendants.iter()
+                    .filter(|d| selected_set.contains(d))
+                    .copied()
+                    .collect();
+
+                if !selected_descendants.is_empty() {
+                    parent_ids.push(id);
+                    child_ids_of_parents.extend(selected_descendants);
+                }
+            }
+
+            // Check if this is exactly a parent + all its children (Rule 1)
+            let align_only_children = if parent_ids.len() == 1 {
+                let parent = parent_ids[0];
+                let all_children = state.diagram.get_children_of_node(parent);
+                let all_children_set: std::collections::HashSet<_> = all_children.iter().copied().collect();
+
+                // Check if all selected non-parent nodes are exactly the children of this parent
+                let non_parent_selected: std::collections::HashSet<_> = selected_ids.iter()
+                    .filter(|id| **id != parent)
+                    .copied()
+                    .collect();
+
+                non_parent_selected == all_children_set && !all_children.is_empty()
+            } else {
+                false
+            };
+
+            // Determine which nodes actually participate in alignment
+            let nodes_to_align: Vec<NodeId> = if align_only_children {
+                // Only align the children, not the parent
+                selected_ids.iter()
+                    .filter(|id| **id != parent_ids[0])
+                    .copied()
+                    .collect()
+            } else {
+                // Exclude descendants of selected parents (they move with parent)
+                selected_ids.iter()
+                    .filter(|id| !child_ids_of_parents.contains(id))
+                    .copied()
+                    .collect()
+            };
+
+            if nodes_to_align.len() < 2 {
+                return;
+            }
+
+            // Collect node IDs with bounds for alignment calculation
+            let mut nodes_with_bounds: Vec<_> = nodes_to_align.iter()
                 .filter_map(|id| {
                     state.diagram.find_node(*id).map(|n| (*id, n.bounds().clone()))
                 })
@@ -817,10 +877,10 @@ impl Toolbar {
                 }
             };
 
-            // Apply alignment
+            // Apply alignment - use translate_node_with_children for parents (unless align_only_children)
             for (id, _) in nodes_with_bounds.iter() {
-                if let Some(node) = state.diagram.find_node_mut(*id) {
-                    let bounds = node.bounds();
+                if let Some(node) = state.diagram.find_node(*id) {
+                    let bounds = node.bounds().clone();
                     let offset = match mode {
                         AlignMode::Left => target - bounds.x1,
                         AlignMode::Right => target - bounds.x2,
@@ -830,12 +890,18 @@ impl Toolbar {
                         AlignMode::CenterV => target - bounds.center().y,
                     };
 
-                    match mode {
-                        AlignMode::Left | AlignMode::Right | AlignMode::CenterH => {
-                            node.translate(offset, 0.0);
-                        }
-                        AlignMode::Top | AlignMode::Bottom | AlignMode::CenterV => {
-                            node.translate(0.0, offset);
+                    let (dx, dy) = match mode {
+                        AlignMode::Left | AlignMode::Right | AlignMode::CenterH => (offset, 0.0),
+                        AlignMode::Top | AlignMode::Bottom | AlignMode::CenterV => (0.0, offset),
+                    };
+
+                    // If this is a parent and we're NOT in align_only_children mode,
+                    // move with children
+                    if !align_only_children && parent_ids.contains(id) {
+                        state.diagram.translate_node_with_children(*id, dx, dy);
+                    } else {
+                        if let Some(node) = state.diagram.find_node_mut(*id) {
+                            node.translate(dx, dy);
                         }
                     }
                 }
@@ -858,7 +924,10 @@ impl Toolbar {
                     let min_y = prev_bounds.y2 + MIN_SEPARATION;
                     if curr_bounds.y1 < min_y {
                         let offset = min_y - curr_bounds.y1;
-                        if let Some(node) = state.diagram.find_node_mut(curr_id) {
+                        // Move with children if this is a parent
+                        if !align_only_children && parent_ids.contains(&curr_id) {
+                            state.diagram.translate_node_with_children(curr_id, 0.0, offset);
+                        } else if let Some(node) = state.diagram.find_node_mut(curr_id) {
                             node.translate(0.0, offset);
                         }
                         nodes_with_bounds[i].1.y1 += offset;
@@ -869,7 +938,10 @@ impl Toolbar {
                     let min_x = prev_bounds.x2 + MIN_SEPARATION;
                     if curr_bounds.x1 < min_x {
                         let offset = min_x - curr_bounds.x1;
-                        if let Some(node) = state.diagram.find_node_mut(curr_id) {
+                        // Move with children if this is a parent
+                        if !align_only_children && parent_ids.contains(&curr_id) {
+                            state.diagram.translate_node_with_children(curr_id, offset, 0.0);
+                        } else if let Some(node) = state.diagram.find_node_mut(curr_id) {
                             node.translate(offset, 0.0);
                         }
                         nodes_with_bounds[i].1.x1 += offset;
@@ -899,8 +971,68 @@ impl Toolbar {
 
             state.diagram.push_undo();
 
+            // Determine which nodes to distribute and which are parents whose children move with them
+            // Rule 1: If selection is exactly one parent + all its children, distribute only children
+            // Rule 2: Otherwise, exclude descendants of selected parents from distribution
+            //         (they move with their parent via translate_node_with_children)
+
+            let selected_set: std::collections::HashSet<_> = selected_ids.iter().copied().collect();
+
+            // Find which selected nodes are parents (have selected descendants)
+            let mut parent_ids: Vec<NodeId> = Vec::new();
+            let mut child_ids_of_parents: std::collections::HashSet<NodeId> = std::collections::HashSet::new();
+
+            for &id in &selected_ids {
+                let descendants = state.diagram.get_all_descendants(id);
+                let selected_descendants: Vec<_> = descendants.iter()
+                    .filter(|d| selected_set.contains(d))
+                    .copied()
+                    .collect();
+
+                if !selected_descendants.is_empty() {
+                    parent_ids.push(id);
+                    child_ids_of_parents.extend(selected_descendants);
+                }
+            }
+
+            // Check if this is exactly a parent + all its children (Rule 1)
+            let distribute_only_children = if parent_ids.len() == 1 {
+                let parent = parent_ids[0];
+                let all_children = state.diagram.get_children_of_node(parent);
+                let all_children_set: std::collections::HashSet<_> = all_children.iter().copied().collect();
+
+                // Check if all selected non-parent nodes are exactly the children of this parent
+                let non_parent_selected: std::collections::HashSet<_> = selected_ids.iter()
+                    .filter(|id| **id != parent)
+                    .copied()
+                    .collect();
+
+                non_parent_selected == all_children_set && all_children.len() >= 2
+            } else {
+                false
+            };
+
+            // Determine which nodes actually participate in distribution
+            let nodes_to_distribute: Vec<NodeId> = if distribute_only_children {
+                // Only distribute the children, not the parent
+                selected_ids.iter()
+                    .filter(|id| **id != parent_ids[0])
+                    .copied()
+                    .collect()
+            } else {
+                // Exclude descendants of selected parents (they move with parent)
+                selected_ids.iter()
+                    .filter(|id| !child_ids_of_parents.contains(id))
+                    .copied()
+                    .collect()
+            };
+
+            if nodes_to_distribute.len() < 3 {
+                return;
+            }
+
             // Collect node IDs with their bounds and center positions
-            let mut nodes_with_info: Vec<_> = selected_ids.iter()
+            let mut nodes_with_info: Vec<_> = nodes_to_distribute.iter()
                 .filter_map(|id| {
                     state.diagram.find_node(*id).map(|n| {
                         let bounds = n.bounds().clone();
@@ -942,9 +1074,15 @@ impl Toolbar {
                         let current_left = bounds.x1;
                         let offset = target_left - current_left;
 
-                        if let Some(node) = state.diagram.find_node_mut(*id) {
+                        // Move with children if this is a parent
+                        if !distribute_only_children && parent_ids.contains(id) {
+                            state.diagram.translate_node_with_children(*id, offset, 0.0);
+                            // Update prev_right from the translated node
+                            if let Some(node) = state.diagram.find_node(*id) {
+                                prev_right = node.bounds().x2;
+                            }
+                        } else if let Some(node) = state.diagram.find_node_mut(*id) {
                             node.translate(offset, 0.0);
-                            // Update prev_right for next iteration
                             prev_right = node.bounds().x2;
                         }
                     }
@@ -964,9 +1102,15 @@ impl Toolbar {
                         let current_top = bounds.y1;
                         let offset = target_top - current_top;
 
-                        if let Some(node) = state.diagram.find_node_mut(*id) {
+                        // Move with children if this is a parent
+                        if !distribute_only_children && parent_ids.contains(id) {
+                            state.diagram.translate_node_with_children(*id, 0.0, offset);
+                            // Update prev_bottom from the translated node
+                            if let Some(node) = state.diagram.find_node(*id) {
+                                prev_bottom = node.bounds().y2;
+                            }
+                        } else if let Some(node) = state.diagram.find_node_mut(*id) {
                             node.translate(0.0, offset);
-                            // Update prev_bottom for next iteration
                             prev_bottom = node.bounds().y2;
                         }
                     }

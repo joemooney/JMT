@@ -653,6 +653,40 @@ impl Diagram {
         }
     }
 
+    /// Get direct children of a state (nodes in its regions)
+    pub fn get_children_of_node(&self, node_id: NodeId) -> Vec<NodeId> {
+        self.find_node(node_id)
+            .and_then(|n| n.as_state())
+            .map(|state| {
+                state.regions.iter()
+                    .flat_map(|r| r.children.iter().copied())
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    /// Get all descendants of a state (children, grandchildren, etc.)
+    pub fn get_all_descendants(&self, node_id: NodeId) -> Vec<NodeId> {
+        let mut descendants = Vec::new();
+        let mut to_visit = vec![node_id];
+
+        while let Some(current) = to_visit.pop() {
+            let children = self.get_children_of_node(current);
+            for child in children {
+                descendants.push(child);
+                to_visit.push(child);
+            }
+        }
+
+        descendants
+    }
+
+    /// Check if a node is a descendant of another node
+    pub fn is_descendant_of(&self, node_id: NodeId, ancestor_id: NodeId) -> bool {
+        let descendants = self.get_all_descendants(ancestor_id);
+        descendants.contains(&node_id)
+    }
+
     /// Get selected elements in order (across all diagram types)
     pub fn selected_elements_in_order(&self) -> Vec<Uuid> {
         self.selection_order.clone()
