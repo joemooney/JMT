@@ -1170,17 +1170,14 @@ impl Diagram {
 
     /// Re-parent a node to the appropriate region based on its current position
     pub fn update_node_region(&mut self, node_id: NodeId) {
-        // Get the node's center position, area, and name for debug
-        let (center, node_area, node_name) = match self.find_node(node_id) {
+        // Get the node's center position and area
+        let (center, node_area) = match self.find_node(node_id) {
             Some(n) => {
                 let bounds = n.bounds();
-                (bounds.center(), bounds.width() * bounds.height(), n.name().to_string())
+                (bounds.center(), bounds.width() * bounds.height())
             }
             None => return,
         };
-
-        eprintln!("  update_node_region: {} center=({:.0},{:.0}) area={:.0}",
-            node_name, center.x, center.y, node_area);
 
         // First, check if we're inside a state that has no regions
         // If so, create a default region for it
@@ -1188,7 +1185,6 @@ impl Diagram {
         // Also check that the potential parent is LARGER than the node being moved
         // (to prevent circular parent-child relationships)
         if let Some(state_id) = self.find_state_at_point_excluding(center.x, center.y, Some(node_id)) {
-            let parent_name = self.find_node(state_id).map(|n| n.name().to_string()).unwrap_or_default();
             // Check if this state is larger than our node (only larger states can be parents)
             let parent_area = self.find_node(state_id)
                 .map(|n| {
@@ -1196,8 +1192,6 @@ impl Diagram {
                     b.width() * b.height()
                 })
                 .unwrap_or(0.0);
-
-            eprintln!("    find_state_at_point_excluding found: {} (area={:.0})", parent_name, parent_area);
 
             if parent_area > node_area {
                 // Check if this state has any regions
@@ -1207,73 +1201,51 @@ impl Diagram {
                     .unwrap_or(false);
 
                 if needs_region {
-                    eprintln!("    Creating default region for {}", parent_name);
                     // Create a default region for this state
                     if let Some(Node::State(state)) = self.find_node_mut(state_id) {
                         state.add_region("default");
                     }
                 }
-            } else {
-                eprintln!("    Skipping {} as potential parent (not larger)", parent_name);
             }
-        } else {
-            eprintln!("    find_state_at_point_excluding: no state found at center");
         }
 
         // Now find which region should contain this node
         // We need to find a region that belongs to a state LARGER than this node
         if let Some(region_id) = self.find_region_at_point_for_node(center.x, center.y, node_id, node_area) {
-            // Get region name for debug
-            let region_name = self.find_region_name(region_id).unwrap_or_else(|| "unknown".to_string());
-            eprintln!("    find_region_at_point_for_node found: {} (id={:?})", region_name, region_id);
-
             // Get current parent
             let current_parent = self.find_node(node_id)
                 .and_then(|n| n.parent_region_id());
 
             // Only update if different
             if current_parent != Some(region_id) {
-                eprintln!("    Assigning {} to region {}", node_name, region_name);
                 self.assign_node_to_region(node_id, region_id);
-            } else {
-                eprintln!("    Already in correct region: {}", region_name);
             }
-        } else {
-            eprintln!("    find_region_at_point_for_node: no region found!");
         }
     }
 
     /// Find the region at a point that can contain a node of the given area
     /// Only returns regions from states that are larger than the node
     fn find_region_at_point_for_node(&self, x: f32, y: f32, exclude_id: NodeId, node_area: f32) -> Option<Uuid> {
-        eprintln!("      find_region_at_point_for_node: point=({:.0},{:.0}) node_area={:.0}", x, y, node_area);
-
         // Check state nodes' regions first (inner states before outer)
         // We want the innermost region that contains the point AND belongs to a larger state
-        let mut best_match: Option<(Uuid, f32, String)> = None; // (region_id, area, state_name)
+        let mut best_match: Option<(Uuid, f32)> = None; // (region_id, area)
 
         for node in &self.nodes {
             if let Node::State(state) = node {
                 // Skip the excluded node's regions
                 if state.id == exclude_id {
-                    eprintln!("        Skipping {} (excluded node)", state.name);
                     continue;
                 }
                 // Only consider states that are larger than the node being parented
                 let state_area = state.bounds.width() * state.bounds.height();
                 if state_area <= node_area {
-                    eprintln!("        Skipping {} (area {:.0} <= node_area {:.0})", state.name, state_area, node_area);
                     continue;
                 }
-                eprintln!("        Checking {} (area={:.0}, {} regions)", state.name, state_area, state.regions.len());
                 for region in &state.regions {
-                    let contains = region.contains_point(x, y);
-                    eprintln!("          Region '{}' bounds ({:.0},{:.0})-({:.0},{:.0}): contains={}",
-                        region.name, region.bounds.x1, region.bounds.y1, region.bounds.x2, region.bounds.y2, contains);
-                    if contains {
+                    if region.contains_point(x, y) {
                         let area = region.bounds.width() * region.bounds.height();
                         if best_match.is_none() || area < best_match.as_ref().unwrap().1 {
-                            best_match = Some((region.id, area, state.name.clone()));
+                            best_match = Some((region.id, area));
                         }
                     }
                 }
@@ -1281,24 +1253,18 @@ impl Diagram {
         }
 
         // If found a region in a state node, return it
-        if let Some((region_id, area, state_name)) = best_match {
-            eprintln!("      -> Best match: region in {} (area={:.0})", state_name, area);
+        if let Some((region_id, _area)) = best_match {
             return Some(region_id);
         }
 
         // Fall back to root state's regions
-        eprintln!("        No state region found, checking root state regions");
         for region in &self.root_state.regions {
-            let contains = region.contains_point(x, y);
-            eprintln!("          Root region '{}' bounds ({:.0},{:.0})-({:.0},{:.0}): contains={}",
-                region.name, region.bounds.x1, region.bounds.y1, region.bounds.x2, region.bounds.y2, contains);
-            if contains {
+            if region.contains_point(x, y) {
                 return Some(region.id);
             }
         }
 
         // Default to root region if point is anywhere
-        eprintln!("      -> Falling back to root_region_id()");
         Some(self.root_region_id())
     }
 
@@ -1317,32 +1283,23 @@ impl Diagram {
 
         // Get all nodes sorted by area (largest first)
         // This ensures parent states are processed before their potential children
-        let mut node_info: Vec<(NodeId, String, f32, Rect)> = self.nodes.iter()
-            .map(|n| {
-                let bounds = n.bounds().clone();
-                let area = bounds.width() * bounds.height();
-                (n.id(), n.name().to_string(), area, bounds)
-            })
+        let mut node_info: Vec<(NodeId, Rect)> = self.nodes.iter()
+            .map(|n| (n.id(), n.bounds().clone()))
             .collect();
 
         // Sort by area descending (largest first)
-        node_info.sort_by(|a, b| b.2.partial_cmp(&a.2).unwrap_or(std::cmp::Ordering::Equal));
-
-        eprintln!("\n=== update_all_node_regions ===");
-        for (_id, name, area, bounds) in &node_info {
-            eprintln!("  {} (area={:.0}): corners ({:.0},{:.0}) to ({:.0},{:.0})",
-                name, area, bounds.x1, bounds.y1, bounds.x2, bounds.y2);
-        }
+        node_info.sort_by(|a, b| {
+            let area_a = a.1.width() * a.1.height();
+            let area_b = b.1.width() * b.1.height();
+            area_b.partial_cmp(&area_a).unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         // Check for partial containment errors and update region assignments
         let mut error_nodes: Vec<NodeId> = Vec::new();
 
-        for (node_id, name, _area, bounds) in &node_info {
-            eprintln!("\nProcessing {} at ({:.0},{:.0})-({:.0},{:.0}):",
-                name, bounds.x1, bounds.y1, bounds.x2, bounds.y2);
-
+        for (node_id, bounds) in &node_info {
             // Check which larger nodes this node overlaps with
-            for (other_id, other_name, other_area, other_bounds) in &node_info {
+            for (other_id, other_bounds) in &node_info {
                 if other_id == node_id {
                     continue;
                 }
@@ -1356,11 +1313,8 @@ impl Diagram {
                 ];
                 let contained_count = corners.iter().filter(|c| other_bounds.contains_point(**c)).count();
 
-                if contained_count == 4 {
-                    eprintln!("  -> All 4 corners contained in {} (area={:.0})", other_name, other_area);
-                } else if contained_count > 0 {
-                    // Partial containment - this is an error
-                    eprintln!("  -> ERROR: {} corners in {} (partial containment)", contained_count, other_name);
+                // Partial containment (1-3 corners) is an error
+                if contained_count > 0 && contained_count < 4 {
                     error_nodes.push(*node_id);
                 }
             }
@@ -1374,8 +1328,6 @@ impl Diagram {
                 node.set_error(true);
             }
         }
-
-        eprintln!("=== end update_all_node_regions ===\n");
     }
 
     /// Add a connection between two nodes
