@@ -2738,17 +2738,19 @@ impl eframe::App for JmtApp {
                 let diagram_y = (hover_pos.y - canvas_origin.y) / zoom;
                 self.diagram_cursor_pos = Some((diagram_x, diagram_y));
 
-                // Detect what's under the cursor for status bar
+                // Detect ALL items under/near the cursor for status bar
                 let point = Point::new(diagram_x, diagram_y);
                 let pivot_tolerance = self.settings.pivot_hit_tolerance;
                 let connection_tolerance = self.settings.connection_hit_tolerance;
 
                 self.hover_info = self.current_diagram().and_then(|state| {
-                    // Check pivot points on selected connection first
+                    let mut items: Vec<String> = Vec::new();
+
+                    // Check pivot points on selected connection
                     if let Some(conn_id) = state.diagram.selected_connection() {
                         if let Some(conn) = state.diagram.find_connection(conn_id) {
                             if let Some(idx) = conn.find_pivot_at(point, pivot_tolerance) {
-                                return Some(format!("Pivot {}", idx + 1));
+                                items.push(format!("Pivot{}", idx + 1));
                             }
                         }
                     }
@@ -2763,50 +2765,43 @@ impl eframe::App for JmtApp {
                             let target_bounds = target_node.bounds();
 
                             if let Some(is_source) = conn.find_endpoint_at(point, source_bounds, target_bounds, pivot_tolerance) {
-                                let endpoint_type = if is_source { "source" } else { "target" };
-                                return Some(format!("{} endpoint", endpoint_type));
+                                let endpoint_type = if is_source { "src" } else { "tgt" };
+                                items.push(format!("{}Endpoint", endpoint_type));
                             }
                         }
                     }
 
                     // Check connection labels
-                    if let Some(conn_id) = state.diagram.find_connection_label_at(point) {
-                        if let Some(conn) = state.diagram.find_connection(conn_id) {
-                            let label = conn.label();
-                            if label.is_empty() {
-                                return Some("Connection label".to_string());
-                            } else {
-                                return Some(format!("Label: {}", label));
-                            }
-                        }
+                    if let Some(_conn_id) = state.diagram.find_connection_label_at(point) {
+                        items.push("Label".to_string());
                     }
 
-                    // Check nodes (smallest first for innermost)
-                    if let Some(node_id) = state.diagram.find_node_at(point) {
-                        if let Some(node) = state.diagram.find_node(node_id) {
+                    // Check ALL nodes that contain this point (not just innermost)
+                    for node in state.diagram.nodes() {
+                        if node.contains_point(point) {
                             let type_name = node.node_type().display_name();
                             let name = node.name();
                             if name.is_empty() {
-                                return Some(type_name.to_string());
+                                items.push(type_name.to_string());
                             } else {
-                                return Some(format!("{}: {}", type_name, name));
+                                items.push(format!("{}:{}", type_name, name));
                             }
                         }
                     }
 
                     // Check connection lines
-                    if let Some(conn_id) = state.diagram.find_connection_at(point, connection_tolerance) {
-                        if let Some(conn) = state.diagram.find_connection(conn_id) {
-                            let label = conn.label();
-                            if label.is_empty() {
-                                return Some("Connection".to_string());
-                            } else {
-                                return Some(format!("Connection: {}", label));
-                            }
+                    for conn in state.diagram.connections() {
+                        if conn.is_near_point(point, connection_tolerance) {
+                            items.push("Conn".to_string());
+                            break; // Only show one "Conn" even if multiple
                         }
                     }
 
-                    None
+                    if items.is_empty() {
+                        None
+                    } else {
+                        Some(format!("[{}] {}", items.len(), items.join(", ")))
+                    }
                 });
             } else {
                 self.diagram_cursor_pos = None;
