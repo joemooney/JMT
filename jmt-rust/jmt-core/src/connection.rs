@@ -448,18 +448,42 @@ impl Connection {
     }
 
     /// Arc routing: smooth quadratic Bezier curve
-    fn calculate_arc_segments(&mut self, source_bounds: &Rect, target_bounds: &Rect, stub_len: f32) {
+    fn calculate_arc_segments(&mut self, source_bounds: &Rect, target_bounds: &Rect, _stub_len: f32) {
         let source_point = self.get_side_point(source_bounds, self.source_side, self.source_offset);
         let target_point = self.get_side_point(target_bounds, self.target_side, self.target_offset);
 
-        // Calculate control point from stub directions
-        let source_stub = self.get_stub_point(source_point, self.source_side, stub_len * 2.0);
-        let target_stub = self.get_stub_point(target_point, self.target_side, stub_len * 2.0);
+        // Calculate the midpoint between source and target
+        let mid_x = (source_point.x + target_point.x) / 2.0;
+        let mid_y = (source_point.y + target_point.y) / 2.0;
 
-        // Control point at the intersection of stub directions (midpoint for smooth curve)
+        // Calculate perpendicular offset for control point
+        let dx = target_point.x - source_point.x;
+        let dy = target_point.y - source_point.y;
+        let length = (dx * dx + dy * dy).sqrt();
+
+        // Offset perpendicular to the line, proportional to length (min 30px)
+        let offset = (length * 0.3).max(30.0);
+
+        // Perpendicular direction (rotate 90 degrees)
+        // For horizontal connections, this creates vertical bulge
+        // For vertical connections, this creates horizontal bulge
+        let (perp_x, perp_y) = if length > 0.001 {
+            (-dy / length, dx / length)
+        } else {
+            (0.0, -1.0)
+        };
+
+        // Control point is midpoint offset perpendicular to the line
+        // Use the stub directions to determine which way to curve
+        let curve_direction = match (self.source_side, self.target_side) {
+            (Side::Right, Side::Left) | (Side::Left, Side::Right) => -1.0, // Curve upward for horizontal
+            (Side::Bottom, Side::Top) | (Side::Top, Side::Bottom) => -1.0, // Curve left for vertical
+            _ => 1.0,
+        };
+
         let control = Point::new(
-            (source_stub.x + target_stub.x) / 2.0,
-            (source_stub.y + target_stub.y) / 2.0,
+            mid_x + perp_x * offset * curve_direction,
+            mid_y + perp_y * offset * curve_direction,
         );
 
         // Add the Bezier curve to path

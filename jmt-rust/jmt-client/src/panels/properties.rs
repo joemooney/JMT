@@ -35,8 +35,21 @@ impl PropertiesPanel {
                 }
             } else if let Some(conn_id) = selected_conn {
                 // Show connection properties
+                // Capture old routing style to detect changes
+                let old_routing_style = state.diagram.find_connection(conn_id)
+                    .map(|c| c.routing_style);
+
+                let mut needs_recalculate = false;
                 if let Some(conn) = state.diagram.find_connection_mut(conn_id) {
                     Self::show_connection_properties(ui, conn, &mut state.modified);
+                    // Check if routing style changed
+                    if old_routing_style != Some(conn.routing_style) {
+                        needs_recalculate = true;
+                    }
+                }
+
+                if needs_recalculate {
+                    state.diagram.recalculate_connections();
                 }
             } else if selected_nodes.len() > 1 {
                 // Multiple nodes selected
