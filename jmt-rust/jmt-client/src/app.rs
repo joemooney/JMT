@@ -2106,67 +2106,125 @@ impl eframe::App for JmtApp {
             let canvas_origin = response.rect.min;
 
             // Check if cursor is over interactive elements and change cursor accordingly
-            if let Some(hover_pos) = self.cursor_pos {
-                let diagram_pos = Point::new(
-                    (hover_pos.x - canvas_origin.x) / zoom,
-                    (hover_pos.y - canvas_origin.y) / zoom
-                );
-                let corner_margin = CORNER_HIT_MARGIN;
-                let connection_tolerance = CONNECTION_HIT_TOLERANCE;
+            // First priority: active drag states (mouse is pressed and dragging)
+            let mut cursor_set = false;
 
-                let mut cursor_set = false;
+            if self.resize_state.is_active() {
+                // Show resize cursor while actively resizing
+                let corner = self.resize_state.corner;
+                match corner {
+                    Corner::TopLeft | Corner::BottomRight => {
+                        ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeNwSe);
+                    }
+                    Corner::TopRight | Corner::BottomLeft => {
+                        ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeNeSw);
+                    }
+                    Corner::None => {}
+                }
+                cursor_set = true;
+            } else if self.dragging_nodes {
+                // Show grabbing cursor while dragging nodes
+                ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
+                cursor_set = true;
+            } else if self.dragging_pivot.is_some() {
+                // Show grabbing cursor while dragging pivot points
+                ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
+                cursor_set = true;
+            } else if self.dragging_endpoint.is_some() {
+                // Show grabbing cursor while dragging connection endpoints
+                ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
+                cursor_set = true;
+            } else if self.dragging_label.is_some() {
+                // Show grabbing cursor while dragging labels
+                ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
+                cursor_set = true;
+            } else if self.dragging_separator.is_some() {
+                // Show resize cursor while dragging region separators
+                ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeVertical);
+                cursor_set = true;
+            }
 
-                // First check: corners of resizable nodes (highest priority)
-                if let Some(state) = self.current_diagram() {
-                    for node in state.diagram.nodes() {
-                        if node.can_resize() {
-                            let corner = node.get_corner(diagram_pos, corner_margin);
-                            if corner != Corner::None {
-                                match corner {
-                                    Corner::TopLeft | Corner::BottomRight => {
-                                        ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeNwSe);
+            // Second priority: hover states (cursor is over interactive elements)
+            if !cursor_set {
+                if let Some(hover_pos) = self.cursor_pos {
+                    let diagram_pos = Point::new(
+                        (hover_pos.x - canvas_origin.x) / zoom,
+                        (hover_pos.y - canvas_origin.y) / zoom
+                    );
+                    let corner_margin = CORNER_HIT_MARGIN;
+                    let connection_tolerance = CONNECTION_HIT_TOLERANCE;
+
+                    // Check: corners of resizable nodes (highest priority)
+                    if let Some(state) = self.current_diagram() {
+                        for node in state.diagram.nodes() {
+                            if node.can_resize() {
+                                let corner = node.get_corner(diagram_pos, corner_margin);
+                                if corner != Corner::None {
+                                    match corner {
+                                        Corner::TopLeft | Corner::BottomRight => {
+                                            ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeNwSe);
+                                        }
+                                        Corner::TopRight | Corner::BottomLeft => {
+                                            ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeNeSw);
+                                        }
+                                        Corner::None => {}
                                     }
-                                    Corner::TopRight | Corner::BottomLeft => {
-                                        ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeNeSw);
-                                    }
-                                    Corner::None => {}
+                                    cursor_set = true;
+                                    break;
                                 }
+                            }
+                        }
+
+                        // Second check: region separators (for resizing)
+                        let separator_tolerance = 5.0;
+                        if !cursor_set {
+                            if state.diagram.find_region_separator_at(diagram_pos.x, diagram_pos.y, separator_tolerance).is_some() {
+                                ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeVertical);
                                 cursor_set = true;
-                                break;
+                            }
+                        }
+
+                        // Third check: connection labels (for dragging)
+                        if !cursor_set {
+                            if state.diagram.find_connection_label_at(diagram_pos).is_some() {
+                                // Use grab cursor for labels (shows they can be grabbed)
+                                ui.ctx().set_cursor_icon(egui::CursorIcon::Grab);
+                                cursor_set = true;
+                            }
+                        }
+
+                        // Fourth check: pivot points and endpoints
+                        if !cursor_set {
+                            if let Some((_conn_id, drag_type)) = self.check_pivot_or_endpoint_at(diagram_pos) {
+                                // Show grab cursor for pivot points and endpoints
+                                ui.ctx().set_cursor_icon(egui::CursorIcon::Grab);
+                                cursor_set = true;
+                                let _ = drag_type; // suppress unused warning
+                            }
+                        }
+
+                        // Fifth check: nodes (for dragging)
+                        if !cursor_set {
+                            if state.diagram.find_node_at(diagram_pos).is_some() {
+                                // Show grab cursor for nodes
+                                ui.ctx().set_cursor_icon(egui::CursorIcon::Grab);
+                                cursor_set = true;
+                            }
+                        }
+
+                        // Sixth check: connections
+                        if !cursor_set {
+                            if let Some(_conn_id) = state.diagram.find_connection_at(diagram_pos, connection_tolerance) {
+                                // Use crosshair cursor for connections
+                                ui.ctx().set_cursor_icon(egui::CursorIcon::Crosshair);
+                                cursor_set = true;
                             }
                         }
                     }
 
-                    // Second check: region separators (for resizing)
-                    let separator_tolerance = 5.0;
-                    if !cursor_set {
-                        if state.diagram.find_region_separator_at(diagram_pos.x, diagram_pos.y, separator_tolerance).is_some() {
-                            ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeVertical);
-                            cursor_set = true;
-                        }
-                    }
-
-                    // Third check: connection labels (for dragging)
-                    if !cursor_set {
-                        if state.diagram.find_connection_label_at(diagram_pos).is_some() {
-                            // Use move cursor for labels
-                            ui.ctx().set_cursor_icon(egui::CursorIcon::Move);
-                            cursor_set = true;
-                        }
-                    }
-
-                    // Fourth check: connections
-                    if !cursor_set {
-                        if let Some(_conn_id) = state.diagram.find_connection_at(diagram_pos, connection_tolerance) {
-                            // Use crosshair cursor for connections
-                            ui.ctx().set_cursor_icon(egui::CursorIcon::Crosshair);
-                            cursor_set = true;
-                        }
-                    }
+                    // If nothing special, egui handles default cursor
+                    let _ = cursor_set;
                 }
-
-                // If nothing special, egui handles default cursor
-                let _ = cursor_set;
             }
 
             // Draw the diagram with zoom
