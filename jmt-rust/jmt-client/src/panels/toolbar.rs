@@ -982,6 +982,13 @@ impl Toolbar {
                 }
             }
 
+            // Mark all aligned nodes as explicitly aligned (for crop grid-snapping)
+            for (id, _) in &nodes_with_bounds {
+                if let Some(node) = state.diagram.find_node_mut(*id) {
+                    node.set_aligned(true);
+                }
+            }
+
             // Expand parent states to contain children (preserve parentage)
             state.diagram.expand_parents_to_contain_children();
             state.diagram.recalculate_connections();

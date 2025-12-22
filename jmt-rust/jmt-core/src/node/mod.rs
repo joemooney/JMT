@@ -221,6 +221,22 @@ impl Node {
         }
     }
 
+    /// Check if this node has been explicitly aligned
+    pub fn is_aligned(&self) -> bool {
+        match self {
+            Node::State(s) => s.aligned,
+            Node::Pseudo(p) => p.aligned,
+        }
+    }
+
+    /// Set the aligned state of this node
+    pub fn set_aligned(&mut self, aligned: bool) {
+        match self {
+            Node::State(s) => s.aligned = aligned,
+            Node::Pseudo(p) => p.aligned = aligned,
+        }
+    }
+
     /// Get the parent region ID of this node
     pub fn parent_region_id(&self) -> Option<Uuid> {
         match self {

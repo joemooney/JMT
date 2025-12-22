@@ -1148,6 +1148,39 @@ impl JmtApp {
         }
     }
 
+    /// Crop the diagram by removing blank space around content
+    /// Returns true if cropping was performed
+    pub fn crop_diagram(&mut self) -> bool {
+        let Some(state) = self.current_diagram_mut() else {
+            return false;
+        };
+
+        // Check if there's content to crop
+        if state.diagram.tight_content_bounds().is_none() {
+            self.status_message = "No content to crop".to_string();
+            return false;
+        }
+
+        state.diagram.push_undo();
+        let margin = 20.0;
+        let snap_to_grid = true;
+        let grid_size = 10.0;
+
+        if let Some((dx, dy)) = state.diagram.crop(margin, snap_to_grid, grid_size) {
+            if dx.abs() > 0.01 || dy.abs() > 0.01 {
+                state.modified = true;
+                self.status_message = format!("Diagram cropped (moved by {:.0}, {:.0})", dx, dy);
+                true
+            } else {
+                self.status_message = "Diagram already cropped".to_string();
+                false
+            }
+        } else {
+            self.status_message = "No content to crop".to_string();
+            false
+        }
+    }
+
     /// Export the current diagram as PNG
     #[cfg(not(target_arch = "wasm32"))]
     pub fn export_png(&mut self, autocrop: bool) {

@@ -94,6 +94,18 @@ impl MenuBar {
 
                 ui.separator();
 
+                // Crop diagram to remove blank space
+                let has_diagram = app.current_diagram().is_some();
+                if ui.add_enabled(has_diagram, egui::Button::new("Crop Diagram"))
+                    .on_hover_text("Remove blank space around diagram content")
+                    .clicked()
+                {
+                    app.crop_diagram();
+                    ui.close_menu();
+                }
+
+                ui.separator();
+
                 if ui.button("⚙ Settings...").clicked() {
                     app.show_settings_window = true;
                     ui.close_menu();

@@ -309,6 +309,210 @@ impl Diagram {
         )
     }
 
+    /// Calculate the tight bounding rectangle of all content (no padding)
+    /// Returns None if there's no content
+    pub fn tight_content_bounds(&self) -> Option<Rect> {
+        let mut min_x = f32::MAX;
+        let mut min_y = f32::MAX;
+        let mut max_x = f32::MIN;
+        let mut max_y = f32::MIN;
+        let mut has_content = false;
+
+        // State machine nodes
+        for node in &self.nodes {
+            let bounds = node.bounds();
+            min_x = min_x.min(bounds.x1);
+            min_y = min_y.min(bounds.y1);
+            max_x = max_x.max(bounds.x2);
+            max_y = max_y.max(bounds.y2);
+            has_content = true;
+        }
+
+        // Connections - include pivot points and labels
+        for conn in &self.connections {
+            for pivot in &conn.pivot_points {
+                min_x = min_x.min(pivot.x);
+                min_y = min_y.min(pivot.y);
+                max_x = max_x.max(pivot.x);
+                max_y = max_y.max(pivot.y);
+            }
+            // Include label position if it has an offset
+            if let (Some(midpoint), Some(offset)) = (conn.midpoint(), conn.label_offset) {
+                let label_x = midpoint.x + offset.0;
+                let label_y = midpoint.y + offset.1;
+                min_x = min_x.min(label_x - 50.0); // Approximate label bounds
+                min_y = min_y.min(label_y - 10.0);
+                max_x = max_x.max(label_x + 50.0);
+                max_y = max_y.max(label_y + 10.0);
+            }
+        }
+
+        // Sequence diagram lifelines
+        for lifeline in &self.lifelines {
+            let bounds = lifeline.head_bounds();
+            min_x = min_x.min(bounds.x1);
+            min_y = min_y.min(bounds.y1);
+            max_x = max_x.max(bounds.x2);
+            max_y = max_y.max(lifeline.y + lifeline.head_height + lifeline.line_length);
+            has_content = true;
+        }
+
+        // Use case actors
+        for actor in &self.actors {
+            min_x = min_x.min(actor.x - 20.0);
+            min_y = min_y.min(actor.y);
+            max_x = max_x.max(actor.x + 20.0);
+            max_y = max_y.max(actor.y + actor.height);
+            has_content = true;
+        }
+
+        // Use cases
+        for uc in &self.use_cases {
+            min_x = min_x.min(uc.bounds.x1);
+            min_y = min_y.min(uc.bounds.y1);
+            max_x = max_x.max(uc.bounds.x2);
+            max_y = max_y.max(uc.bounds.y2);
+            has_content = true;
+        }
+
+        // System boundaries
+        for sb in &self.system_boundaries {
+            min_x = min_x.min(sb.bounds.x1);
+            min_y = min_y.min(sb.bounds.y1);
+            max_x = max_x.max(sb.bounds.x2);
+            max_y = max_y.max(sb.bounds.y2);
+            has_content = true;
+        }
+
+        // Activity actions
+        for action in &self.actions {
+            min_x = min_x.min(action.bounds.x1);
+            min_y = min_y.min(action.bounds.y1);
+            max_x = max_x.max(action.bounds.x2);
+            max_y = max_y.max(action.bounds.y2);
+            has_content = true;
+        }
+
+        // Swimlanes
+        for swimlane in &self.swimlanes {
+            min_x = min_x.min(swimlane.bounds.x1);
+            min_y = min_y.min(swimlane.bounds.y1);
+            max_x = max_x.max(swimlane.bounds.x2);
+            max_y = max_y.max(swimlane.bounds.y2);
+            has_content = true;
+        }
+
+        // Object nodes
+        for obj in &self.object_nodes {
+            min_x = min_x.min(obj.bounds.x1);
+            min_y = min_y.min(obj.bounds.y1);
+            max_x = max_x.max(obj.bounds.x2);
+            max_y = max_y.max(obj.bounds.y2);
+            has_content = true;
+        }
+
+        if has_content {
+            Some(Rect::new(min_x, min_y, max_x, max_y))
+        } else {
+            None
+        }
+    }
+
+    /// Crop the diagram by removing blank space around content
+    /// - margin: the margin to leave around the content (e.g., 20.0)
+    /// - snap_to_grid: if true, snap the result to the given grid size
+    /// - grid_size: the grid size to snap to (e.g., 10.0)
+    /// Returns the translation applied (dx, dy), or None if no content
+    pub fn crop(&mut self, margin: f32, snap_to_grid: bool, grid_size: f32) -> Option<(f32, f32)> {
+        let bounds = self.tight_content_bounds()?;
+
+        // Calculate target position (margin from origin)
+        let mut target_x = margin;
+        let mut target_y = margin;
+
+        // If snapping to grid, round the target to grid
+        if snap_to_grid && grid_size > 0.0 {
+            target_x = (target_x / grid_size).round() * grid_size;
+            target_y = (target_y / grid_size).round() * grid_size;
+        }
+
+        // Calculate translation
+        let dx = target_x - bounds.x1;
+        let dy = target_y - bounds.y1;
+
+        // Don't translate if already at target
+        if dx.abs() < 0.01 && dy.abs() < 0.01 {
+            return Some((0.0, 0.0));
+        }
+
+        // Translate all elements
+        self.translate_all(dx, dy);
+
+        Some((dx, dy))
+    }
+
+    /// Translate all diagram elements by the given offset
+    pub fn translate_all(&mut self, dx: f32, dy: f32) {
+        // State machine nodes
+        for node in &mut self.nodes {
+            node.translate(dx, dy);
+        }
+
+        // Connections - translate pivot points (endpoints are calculated from nodes)
+        for conn in &mut self.connections {
+            for pivot in &mut conn.pivot_points {
+                pivot.x += dx;
+                pivot.y += dy;
+            }
+        }
+
+        // Sequence diagram lifelines
+        for lifeline in &mut self.lifelines {
+            lifeline.x += dx;
+            lifeline.y += dy;
+        }
+
+        // Use case actors
+        for actor in &mut self.actors {
+            actor.x += dx;
+            actor.y += dy;
+        }
+
+        // Use cases
+        for uc in &mut self.use_cases {
+            uc.bounds = uc.bounds.translate(dx, dy);
+        }
+
+        // System boundaries
+        for sb in &mut self.system_boundaries {
+            sb.bounds = sb.bounds.translate(dx, dy);
+        }
+
+        // Activity actions
+        for action in &mut self.actions {
+            action.bounds = action.bounds.translate(dx, dy);
+        }
+
+        // Swimlanes
+        for swimlane in &mut self.swimlanes {
+            swimlane.bounds = swimlane.bounds.translate(dx, dy);
+        }
+
+        // Object nodes
+        for obj in &mut self.object_nodes {
+            obj.bounds = obj.bounds.translate(dx, dy);
+        }
+
+        // Messages (sequence diagram) - their positions are typically relative to lifelines
+        // but if they have absolute positions, translate them
+        for msg in &mut self.messages {
+            msg.y += dy;
+        }
+
+        // Recalculate connection paths
+        self.recalculate_connections();
+    }
+
     /// Get all nodes
     pub fn nodes(&self) -> &[Node] {
         &self.nodes

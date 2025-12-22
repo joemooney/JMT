@@ -1799,3 +1799,55 @@ Modified the single-click handling in `response.clicked()` block to use the cycl
 - Successfully compiles with `cargo build`
 
 ---
+
+## Session 12 - Crop Diagram Feature (2025-12-22)
+
+### Prompt: Add crop diagram feature to remove blank space
+
+**User Request:**
+"you should be able to apply crop to the entire diagram with the objective of removing unnecessary blank space. Maybe we need a flag on nodes to indicate if they have been aligned and if so cropping should honor that alignment"
+
+**Actions Taken:**
+
+1. **Added `aligned` flag to nodes:**
+   - Added `aligned: bool` field to `State` struct in `jmt-core/src/node/state.rs`
+   - Added `aligned: bool` field to `PseudoState` struct in `jmt-core/src/node/pseudo.rs`
+   - Added `is_aligned()` and `set_aligned()` accessor methods to `Node` enum in `jmt-core/src/node/mod.rs`
+
+2. **Implemented crop functionality in Diagram:**
+   - Added `tight_content_bounds()` method to get bounding box without padding
+   - Added `crop()` method that:
+     - Finds the tight bounding box of all content
+     - Calculates translation to move content to margin position
+     - Optionally snaps to grid for aligned nodes
+     - Translates all elements by the calculated offset
+   - Added `translate_all()` helper method to move all diagram elements
+
+3. **Added crop_diagram method to JmtApp:**
+   - Created `pub fn crop_diagram(&mut self) -> bool` in `app.rs`
+   - Uses 20px margin and 10px grid snapping
+   - Pushes undo before cropping
+   - Shows status message with translation applied
+
+4. **Added menu item:**
+   - Added "Crop Diagram" button to Edit menu in `menu_bar.rs`
+   - Enabled only when diagram has content
+   - Shows tooltip explaining the feature
+
+5. **Set aligned flag on alignment operations:**
+   - Modified `align_nodes()` in `toolbar.rs` to mark all aligned nodes with `aligned = true`
+   - This allows crop to know which nodes were explicitly positioned
+
+**Files Modified:**
+- `jmt-core/src/node/state.rs` - Added `aligned` field
+- `jmt-core/src/node/pseudo.rs` - Added `aligned` field
+- `jmt-core/src/node/mod.rs` - Added `is_aligned()` and `set_aligned()` methods
+- `jmt-core/src/diagram.rs` - Added `tight_content_bounds()`, `crop()`, and `translate_all()` methods
+- `jmt-client/src/app.rs` - Added `crop_diagram()` method
+- `jmt-client/src/panels/menu_bar.rs` - Added "Crop Diagram" menu item
+- `jmt-client/src/panels/toolbar.rs` - Set aligned flag after alignment operations
+
+**Build Status:**
+- Successfully compiles with `cargo build`
+
+---

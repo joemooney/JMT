@@ -48,6 +48,9 @@ pub struct State {
     /// Whether this node has a placement error (partially inside another node)
     #[serde(skip)]
     pub has_error: bool,
+    /// Whether this node has been explicitly aligned (for crop grid-snapping)
+    #[serde(default)]
+    pub aligned: bool,
 }
 
 impl State {
@@ -69,6 +72,7 @@ impl State {
             show_expanded: false,
             has_focus: false,
             has_error: false,
+            aligned: false,
         }
     }
 
@@ -90,6 +94,7 @@ impl State {
             show_expanded: false,
             has_focus: false,
             has_error: false,
+            aligned: false,
         }
     }
 
