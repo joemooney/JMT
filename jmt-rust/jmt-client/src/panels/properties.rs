@@ -67,8 +67,12 @@ impl PropertiesPanel {
                             (name, parent_state)
                         });
 
+                    // Get file path for embedded sub-statemachine display
+                    let file_path = state.file_path.as_ref()
+                        .map(|p| p.to_string_lossy().to_string());
+
                     if let Some(node) = state.diagram.find_node_mut(node_id) {
-                        action = Self::show_node_properties(ui, node, &mut state.modified, region_info);
+                        action = Self::show_node_properties(ui, node, &mut state.modified, region_info, file_path.as_deref());
                     }
                 }
             }
@@ -127,6 +131,7 @@ impl PropertiesPanel {
         node: &mut Node,
         modified: &mut bool,
         region_info: Option<(String, Option<String>)>,  // (region_name, parent_state_name)
+        diagram_file_path: Option<&str>,  // For showing embedded sub-statemachine file path
     ) -> Option<PropertiesAction> {
         let mut action: Option<PropertiesAction> = None;
         let node_id = node.id();
@@ -281,11 +286,12 @@ impl PropertiesPanel {
                     }
                 });
 
-                // Show file path if external
+                // Show file path
                 let is_external = state.substatemachine_path.as_ref()
                     .map(|p| !p.is_empty())
                     .unwrap_or(false);
                 if is_external {
+                    // External: editable path
                     let mut path_str = state.substatemachine_path.clone().unwrap_or_default();
                     let original_path = path_str.clone();
                     ui.horizontal(|ui| {
@@ -297,6 +303,13 @@ impl PropertiesPanel {
                         state.substatemachine_path = Some(path_str);
                         *modified = true;
                     }
+                } else {
+                    // Embedded: show the parent file path (read-only)
+                    let path_display = diagram_file_path.unwrap_or("(unsaved)");
+                    ui.horizontal(|ui| {
+                        ui.label("File:");
+                        ui.label(path_display);
+                    });
                 }
 
                 // Open button
