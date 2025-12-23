@@ -2699,9 +2699,17 @@ impl Diagram {
         }
     }
 
-    /// Select a single connection
+    /// Select a single connection (clears all other selection)
     pub fn select_connection(&mut self, id: ConnectionId) {
         self.clear_selection();
+        if let Some(conn) = self.find_connection_mut(id) {
+            conn.selected = true;
+        }
+    }
+
+    /// Add a connection to the current selection (without clearing existing selection)
+    /// Used by marquee selection when both nodes and connections with pivot points are selected
+    pub fn add_connection_to_selection(&mut self, id: ConnectionId) {
         if let Some(conn) = self.find_connection_mut(id) {
             conn.selected = true;
         }

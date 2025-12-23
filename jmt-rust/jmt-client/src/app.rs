@@ -3797,9 +3797,11 @@ impl eframe::App for JmtApp {
                             if let Some(state) = self.current_diagram_mut() {
                                 state.diagram.select_elements_in_rect(&rect);
 
-                                // Select connection with pivot points
+                                // Also select connection with pivot points (without clearing node selection)
+                                // We use add_connection_to_selection instead of select_connection
+                                // because select_connection would clear the nodes we just selected
                                 if let Some((conn_id, _, _)) = pivot_info {
-                                    state.diagram.select_connection(conn_id);
+                                    state.diagram.add_connection_to_selection(conn_id);
                                 }
                             }
 
