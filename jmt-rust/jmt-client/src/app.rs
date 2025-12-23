@@ -959,6 +959,7 @@ impl JmtApp {
             Ok(content) => {
                 match serde_json::from_str::<Diagram>(&content) {
                     Ok(mut diagram) => {
+                        diagram.assign_missing_seq_ids();
                         diagram.recalculate_connections();
                         let state = DiagramState::with_path(diagram, resolved_path.clone());
                         self.diagrams.push(state);
@@ -1157,6 +1158,8 @@ impl JmtApp {
                 Ok(content) => {
                     match serde_json::from_str::<Diagram>(&content) {
                         Ok(mut diagram) => {
+                            // Assign seq_ids to any elements that don't have them
+                            diagram.assign_missing_seq_ids();
                             // Recalculate connection routing (segments are not serialized)
                             diagram.recalculate_connections();
                             let state = DiagramState::with_path(diagram, path.clone());

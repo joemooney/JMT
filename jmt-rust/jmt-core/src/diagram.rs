@@ -1265,6 +1265,100 @@ impl Diagram {
         format!("conn{:04}", self.conn_counter)
     }
 
+    /// Parse a sequential ID and return the numeric part
+    /// Returns None if the format doesn't match
+    fn parse_seq_id(seq_id: &str, prefix: &str) -> Option<u32> {
+        if seq_id.starts_with(prefix) {
+            seq_id[prefix.len()..].parse().ok()
+        } else {
+            None
+        }
+    }
+
+    /// Assign sequential IDs to any elements that don't have them,
+    /// and update counters to be higher than any existing IDs.
+    /// Should be called after loading a diagram.
+    pub fn assign_missing_seq_ids(&mut self) {
+        // First pass: find the maximum existing counter values
+        for node in &self.nodes {
+            match node {
+                Node::State(s) => {
+                    if let Some(num) = Self::parse_seq_id(&s.seq_id, "state") {
+                        self.state_counter = self.state_counter.max(num);
+                    }
+                }
+                Node::Pseudo(p) => {
+                    let (prefix, counter) = match p.kind {
+                        PseudoStateKind::Initial => ("initial", &mut self.initial_counter),
+                        PseudoStateKind::Final => ("final", &mut self.final_counter),
+                        PseudoStateKind::Choice => ("choice", &mut self.choice_counter),
+                        PseudoStateKind::Fork => ("fork", &mut self.fork_counter),
+                        PseudoStateKind::Join => ("join", &mut self.join_counter),
+                        PseudoStateKind::Junction => ("junction", &mut self.junction_counter),
+                    };
+                    if let Some(num) = Self::parse_seq_id(&p.seq_id, prefix) {
+                        *counter = (*counter).max(num);
+                    }
+                }
+            }
+        }
+
+        for conn in &self.connections {
+            if let Some(num) = Self::parse_seq_id(&conn.seq_id, "conn") {
+                self.conn_counter = self.conn_counter.max(num);
+            }
+        }
+
+        // Second pass: assign seq_ids to elements that don't have them
+        for node in &mut self.nodes {
+            match node {
+                Node::State(s) => {
+                    if s.seq_id.is_empty() {
+                        self.state_counter += 1;
+                        s.seq_id = format!("state{:04}", self.state_counter);
+                    }
+                }
+                Node::Pseudo(p) => {
+                    if p.seq_id.is_empty() {
+                        p.seq_id = match p.kind {
+                            PseudoStateKind::Initial => {
+                                self.initial_counter += 1;
+                                format!("initial{:04}", self.initial_counter)
+                            }
+                            PseudoStateKind::Final => {
+                                self.final_counter += 1;
+                                format!("final{:04}", self.final_counter)
+                            }
+                            PseudoStateKind::Choice => {
+                                self.choice_counter += 1;
+                                format!("choice{:04}", self.choice_counter)
+                            }
+                            PseudoStateKind::Fork => {
+                                self.fork_counter += 1;
+                                format!("fork{:04}", self.fork_counter)
+                            }
+                            PseudoStateKind::Join => {
+                                self.join_counter += 1;
+                                format!("join{:04}", self.join_counter)
+                            }
+                            PseudoStateKind::Junction => {
+                                self.junction_counter += 1;
+                                format!("junction{:04}", self.junction_counter)
+                            }
+                        };
+                    }
+                }
+            }
+        }
+
+        for conn in &mut self.connections {
+            if conn.seq_id.is_empty() {
+                self.conn_counter += 1;
+                conn.seq_id = format!("conn{:04}", self.conn_counter);
+            }
+        }
+    }
+
     /// Add a new state at the given position
     pub fn add_state(&mut self, name: &str, x: f32, y: f32) -> NodeId {
         // Center the state on the given position
