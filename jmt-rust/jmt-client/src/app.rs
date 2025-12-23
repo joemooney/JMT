@@ -557,13 +557,17 @@ impl JmtApp {
         }
 
         // 5. Check connection lines (lowest priority)
-        for conn in state.diagram.connections() {
-            if conn.is_near_point(pos, connection_tolerance) {
-                // Only add if not already in candidates as endpoint or label
-                let already_has = candidates.iter().any(|c| matches!(c,
-                    ClickCandidate::Endpoint(id, _) | ClickCandidate::Label(id) if *id == conn.id));
-                if !already_has {
-                    candidates.push(ClickCandidate::Connection(conn.id));
+        // BUT: If we clicked inside a node, don't add connections - user meant to click the node
+        let clicked_inside_node = candidates.iter().any(|c| matches!(c, ClickCandidate::Node(_)));
+        if !clicked_inside_node {
+            for conn in state.diagram.connections() {
+                if conn.is_near_point(pos, connection_tolerance) {
+                    // Only add if not already in candidates as endpoint or label
+                    let already_has = candidates.iter().any(|c| matches!(c,
+                        ClickCandidate::Endpoint(id, _) | ClickCandidate::Label(id) if *id == conn.id));
+                    if !already_has {
+                        candidates.push(ClickCandidate::Connection(conn.id));
+                    }
                 }
             }
         }
