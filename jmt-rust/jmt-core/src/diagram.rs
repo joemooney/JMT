@@ -2117,9 +2117,11 @@ impl Diagram {
             }
         }
 
-        // Get all nodes sorted by area (largest first)
+        // Get all VISIBLE nodes sorted by area (largest first)
         // This ensures parent states are processed before their potential children
+        // We skip nodes hidden inside collapsed sub-statemachines
         let mut node_info: Vec<(NodeId, Rect)> = self.nodes.iter()
+            .filter(|n| self.is_node_visible(n.id()))
             .map(|n| (n.id(), n.bounds().clone()))
             .collect();
 
@@ -2977,12 +2979,19 @@ impl Diagram {
 
     /// Find which nodes a given node is overlapping with (for error display)
     /// Returns a list of (node_name, overlap_type) where overlap_type describes the overlap
+    /// Only checks visible nodes (excludes nodes hidden in collapsed sub-statemachines)
     pub fn find_overlapping_nodes(&self, node_id: NodeId) -> Vec<(String, String)> {
         let mut overlaps = Vec::new();
 
         let Some(node) = self.find_node(node_id) else {
             return overlaps;
         };
+
+        // Only check visible nodes
+        if !self.is_node_visible(node_id) {
+            return overlaps;
+        }
+
         let bounds = node.bounds();
         let corners = [
             Point::new(bounds.x1, bounds.y1),
@@ -2993,6 +3002,10 @@ impl Diagram {
 
         for other in &self.nodes {
             if other.id() == node_id {
+                continue;
+            }
+            // Skip hidden nodes
+            if !self.is_node_visible(other.id()) {
                 continue;
             }
             let other_bounds = other.bounds();
