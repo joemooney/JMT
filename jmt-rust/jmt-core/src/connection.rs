@@ -181,6 +181,9 @@ pub struct Connection {
     /// Whether the label is being hovered/selected (for interaction)
     #[serde(skip)]
     pub label_selected: bool,
+    /// Sequential ID for this connection (e.g., "conn0001")
+    #[serde(default)]
+    pub seq_id: String,
 }
 
 impl Connection {
@@ -206,6 +209,7 @@ impl Connection {
             path: Vec::new(),
             selected: false,
             label_selected: false,
+            seq_id: String::new(),
         }
     }
 
@@ -231,6 +235,7 @@ impl Connection {
             path: Vec::new(),
             selected: false,
             label_selected: false,
+            seq_id: String::new(),
         }
     }
 

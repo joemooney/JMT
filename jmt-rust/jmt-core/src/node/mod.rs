@@ -237,6 +237,22 @@ impl Node {
         }
     }
 
+    /// Get the sequential ID of this node
+    pub fn seq_id(&self) -> &str {
+        match self {
+            Node::State(s) => &s.seq_id,
+            Node::Pseudo(p) => &p.seq_id,
+        }
+    }
+
+    /// Set the sequential ID of this node
+    pub fn set_seq_id(&mut self, seq_id: String) {
+        match self {
+            Node::State(s) => s.seq_id = seq_id,
+            Node::Pseudo(p) => p.seq_id = seq_id,
+        }
+    }
+
     /// Get the parent region ID of this node
     pub fn parent_region_id(&self) -> Option<Uuid> {
         match self {

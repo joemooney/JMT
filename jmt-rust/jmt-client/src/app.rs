@@ -656,15 +656,42 @@ impl JmtApp {
                 self.dragging_endpoint = None;
                 self.selected_pivot = None;
                 self.selection_rect.clear();
-                // Get node name for status
+                // Get node name for status (use seq_id if unnamed)
                 let name = self.current_diagram()
                     .and_then(|s| s.diagram.find_node(node_id))
-                    .map(|n| n.name().to_string())
+                    .map(|n| {
+                        let name = n.name();
+                        if name.is_empty() {
+                            let seq_id = n.seq_id();
+                            if seq_id.is_empty() {
+                                n.node_type().display_name().to_string()
+                            } else {
+                                seq_id.to_string()
+                            }
+                        } else {
+                            name.to_string()
+                        }
+                    })
                     .unwrap_or_else(|| "Node".to_string());
                 self.status_message = name;
                 true
             }
             ClickCandidate::Connection(conn_id) => {
+                // Get connection name for status (use seq_id if unnamed)
+                let name = self.current_diagram()
+                    .and_then(|s| s.diagram.find_connection(conn_id))
+                    .map(|c| {
+                        if c.name.is_empty() {
+                            if c.seq_id.is_empty() {
+                                "Connection".to_string()
+                            } else {
+                                c.seq_id.clone()
+                            }
+                        } else {
+                            c.name.clone()
+                        }
+                    })
+                    .unwrap_or_else(|| "Connection".to_string());
                 if let Some(state) = self.current_diagram_mut() {
                     state.diagram.select_connection(conn_id);
                 }
@@ -674,7 +701,7 @@ impl JmtApp {
                 self.dragging_endpoint = None;
                 self.selected_pivot = None;
                 self.selection_rect.clear();
-                self.status_message = "Connection".to_string();
+                self.status_message = name;
                 true
             }
         }
@@ -3667,12 +3694,24 @@ impl eframe::App for JmtApp {
                         let item_y = start_y + i as f32 * item_spacing;
                         let item_center = egui::Pos2::new(loupe_center.x, item_y);
 
-                        // Get candidate info
+                        // Get candidate info (use seq_id for unnamed elements)
                         let (label, color) = match candidate {
                             ClickCandidate::Node(id) => {
                                 let name = self.current_diagram()
                                     .and_then(|s| s.diagram.find_node(*id))
-                                    .map(|n| n.name().to_string())
+                                    .map(|n| {
+                                        let name = n.name();
+                                        if name.is_empty() {
+                                            let seq_id = n.seq_id();
+                                            if seq_id.is_empty() {
+                                                n.node_type().display_name().to_string()
+                                            } else {
+                                                seq_id.to_string()
+                                            }
+                                        } else {
+                                            name.to_string()
+                                        }
+                                    })
                                     .unwrap_or_else(|| "Node".to_string());
                                 (format!("📦 {}", name), egui::Color32::from_rgb(255, 220, 150))
                             }
@@ -3686,8 +3725,22 @@ impl eframe::App for JmtApp {
                             ClickCandidate::Label(_) => {
                                 ("📝 Label".to_string(), egui::Color32::WHITE)
                             }
-                            ClickCandidate::Connection(_) => {
-                                ("➜ Connection".to_string(), egui::Color32::LIGHT_GRAY)
+                            ClickCandidate::Connection(conn_id) => {
+                                let name = self.current_diagram()
+                                    .and_then(|s| s.diagram.find_connection(*conn_id))
+                                    .map(|c| {
+                                        if c.name.is_empty() {
+                                            if c.seq_id.is_empty() {
+                                                "Connection".to_string()
+                                            } else {
+                                                c.seq_id.clone()
+                                            }
+                                        } else {
+                                            c.name.clone()
+                                        }
+                                    })
+                                    .unwrap_or_else(|| "Connection".to_string());
+                                (format!("➜ {}", name), egui::Color32::LIGHT_GRAY)
                             }
                         };
 

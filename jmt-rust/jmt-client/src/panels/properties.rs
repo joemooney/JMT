@@ -146,6 +146,15 @@ impl PropertiesPanel {
             }
         });
 
+        // Show sequential ID (read-only)
+        let seq_id = node.seq_id();
+        if !seq_id.is_empty() {
+            ui.horizontal(|ui| {
+                ui.label("ID:");
+                ui.label(seq_id);
+            });
+        }
+
         // Show containing region
         if let Some((region_name, parent_state)) = region_info {
             ui.horizontal(|ui| {
@@ -363,6 +372,14 @@ impl PropertiesPanel {
                 *modified = true;
             }
         });
+
+        // Show sequential ID (read-only)
+        if !conn.seq_id.is_empty() {
+            ui.horizontal(|ui| {
+                ui.label("ID:");
+                ui.label(&conn.seq_id);
+            });
+        }
 
         ui.separator();
 

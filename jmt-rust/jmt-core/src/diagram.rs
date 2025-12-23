@@ -126,6 +126,32 @@ pub struct Diagram {
     #[serde(default)]
     pub parent_references: Vec<ParentReference>,
 
+    // === Sequential ID counters ===
+    /// Counter for state sequential IDs
+    #[serde(default)]
+    pub state_counter: u32,
+    /// Counter for initial pseudo-state sequential IDs
+    #[serde(default)]
+    pub initial_counter: u32,
+    /// Counter for final pseudo-state sequential IDs
+    #[serde(default)]
+    pub final_counter: u32,
+    /// Counter for choice pseudo-state sequential IDs
+    #[serde(default)]
+    pub choice_counter: u32,
+    /// Counter for fork pseudo-state sequential IDs
+    #[serde(default)]
+    pub fork_counter: u32,
+    /// Counter for join pseudo-state sequential IDs
+    #[serde(default)]
+    pub join_counter: u32,
+    /// Counter for junction pseudo-state sequential IDs
+    #[serde(default)]
+    pub junction_counter: u32,
+    /// Counter for connection sequential IDs
+    #[serde(default)]
+    pub conn_counter: u32,
+
     /// Undo history (serialized diagram snapshots)
     #[serde(skip)]
     undo_stack: Vec<String>,
@@ -182,6 +208,15 @@ impl Diagram {
             control_flows: Vec::new(),
             // Sub-statemachine parent tracking
             parent_references: Vec::new(),
+            // Sequential ID counters
+            state_counter: 0,
+            initial_counter: 0,
+            final_counter: 0,
+            choice_counter: 0,
+            fork_counter: 0,
+            join_counter: 0,
+            junction_counter: 0,
+            conn_counter: 0,
             // Undo
             undo_stack: Vec::new(),
             redo_stack: Vec::new(),
@@ -1188,18 +1223,62 @@ impl Diagram {
         None
     }
 
+    /// Generate the next sequential ID for a state
+    pub fn next_state_seq_id(&mut self) -> String {
+        self.state_counter += 1;
+        format!("state{:04}", self.state_counter)
+    }
+
+    /// Generate the next sequential ID for a pseudo-state based on its kind
+    pub fn next_pseudo_seq_id(&mut self, kind: PseudoStateKind) -> String {
+        match kind {
+            PseudoStateKind::Initial => {
+                self.initial_counter += 1;
+                format!("initial{:04}", self.initial_counter)
+            }
+            PseudoStateKind::Final => {
+                self.final_counter += 1;
+                format!("final{:04}", self.final_counter)
+            }
+            PseudoStateKind::Choice => {
+                self.choice_counter += 1;
+                format!("choice{:04}", self.choice_counter)
+            }
+            PseudoStateKind::Fork => {
+                self.fork_counter += 1;
+                format!("fork{:04}", self.fork_counter)
+            }
+            PseudoStateKind::Join => {
+                self.join_counter += 1;
+                format!("join{:04}", self.join_counter)
+            }
+            PseudoStateKind::Junction => {
+                self.junction_counter += 1;
+                format!("junction{:04}", self.junction_counter)
+            }
+        }
+    }
+
+    /// Generate the next sequential ID for a connection
+    pub fn next_conn_seq_id(&mut self) -> String {
+        self.conn_counter += 1;
+        format!("conn{:04}", self.conn_counter)
+    }
+
     /// Add a new state at the given position
     pub fn add_state(&mut self, name: &str, x: f32, y: f32) -> NodeId {
         // Center the state on the given position
         let width = self.settings.default_state_width;
         let height = self.settings.default_state_height;
-        let state = State::new(
+        let seq_id = self.next_state_seq_id();
+        let mut state = State::new(
             name,
             x - width / 2.0,
             y - height / 2.0,
             width,
             height,
         );
+        state.seq_id = seq_id;
         let id = state.id;
         self.nodes.push(Node::State(state));
 
@@ -1214,7 +1293,9 @@ impl Diagram {
     pub fn add_pseudo_state(&mut self, kind: PseudoStateKind, x: f32, y: f32) -> NodeId {
         let (width, height) = kind.default_size();
         // Center on the given position
-        let pseudo = PseudoState::new(kind, x - width / 2.0, y - height / 2.0);
+        let seq_id = self.next_pseudo_seq_id(kind);
+        let mut pseudo = PseudoState::new(kind, x - width / 2.0, y - height / 2.0);
+        pseudo.seq_id = seq_id;
         let id = pseudo.id;
         self.nodes.push(Node::Pseudo(pseudo));
 
@@ -2198,6 +2279,7 @@ impl Diagram {
         let mut conn = Connection::new(source_id, target_id);
         conn.source_side = source_side;
         conn.target_side = target_side;
+        conn.seq_id = self.next_conn_seq_id();
 
         let id = conn.id;
         self.connections.push(conn);

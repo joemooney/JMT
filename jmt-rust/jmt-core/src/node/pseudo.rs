@@ -99,6 +99,9 @@ pub struct PseudoState {
     /// Whether this node has been explicitly aligned (for crop grid-snapping)
     #[serde(default)]
     pub aligned: bool,
+    /// Sequential ID for this pseudo-state (e.g., "initial0001")
+    #[serde(default)]
+    pub seq_id: String,
 }
 
 impl PseudoState {
@@ -115,6 +118,7 @@ impl PseudoState {
             has_focus: false,
             has_error: false,
             aligned: false,
+            seq_id: String::new(),
         }
     }
 
@@ -131,6 +135,7 @@ impl PseudoState {
             has_focus: false,
             has_error: false,
             aligned: false,
+            seq_id: String::new(),
         }
     }
 

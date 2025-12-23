@@ -51,6 +51,9 @@ pub struct State {
     /// Whether this node has been explicitly aligned (for crop grid-snapping)
     #[serde(default)]
     pub aligned: bool,
+    /// Sequential ID for this state (e.g., "state0001")
+    #[serde(default)]
+    pub seq_id: String,
 }
 
 impl State {
@@ -73,6 +76,7 @@ impl State {
             has_focus: false,
             has_error: false,
             aligned: false,
+            seq_id: String::new(),
         }
     }
 
@@ -95,6 +99,7 @@ impl State {
             has_focus: false,
             has_error: false,
             aligned: false,
+            seq_id: String::new(),
         }
     }
 
