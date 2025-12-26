@@ -52,6 +52,12 @@ The original implementation uses Fantom (JVM) with FWT for the GUI. See `fan/` d
     - Click icon for preview popup, double-click to open in new tab
     - Support for embedded or external file storage
     - Properties panel controls for creating and managing sub-statemachines
+16. **Sequential IDs** - Unique identifiers for all diagram elements
+    - Auto-generated IDs: `state0001`, `initial0001`, `conn0001`, etc.
+    - Shown in Properties panel for reference
+    - Used in status bar/loupe for unnamed elements
+    - Unique per file across all embedded sub-statemachines
+    - Backwards compatible: existing files get IDs assigned on load
 
 ## Project Structure
 
