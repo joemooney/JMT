@@ -3436,9 +3436,10 @@ impl eframe::App for JmtApp {
                             self.dragging_label = None;
                             self.selection_rect.clear();
                         } else {
-                            // First, check if the drag point is within an already-selected node.
-                            // If so, drag that node without re-evaluating candidates.
-                            // This prevents accidentally selecting a parent state when trying to drag a child.
+                            // First, check if the drag point is within or NEAR an already-selected node.
+                            // Use expanded bounds to account for imprecise clicking on small nodes.
+                            // If you just selected something, you probably want to drag it.
+                            let drag_tolerance = 15.0; // pixels of tolerance around selected nodes
                             let drag_selected = self.current_diagram().and_then(|state| {
                                 let selected = state.diagram.selected_nodes();
                                 // Check smallest selected node first (most likely the one user wants)
@@ -3446,7 +3447,15 @@ impl eframe::App for JmtApp {
                                     .filter_map(|&id| {
                                         state.diagram.find_node(id).map(|n| {
                                             let b = n.bounds();
-                                            (id, b.width() * b.height(), n.contains_point(point))
+                                            // Expand bounds by tolerance for easier dragging of small nodes
+                                            let expanded = Rect::new(
+                                                b.x1 - drag_tolerance,
+                                                b.y1 - drag_tolerance,
+                                                b.x2 + drag_tolerance,
+                                                b.y2 + drag_tolerance,
+                                            );
+                                            let in_expanded = expanded.contains_point(point);
+                                            (id, b.width() * b.height(), in_expanded)
                                         })
                                     })
                                     .filter(|(_, _, contains)| *contains)
