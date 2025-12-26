@@ -77,7 +77,9 @@ impl DiagramCanvas {
         );
     }
 
-    /// Render title in UML frame notation (rectangle around diagram with dog-eared label in top-left)
+    /// Render title in UML frame notation (dog-eared label in top-left corner)
+    /// Note: We only draw the label, not a full rectangle around content, as that's
+    /// problematic for large diagrams that extend beyond the visible area.
     fn render_title_frame(&self, diagram: &Diagram, painter: &egui::Painter, zoom: f32) {
         let font_size = 14.0 * zoom;
         let font = egui::FontId::proportional(font_size);
@@ -97,46 +99,12 @@ impl DiagramCanvas {
         let dog_ear_size = 12.0 * zoom;
         let label_height = text_height + padding_v * 2.0;
 
-        // Get content bounds and add margin for the frame
-        let frame_margin = 20.0; // Margin around content in diagram units
-        let content_bounds = diagram.content_bounds();
-
-        // Calculate label height in diagram units for positioning
-        let label_height_diagram = label_height / zoom;
-
-        // Frame rectangle coordinates (in diagram space first)
-        // Ensure minimum position so frame is always visible (at least 10 pixels from edge)
-        let min_frame_pos = 10.0; // Minimum position in diagram units
-        let frame_left = (content_bounds.x1 - frame_margin).max(min_frame_pos);
-        let frame_top = (content_bounds.y1 - frame_margin - label_height_diagram).max(min_frame_pos);
-        let frame_right = content_bounds.x2 + frame_margin;
-        let frame_bottom = content_bounds.y2 + frame_margin;
+        // Position label at fixed location in top-left of canvas (in diagram units)
+        let label_pos = 20.0; // Fixed position in diagram units
 
         // Convert to screen space
-        let outer_left = frame_left * zoom + self.offset.x;
-        let outer_top = frame_top * zoom + self.offset.y;
-        let outer_right = frame_right * zoom + self.offset.x;
-        let outer_bottom = frame_bottom * zoom + self.offset.y;
-
-        // Ensure minimum frame size
-        let min_width = text_width + padding_h * 2.0 + dog_ear_size + 100.0 * zoom;
-        let min_height = label_height + 100.0 * zoom;
-        let outer_right = outer_right.max(outer_left + min_width);
-        let outer_bottom = outer_bottom.max(outer_top + min_height);
-
-        // Draw the outer frame rectangle
-        painter.rect_stroke(
-            Rect::from_min_max(
-                Pos2::new(outer_left, outer_top),
-                Pos2::new(outer_right, outer_bottom),
-            ),
-            Rounding::ZERO,
-            Stroke::new(zoom, Color32::BLACK),
-        );
-
-        // Label position (attached to top-left of frame)
-        let label_left = outer_left;
-        let label_top = outer_top;
+        let label_left = label_pos * zoom + self.offset.x;
+        let label_top = label_pos * zoom + self.offset.y;
         let label_right = label_left + text_width + padding_h * 2.0 + dog_ear_size;
         let label_bottom = label_top + label_height;
 
