@@ -101,11 +101,22 @@ impl DiagramCanvas {
         let frame_margin = 20.0; // Margin around content in diagram units
         let content_bounds = diagram.content_bounds();
 
-        // Frame rectangle coordinates (in screen space)
-        let outer_left = (content_bounds.x1 - frame_margin) * zoom + self.offset.x;
-        let outer_top = (content_bounds.y1 - frame_margin - label_height / zoom) * zoom + self.offset.y;
-        let outer_right = (content_bounds.x2 + frame_margin) * zoom + self.offset.x;
-        let outer_bottom = (content_bounds.y2 + frame_margin) * zoom + self.offset.y;
+        // Calculate label height in diagram units for positioning
+        let label_height_diagram = label_height / zoom;
+
+        // Frame rectangle coordinates (in diagram space first)
+        // Ensure minimum position so frame is always visible (at least 10 pixels from edge)
+        let min_frame_pos = 10.0; // Minimum position in diagram units
+        let frame_left = (content_bounds.x1 - frame_margin).max(min_frame_pos);
+        let frame_top = (content_bounds.y1 - frame_margin - label_height_diagram).max(min_frame_pos);
+        let frame_right = content_bounds.x2 + frame_margin;
+        let frame_bottom = content_bounds.y2 + frame_margin;
+
+        // Convert to screen space
+        let outer_left = frame_left * zoom + self.offset.x;
+        let outer_top = frame_top * zoom + self.offset.y;
+        let outer_right = frame_right * zoom + self.offset.x;
+        let outer_bottom = frame_bottom * zoom + self.offset.y;
 
         // Ensure minimum frame size
         let min_width = text_width + padding_h * 2.0 + dog_ear_size + 100.0 * zoom;
