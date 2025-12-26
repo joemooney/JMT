@@ -1851,3 +1851,38 @@ Modified the single-click handling in `response.clicked()` block to use the cycl
 - Successfully compiles with `cargo build`
 
 ---
+
+## Session 13 - Embedded Sub-Statemachine Display Fixes (2025-12-25)
+
+### Prompt: Fix tab title and Properties path for embedded sub-statemachines
+
+**User Request:**
+When a sub-statemachine is stored embedded in the parent file:
+- Tab shows `Waiting(sub)*` but should show `Waiting(sm1)*` where sm1 is the parent file name
+- Properties shows `Path: (not saved)` but should show the parent's path
+
+**Actions Taken:**
+
+1. **Added embedded sub-statemachine tracking to DiagramState:**
+   - Added `is_embedded_sub: bool` field to track if diagram is an embedded sub-statemachine
+   - Added `parent_state_id: Option<NodeId>` to know which state contains this sub-statemachine
+   - Updated `new()` and `with_path()` constructors to initialize these fields
+
+2. **Updated open_embedded_substatemachine function:**
+   - Changed function signature to accept `parent_file_path: Option<PathBuf>` and `parent_file_name: Option<String>`
+   - Tab title now uses parent file name: `format!("{} ({})", display_name, parent_indicator)` instead of `format!("{} (sub)", display_name)`
+   - Creates DiagramState with parent's file path using `DiagramState::with_path()` so Properties panel shows correct path
+   - Marks the new DiagramState with `is_embedded_sub = true` and stores `parent_state_id`
+
+3. **Updated call site in open_substatemachine:**
+   - Extracts parent file path from current diagram
+   - Extracts parent file name (file stem) from path
+   - Passes both to `open_embedded_substatemachine()`
+
+**Files Modified:**
+- `jmt-client/src/app.rs` - Added new fields to DiagramState, updated open_embedded_substatemachine function
+
+**Build Status:**
+- Successfully compiles with `cargo build`
+
+---
