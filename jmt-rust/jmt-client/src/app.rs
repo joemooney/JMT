@@ -647,6 +647,7 @@ impl JmtApp {
                 true
             }
             ClickCandidate::Node(node_id) => {
+                eprintln!("DEBUG: select_candidate Node {:?}", node_id);
                 if self.edit_mode != EditMode::Arrow {
                     self.set_edit_mode(EditMode::Arrow);
                 }
@@ -656,7 +657,9 @@ impl JmtApp {
                         state.diagram.clear_selection();
                         state.diagram.select_node(node_id);
                     }
+                    eprintln!("DEBUG: calling push_undo for node drag");
                     state.diagram.push_undo();
+                    eprintln!("DEBUG: after push_undo, undo_stack_len = {}", state.diagram.undo_stack_len());
                 }
                 self.dragging_nodes = true;
                 self.dragging_label = None;

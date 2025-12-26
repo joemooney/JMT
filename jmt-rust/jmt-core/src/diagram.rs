@@ -3481,12 +3481,18 @@ impl Diagram {
 
     /// Push current state to undo stack
     pub fn push_undo(&mut self) {
-        if let Ok(snapshot) = serde_json::to_string(self) {
-            self.undo_stack.push(snapshot);
-            if self.undo_stack.len() > self.max_undo_levels {
-                self.undo_stack.remove(0);
+        match serde_json::to_string(self) {
+            Ok(snapshot) => {
+                self.undo_stack.push(snapshot);
+                if self.undo_stack.len() > self.max_undo_levels {
+                    self.undo_stack.remove(0);
+                }
+                self.redo_stack.clear();
+                eprintln!("DEBUG push_undo: success, undo_stack.len = {}", self.undo_stack.len());
             }
-            self.redo_stack.clear();
+            Err(e) => {
+                eprintln!("DEBUG push_undo: serialization failed: {}", e);
+            }
         }
     }
 

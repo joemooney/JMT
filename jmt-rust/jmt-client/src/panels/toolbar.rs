@@ -13,14 +13,24 @@ impl Toolbar {
     pub fn show(ui: &mut egui::Ui, app: &mut JmtApp) {
         ui.horizontal(|ui| {
             // Undo/Redo buttons
-            let can_undo = app.current_diagram()
-                .map(|s| s.diagram.can_undo())
-                .unwrap_or(false);
+            let (can_undo, undo_len) = app.current_diagram()
+                .map(|s| (s.diagram.can_undo(), s.diagram.undo_stack_len()))
+                .unwrap_or((false, 0));
             let can_redo = app.current_diagram()
                 .map(|s| s.diagram.can_redo())
                 .unwrap_or(false);
 
-            if ui.add_enabled(can_undo, egui::Button::new("⟲ Undo"))
+            // Debug: show undo stack length in button text
+            // Also log when undo_len changes (one-time per change, tracked via static)
+            use std::sync::atomic::{AtomicUsize, Ordering};
+            static LAST_UNDO_LEN: AtomicUsize = AtomicUsize::new(0);
+            let last = LAST_UNDO_LEN.load(Ordering::Relaxed);
+            if undo_len != last {
+                eprintln!("DEBUG toolbar: undo_len changed from {} to {}, can_undo={}", last, undo_len, can_undo);
+                LAST_UNDO_LEN.store(undo_len, Ordering::Relaxed);
+            }
+            let undo_text = format!("⟲ Undo ({})", undo_len);
+            if ui.add_enabled(can_undo, egui::Button::new(&undo_text))
                 .on_hover_text("Undo last action (Ctrl+Z)")
                 .clicked()
             {
