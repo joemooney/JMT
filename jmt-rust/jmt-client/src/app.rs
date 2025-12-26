@@ -3467,29 +3467,61 @@ impl eframe::App for JmtApp {
                                 self.selected_pivot = None;
                                 self.selection_rect.clear();
                                 self.status_message = "Dragging selected node(s)".to_string();
-                            } else if !self.handle_click_with_cycling(point) {
-                                // Nothing to select - start marquee or lasso selection
-                                if self.edit_mode == EditMode::Arrow {
-                                    // We're starting a marquee selection (only in Arrow mode)
-                                    self.dragging_nodes = false;
-                                    self.dragging_label = None;
-                                    self.selected_pivot = None;
-                                    self.selection_rect.start = Some(diagram_pos);
-                                    self.selection_rect.current = Some(diagram_pos);
-                                    // Clear current selection when starting a new marquee
+                            } else {
+                                // Not on a selected node - find the SMALLEST node at this position
+                                // and select+drag it. This is more intuitive than cycling through candidates.
+                                let smallest_node = self.current_diagram().and_then(|state| {
+                                    let mut nodes_at_point: Vec<_> = state.diagram.nodes().iter()
+                                        .filter(|n| n.contains_point(point))
+                                        .map(|n| {
+                                            let b = n.bounds();
+                                            (n.id(), b.width() * b.height(), n.name().to_string())
+                                        })
+                                        .collect();
+                                    // Sort by area (smallest first)
+                                    nodes_at_point.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+                                    nodes_at_point.first().map(|(id, _, name)| (*id, name.clone()))
+                                });
+
+                                if let Some((node_id, name)) = smallest_node {
+                                    // Select and drag the smallest node
                                     if let Some(state) = self.current_diagram_mut() {
                                         state.diagram.clear_selection();
+                                        state.diagram.select_node(node_id);
+                                        state.diagram.push_undo();
                                     }
-                                } else if self.edit_mode == EditMode::Lasso {
-                                    // We're starting a lasso selection
-                                    self.dragging_nodes = false;
+                                    self.dragging_nodes = true;
                                     self.dragging_label = None;
+                                    self.dragging_pivot = None;
+                                    self.dragging_endpoint = None;
                                     self.selected_pivot = None;
-                                    self.lasso_points.clear();
-                                    self.lasso_points.push(diagram_pos);
-                                    // Clear current selection when starting a new lasso
-                                    if let Some(state) = self.current_diagram_mut() {
-                                        state.diagram.clear_selection();
+                                    self.selection_rect.clear();
+                                    let display_name = if name.is_empty() { "node".to_string() } else { name };
+                                    self.status_message = format!("Dragging: {}", display_name);
+                                } else {
+                                    // Nothing to select - start marquee or lasso selection
+                                    if self.edit_mode == EditMode::Arrow {
+                                        // We're starting a marquee selection (only in Arrow mode)
+                                        self.dragging_nodes = false;
+                                        self.dragging_label = None;
+                                        self.selected_pivot = None;
+                                        self.selection_rect.start = Some(diagram_pos);
+                                        self.selection_rect.current = Some(diagram_pos);
+                                        // Clear current selection when starting a new marquee
+                                        if let Some(state) = self.current_diagram_mut() {
+                                            state.diagram.clear_selection();
+                                        }
+                                    } else if self.edit_mode == EditMode::Lasso {
+                                        // We're starting a lasso selection
+                                        self.dragging_nodes = false;
+                                        self.dragging_label = None;
+                                        self.selected_pivot = None;
+                                        self.lasso_points.clear();
+                                        self.lasso_points.push(diagram_pos);
+                                        // Clear current selection when starting a new lasso
+                                        if let Some(state) = self.current_diagram_mut() {
+                                            state.diagram.clear_selection();
+                                        }
                                     }
                                 }
                             }
