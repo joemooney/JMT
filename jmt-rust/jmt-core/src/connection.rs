@@ -327,24 +327,51 @@ impl Connection {
         target_bounds: &Rect,
         _stub_len: f32,
     ) {
+        self.calculate_segments_with_center(source_bounds, target_bounds, _stub_len, false, false);
+    }
+
+    /// Calculate the line segments, optionally using center points for circular nodes
+    /// source_use_center: if true, connection starts from center of source (for Initial pseudo-state)
+    /// target_use_center: if true, connection ends at center of target (for Final pseudo-state)
+    pub fn calculate_segments_with_center(
+        &mut self,
+        source_bounds: &Rect,
+        target_bounds: &Rect,
+        _stub_len: f32,
+        source_use_center: bool,
+        target_use_center: bool,
+    ) {
         self.segments.clear();
         self.path.clear();
 
         // Auto-adjust sides based on pivot points or target/source positions
-        if !self.pivot_points.is_empty() {
-            // Use first pivot to determine source side
-            let first_pivot = self.pivot_points[0];
-            self.source_side = Self::determine_side_from_direction(source_bounds.center(), first_pivot);
-            self.source_offset = 0.0; // Reset offset when auto-adjusting
-
-            // Use last pivot to determine target side
-            let last_pivot = self.pivot_points[self.pivot_points.len() - 1];
-            self.target_side = Self::determine_side_from_direction(target_bounds.center(), last_pivot);
-            self.target_offset = 0.0; // Reset offset when auto-adjusting
+        // Skip side calculation if using center
+        if !source_use_center {
+            if !self.pivot_points.is_empty() {
+                // Use first pivot to determine source side
+                let first_pivot = self.pivot_points[0];
+                self.source_side = Self::determine_side_from_direction(source_bounds.center(), first_pivot);
+                self.source_offset = 0.0; // Reset offset when auto-adjusting
+            } else {
+                // No pivot points - use direction to opposite node
+                self.source_side = Self::determine_side_from_direction(source_bounds.center(), target_bounds.center());
+            }
         } else {
-            // No pivot points - use direction to opposite node
-            self.source_side = Self::determine_side_from_direction(source_bounds.center(), target_bounds.center());
-            self.target_side = Self::determine_side_from_direction(target_bounds.center(), source_bounds.center());
+            self.source_side = Side::None; // Use center
+        }
+
+        if !target_use_center {
+            if !self.pivot_points.is_empty() {
+                // Use last pivot to determine target side
+                let last_pivot = self.pivot_points[self.pivot_points.len() - 1];
+                self.target_side = Self::determine_side_from_direction(target_bounds.center(), last_pivot);
+                self.target_offset = 0.0; // Reset offset when auto-adjusting
+            } else {
+                // No pivot points - use direction to opposite node
+                self.target_side = Self::determine_side_from_direction(target_bounds.center(), source_bounds.center());
+            }
+        } else {
+            self.target_side = Side::None; // Use center
         }
 
         let source_point = self.get_side_point(source_bounds, self.source_side, self.source_offset);

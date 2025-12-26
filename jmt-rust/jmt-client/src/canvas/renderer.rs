@@ -3,7 +3,7 @@
 use eframe::egui::{self, Color32, Pos2, Rect, Rounding, Stroke, Vec2};
 use jmt_core::{Diagram, Node, Connection, DiagramType, TitleStyle};
 use jmt_core::connection::PathSegment;
-use jmt_core::node::{PseudoStateKind, Side};
+use jmt_core::node::PseudoStateKind;
 use jmt_core::geometry::Color;
 use jmt_core::sequence::{Lifeline, Message, CombinedFragment};
 use jmt_core::usecase::{Actor, UseCase, SystemBoundary, UseCaseRelationship, RelationshipKind, UseCaseElementKind};
@@ -565,19 +565,22 @@ impl DiagramCanvas {
             }
         }
 
-        // Draw arrowhead at target
+        // Draw arrowhead at target using the direction of the last segment
         if let Some(end_point) = conn.end_point() {
-            // For curved segments, calculate arrow direction from curve tangent
-            // Use the last segment's direction for arrow orientation
-            let arrow_side = if let Some(last_seg) = conn.segments.last() {
-                Self::side_from_direction(last_seg.start, last_seg.end)
+            // Get the "from" point for arrow direction - use last segment or second-to-last path point
+            let from_point = if let Some(last_seg) = conn.segments.last() {
+                self.scale_pos(last_seg.start.x, last_seg.start.y, zoom)
+            } else if let Some(start) = conn.start_point() {
+                self.scale_pos(start.x, start.y, zoom)
             } else {
-                conn.target_side
+                // Fallback: just use a point slightly above
+                let tip = self.scale_pos(end_point.x, end_point.y, zoom);
+                Pos2::new(tip.x, tip.y - 10.0)
             };
 
-            self.render_arrowhead(
+            self.render_arrowhead_directional(
                 self.scale_pos(end_point.x, end_point.y, zoom),
-                arrow_side,
+                from_point,
                 painter,
                 settings,
                 stroke,
@@ -743,55 +746,48 @@ impl DiagramCanvas {
         painter.add(egui::Shape::CubicBezier(bezier));
     }
 
-    /// Determine arrow side from the direction between two points
-    fn side_from_direction(from: jmt_core::Point, to: jmt_core::Point) -> Side {
-        let dx = to.x - from.x;
-        let dy = to.y - from.y;
-
-        // Return the side where the arrow wings should be drawn
-        // Wings on Left means arrow points Right, etc.
-        if dx.abs() > dy.abs() {
-            if dx > 0.0 { Side::Left } else { Side::Right }
-        } else {
-            if dy > 0.0 { Side::Top } else { Side::Bottom }
-        }
-    }
-
-    /// Render an arrowhead
-    fn render_arrowhead(
+    /// Render an arrowhead pointing in the direction of (dx, dy)
+    /// The arrowhead is drawn at the tip point, with wings pointing back along the line
+    fn render_arrowhead_directional(
         &self,
-        point: Pos2,
-        side: Side,
+        tip: Pos2,
+        from: Pos2,
         painter: &egui::Painter,
         settings: &jmt_core::DiagramSettings,
         stroke: Stroke,
         zoom: f32,
     ) {
-        let w = settings.arrow_width * zoom;
-        let h = settings.arrow_height * zoom;
+        let dx = tip.x - from.x;
+        let dy = tip.y - from.y;
+        let len = (dx * dx + dy * dy).sqrt();
 
-        let (p1, p2) = match side {
-            Side::Top => (
-                Pos2::new(point.x - w, point.y - h),
-                Pos2::new(point.x + w, point.y - h),
-            ),
-            Side::Bottom => (
-                Pos2::new(point.x - w, point.y + h),
-                Pos2::new(point.x + w, point.y + h),
-            ),
-            Side::Left => (
-                Pos2::new(point.x - h, point.y - w),
-                Pos2::new(point.x - h, point.y + w),
-            ),
-            Side::Right => (
-                Pos2::new(point.x + h, point.y - w),
-                Pos2::new(point.x + h, point.y + w),
-            ),
-            Side::None => return,
-        };
+        if len < 0.001 {
+            return;
+        }
 
-        painter.line_segment([p1, point], stroke);
-        painter.line_segment([p2, point], stroke);
+        // Unit vector pointing from source to target (direction of arrow)
+        let ux = dx / len;
+        let uy = dy / len;
+
+        // Perpendicular vector for arrow wings
+        let px = -uy;
+        let py = ux;
+
+        let arrow_len = settings.arrow_height * zoom;
+        let arrow_width = settings.arrow_width * zoom;
+
+        // Two wing points: go back along the line and spread perpendicular
+        let wing1 = Pos2::new(
+            tip.x - ux * arrow_len + px * arrow_width,
+            tip.y - uy * arrow_len + py * arrow_width,
+        );
+        let wing2 = Pos2::new(
+            tip.x - ux * arrow_len - px * arrow_width,
+            tip.y - uy * arrow_len - py * arrow_width,
+        );
+
+        painter.line_segment([wing1, tip], stroke);
+        painter.line_segment([wing2, tip], stroke);
     }
 
     // ===== Sequence Diagram Rendering =====

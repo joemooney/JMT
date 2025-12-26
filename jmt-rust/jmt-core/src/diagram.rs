@@ -2429,6 +2429,18 @@ impl Diagram {
             .map(|n| (n.id(), n.bounds().clone()))
             .collect();
 
+        // Collect node types for determining if we should use center
+        let node_types: std::collections::HashMap<NodeId, Option<PseudoStateKind>> = self.nodes
+            .iter()
+            .map(|n| {
+                let kind = match n {
+                    Node::Pseudo(p) => Some(p.kind),
+                    Node::State(_) => None,
+                };
+                (n.id(), kind)
+            })
+            .collect();
+
         // Third pass: recalculate segments with updated offsets
         for conn in &mut self.connections {
             let source_bounds = all_bounds.iter()
@@ -2438,8 +2450,18 @@ impl Diagram {
                 .find(|(id, _)| *id == conn.target_id)
                 .map(|(_, b)| b.clone());
 
+            // Check if source/target are circular pseudo-states that should use center
+            let source_use_center = node_types.get(&conn.source_id)
+                .and_then(|k| *k)
+                .map(|k| matches!(k, PseudoStateKind::Initial | PseudoStateKind::Junction))
+                .unwrap_or(false);
+            let target_use_center = node_types.get(&conn.target_id)
+                .and_then(|k| *k)
+                .map(|k| matches!(k, PseudoStateKind::Final | PseudoStateKind::Junction))
+                .unwrap_or(false);
+
             if let (Some(sb), Some(tb)) = (source_bounds, target_bounds) {
-                conn.calculate_segments(&sb, &tb, stub_len);
+                conn.calculate_segments_with_center(&sb, &tb, stub_len, source_use_center, target_use_center);
             }
         }
     }
