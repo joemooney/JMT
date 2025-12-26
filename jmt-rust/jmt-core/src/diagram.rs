@@ -54,6 +54,11 @@ pub struct ParentReference {
     pub state_name: String,
 }
 
+/// Default value for max_undo_levels when deserializing
+fn default_max_undo_levels() -> usize {
+    50
+}
+
 /// A complete UML diagram (state machine, sequence, use case, or activity)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Diagram {
@@ -158,8 +163,8 @@ pub struct Diagram {
     /// Redo history
     #[serde(skip)]
     redo_stack: Vec<String>,
-    /// Maximum undo levels
-    #[serde(skip)]
+    /// Maximum undo levels (skip serializing, but use default when deserializing)
+    #[serde(skip_serializing, default = "default_max_undo_levels")]
     max_undo_levels: usize,
     /// Selection order - tracks the order in which nodes were selected
     #[serde(skip)]
