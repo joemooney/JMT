@@ -3359,9 +3359,38 @@ impl eframe::App for JmtApp {
                             self.dragging_label = None;
                             self.selection_rect.clear();
                         } else {
-                            // Use click cycling to handle overlapping items
-                            // This allows clicking multiple times to cycle through items at the same location
-                            if !self.handle_click_with_cycling(point) {
+                            // First, check if the drag point is within an already-selected node.
+                            // If so, drag that node without re-evaluating candidates.
+                            // This prevents accidentally selecting a parent state when trying to drag a child.
+                            let drag_selected = self.current_diagram().and_then(|state| {
+                                let selected = state.diagram.selected_nodes();
+                                // Check smallest selected node first (most likely the one user wants)
+                                let mut selected_with_area: Vec<_> = selected.iter()
+                                    .filter_map(|&id| {
+                                        state.diagram.find_node(id).map(|n| {
+                                            let b = n.bounds();
+                                            (id, b.width() * b.height(), n.contains_point(point))
+                                        })
+                                    })
+                                    .filter(|(_, _, contains)| *contains)
+                                    .collect();
+                                selected_with_area.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+                                selected_with_area.first().map(|(id, _, _)| *id)
+                            });
+
+                            if let Some(_selected_id) = drag_selected {
+                                // Drag point is within an already-selected node - just start dragging
+                                if let Some(state) = self.current_diagram_mut() {
+                                    state.diagram.push_undo();
+                                }
+                                self.dragging_nodes = true;
+                                self.dragging_label = None;
+                                self.dragging_pivot = None;
+                                self.dragging_endpoint = None;
+                                self.selected_pivot = None;
+                                self.selection_rect.clear();
+                                self.status_message = "Dragging selected node(s)".to_string();
+                            } else if !self.handle_click_with_cycling(point) {
                                 // Nothing to select - start marquee or lasso selection
                                 if self.edit_mode == EditMode::Arrow {
                                     // We're starting a marquee selection (only in Arrow mode)
