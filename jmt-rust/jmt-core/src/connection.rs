@@ -80,6 +80,52 @@ impl LineSegment {
         t_min <= t_max && t_max >= 0.0 && t_min <= 1.0
     }
 
+    /// Check if this segment intersects another line segment
+    /// Returns the intersection point if they intersect, None otherwise
+    pub fn intersects_segment(&self, other: &LineSegment) -> Option<Point> {
+        // Using parametric form: P = A + t*(B-A), Q = C + u*(D-C)
+        // Solve for t and u where the lines intersect
+        let a = self.start;
+        let b = self.end;
+        let c = other.start;
+        let d = other.end;
+
+        let dx1 = b.x - a.x;
+        let dy1 = b.y - a.y;
+        let dx2 = d.x - c.x;
+        let dy2 = d.y - c.y;
+
+        let denominator = dx1 * dy2 - dy1 * dx2;
+
+        // Lines are parallel if denominator is ~0
+        if denominator.abs() < 0.0001 {
+            return None;
+        }
+
+        let dx3 = a.x - c.x;
+        let dy3 = a.y - c.y;
+
+        let t = (dx2 * dy3 - dy2 * dx3) / denominator;
+        let u = (dx1 * dy3 - dy1 * dx3) / denominator;
+
+        // Check if intersection is within both segments (0 <= t <= 1 and 0 <= u <= 1)
+        // Use small margin to avoid endpoint touches
+        const MARGIN: f32 = 0.01;
+        if t > MARGIN && t < (1.0 - MARGIN) && u > MARGIN && u < (1.0 - MARGIN) {
+            Some(Point::new(a.x + t * dx1, a.y + t * dy1))
+        } else {
+            None
+        }
+    }
+
+    /// Get the midpoint of this segment
+    pub fn midpoint(&self) -> Point {
+        Point::new(
+            (self.start.x + self.end.x) / 2.0,
+            (self.start.y + self.end.y) / 2.0,
+        )
+    }
+
     /// Check if a point is close to this line segment
     pub fn is_near_point(&self, p: Point, tolerance: f32) -> bool {
         // Quick bounding box check first

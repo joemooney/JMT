@@ -2464,6 +2464,148 @@ impl Diagram {
                 conn.calculate_segments_with_center(&sb, &tb, stub_len, source_use_center, target_use_center);
             }
         }
+
+        // Fourth pass: avoid intersections between connections
+        self.avoid_connection_intersections(&all_bounds, &node_types, stub_len);
+    }
+
+    /// Avoid intersections between connection lines by adding pivot points
+    fn avoid_connection_intersections(
+        &mut self,
+        all_bounds: &[(NodeId, Rect)],
+        node_types: &std::collections::HashMap<NodeId, Option<PseudoStateKind>>,
+        stub_len: f32,
+    ) {
+        const AVOIDANCE_OFFSET: f32 = 25.0; // How far to offset when avoiding
+        const MAX_ITERATIONS: usize = 5; // Maximum passes to avoid infinite loops
+
+        for iteration in 0..MAX_ITERATIONS {
+            let mut found_intersection = false;
+            let mut modifications: Vec<(usize, Vec<Point>)> = Vec::new();
+
+            // Check each pair of connections for intersections
+            let conn_count = self.connections.len();
+            for i in 0..conn_count {
+                for j in (i + 1)..conn_count {
+                    // Skip if connections share a node (they're supposed to meet)
+                    if self.connections[i].source_id == self.connections[j].source_id
+                        || self.connections[i].source_id == self.connections[j].target_id
+                        || self.connections[i].target_id == self.connections[j].source_id
+                        || self.connections[i].target_id == self.connections[j].target_id
+                    {
+                        continue;
+                    }
+
+                    // Check all segment pairs for intersection
+                    for seg_i in &self.connections[i].segments {
+                        for seg_j in &self.connections[j].segments {
+                            if let Some(intersection) = seg_i.intersects_segment(seg_j) {
+                                found_intersection = true;
+
+                                // Determine which connection to modify (prefer the one without user pivots)
+                                let modify_idx = if self.connections[i].pivot_points.is_empty()
+                                    && !self.connections[j].pivot_points.is_empty()
+                                {
+                                    i
+                                } else if self.connections[j].pivot_points.is_empty()
+                                    && !self.connections[i].pivot_points.is_empty()
+                                {
+                                    j
+                                } else {
+                                    // Both have no pivots or both have pivots; modify the shorter one
+                                    let len_i: f32 = self.connections[i].segments.iter().map(|s| s.length()).sum();
+                                    let len_j: f32 = self.connections[j].segments.iter().map(|s| s.length()).sum();
+                                    if len_i <= len_j { i } else { j }
+                                };
+
+                                // Calculate offset direction perpendicular to the segment being modified
+                                let seg = if modify_idx == i { seg_i } else { seg_j };
+                                let dx = seg.end.x - seg.start.x;
+                                let dy = seg.end.y - seg.start.y;
+                                let len = (dx * dx + dy * dy).sqrt().max(0.001);
+                                let perp_x = -dy / len;
+                                let perp_y = dx / len;
+
+                                // Choose direction that moves away from the other connection's midpoint
+                                let other_mid = if modify_idx == i {
+                                    seg_j.midpoint()
+                                } else {
+                                    seg_i.midpoint()
+                                };
+
+                                let offset_dir = if (intersection.x + perp_x * AVOIDANCE_OFFSET - other_mid.x).abs()
+                                    + (intersection.y + perp_y * AVOIDANCE_OFFSET - other_mid.y).abs()
+                                    > (intersection.x - perp_x * AVOIDANCE_OFFSET - other_mid.x).abs()
+                                        + (intersection.y - perp_y * AVOIDANCE_OFFSET - other_mid.y).abs()
+                                {
+                                    1.0
+                                } else {
+                                    -1.0
+                                };
+
+                                // Create two pivot points to route around the intersection
+                                let offset = AVOIDANCE_OFFSET * (iteration as f32 + 1.0);
+                                let pivot1 = Point::new(
+                                    seg.start.x + (seg.end.x - seg.start.x) * 0.3 + perp_x * offset * offset_dir,
+                                    seg.start.y + (seg.end.y - seg.start.y) * 0.3 + perp_y * offset * offset_dir,
+                                );
+                                let pivot2 = Point::new(
+                                    seg.start.x + (seg.end.x - seg.start.x) * 0.7 + perp_x * offset * offset_dir,
+                                    seg.start.y + (seg.end.y - seg.start.y) * 0.7 + perp_y * offset * offset_dir,
+                                );
+
+                                // Only add if not already scheduled for modification
+                                if !modifications.iter().any(|(idx, _)| *idx == modify_idx) {
+                                    let mut new_pivots = self.connections[modify_idx].pivot_points.clone();
+                                    // Insert at appropriate position based on the segment
+                                    if new_pivots.is_empty() {
+                                        new_pivots.push(pivot1);
+                                        new_pivots.push(pivot2);
+                                    } else {
+                                        // Add to existing pivots
+                                        new_pivots.insert(0, pivot1);
+                                        new_pivots.push(pivot2);
+                                    }
+                                    modifications.push((modify_idx, new_pivots));
+                                }
+
+                                break; // Only handle one intersection per connection pair
+                            }
+                        }
+                    }
+                }
+            }
+
+            if !found_intersection {
+                break; // No more intersections to fix
+            }
+
+            // Apply modifications and recalculate segments
+            for (idx, new_pivots) in modifications {
+                self.connections[idx].pivot_points = new_pivots;
+
+                // Recalculate this connection's segments
+                let source_bounds = all_bounds.iter()
+                    .find(|(id, _)| *id == self.connections[idx].source_id)
+                    .map(|(_, b)| b.clone());
+                let target_bounds = all_bounds.iter()
+                    .find(|(id, _)| *id == self.connections[idx].target_id)
+                    .map(|(_, b)| b.clone());
+
+                let source_use_center = node_types.get(&self.connections[idx].source_id)
+                    .and_then(|k| *k)
+                    .map(|k| matches!(k, PseudoStateKind::Initial | PseudoStateKind::Junction))
+                    .unwrap_or(false);
+                let target_use_center = node_types.get(&self.connections[idx].target_id)
+                    .and_then(|k| *k)
+                    .map(|k| matches!(k, PseudoStateKind::Final | PseudoStateKind::Junction))
+                    .unwrap_or(false);
+
+                if let (Some(sb), Some(tb)) = (source_bounds, target_bounds) {
+                    self.connections[idx].calculate_segments_with_center(&sb, &tb, stub_len, source_use_center, target_use_center);
+                }
+            }
+        }
     }
 
     /// Calculate slot offsets for all connections to prevent overlap
