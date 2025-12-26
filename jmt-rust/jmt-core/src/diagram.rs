@@ -2608,6 +2608,54 @@ impl Diagram {
         }
     }
 
+    /// Clear pivot points on connections between aligned nodes
+    /// This is called after alignment to straighten lines between nodes that are now aligned
+    /// aligned_node_ids: set of node IDs that were just aligned
+    /// is_horizontal: true if nodes were aligned horizontally (left/right/center-H)
+    pub fn clear_pivots_for_aligned_connections(&mut self, aligned_node_ids: &std::collections::HashSet<NodeId>, is_horizontal: bool) {
+        const ALIGNMENT_TOLERANCE: f32 = 15.0;
+
+        // Get centers of aligned nodes
+        let node_centers: std::collections::HashMap<NodeId, (f32, f32)> = self.nodes
+            .iter()
+            .filter(|n| aligned_node_ids.contains(&n.id()))
+            .map(|n| (n.id(), (n.bounds().center().x, n.bounds().center().y)))
+            .collect();
+
+        // Check each connection
+        for conn in &mut self.connections {
+            // Only consider connections where both endpoints are in the aligned set
+            if !aligned_node_ids.contains(&conn.source_id) || !aligned_node_ids.contains(&conn.target_id) {
+                continue;
+            }
+
+            // Get centers
+            let source_center = node_centers.get(&conn.source_id);
+            let target_center = node_centers.get(&conn.target_id);
+
+            if let (Some(&(sx, sy)), Some(&(tx, ty))) = (source_center, target_center) {
+                // Check if the nodes are aligned in the relevant axis
+                let are_aligned = if is_horizontal {
+                    // Horizontal alignment means nodes share X position
+                    // Check if Y centers are close enough for a straight vertical line
+                    // Actually, for horizontal align, we want to clear pivots if they would allow a straight line
+                    // A straight line is possible if they're vertically stacked (different Y)
+                    (sx - tx).abs() < ALIGNMENT_TOLERANCE
+                } else {
+                    // Vertical alignment means nodes share Y position
+                    // Check if X centers are close enough for a straight horizontal line
+                    (sy - ty).abs() < ALIGNMENT_TOLERANCE
+                };
+
+                if are_aligned && !conn.pivot_points.is_empty() {
+                    // Clear pivot points to allow straight connection
+                    conn.pivot_points.clear();
+                    conn.segment_curves.clear();
+                }
+            }
+        }
+    }
+
     /// Calculate slot offsets for all connections to prevent overlap
     /// Prioritizes aligned connections (where nodes are vertically/horizontally aligned)
     /// to get the center slot for straight lines. Non-aligned connections are distributed around.

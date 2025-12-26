@@ -989,6 +989,11 @@ impl Toolbar {
                 }
             }
 
+            // Clear pivot points on connections between aligned nodes to straighten lines
+            let aligned_ids: std::collections::HashSet<_> = nodes_with_bounds.iter().map(|(id, _)| *id).collect();
+            let is_horizontal = matches!(mode, AlignMode::Left | AlignMode::Right | AlignMode::CenterH);
+            state.diagram.clear_pivots_for_aligned_connections(&aligned_ids, is_horizontal);
+
             // Expand parent states to contain children (preserve parentage)
             state.diagram.expand_parents_to_contain_children();
             state.diagram.recalculate_connections();
