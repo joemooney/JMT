@@ -58,6 +58,12 @@ The original implementation uses Fantom (JVM) with FWT for the GUI. See `fan/` d
     - Used in status bar/loupe for unnamed elements
     - Unique per file across all embedded sub-statemachines
     - Backwards compatible: existing files get IDs assigned on load
+17. **Smart Connections** - Intelligent connection routing and rendering
+    - Directional arrowheads that follow the actual line angle (not 90-degree snapping)
+    - Circular pseudo-states (Initial, Final, Junction) connect from/to center
+    - Automatic intersection avoidance: connections route around each other
+    - Pivot points auto-clear when nodes are aligned to straighten lines
+    - Manual pivot point editing for custom routing
 
 ## Project Structure
 
