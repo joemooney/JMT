@@ -3871,16 +3871,16 @@ impl eframe::App for JmtApp {
                 } else if self.dragging_pivot.is_some() {
                     // Finished dragging a pivot point
                     if let Some(state) = self.current_diagram_mut() {
-                        // Run full recalculate with intersection avoidance now that drag is done
-                        state.diagram.recalculate_connections();
+                        // Use fast recalculate - don't add intersection avoidance pivots
+                        state.diagram.recalculate_connections_fast();
                     }
                     self.dragging_pivot = None;
                     self.status_message = "Pivot point moved".to_string();
                 } else if self.dragging_endpoint.is_some() {
                     // Finished dragging an endpoint
                     if let Some(state) = self.current_diagram_mut() {
-                        // Run full recalculate with intersection avoidance now that drag is done
-                        state.diagram.recalculate_connections();
+                        // Use fast recalculate - don't add intersection avoidance pivots
+                        state.diagram.recalculate_connections_fast();
                     }
                     self.dragging_endpoint = None;
                     self.status_message = "Endpoint moved".to_string();
@@ -3889,8 +3889,8 @@ impl eframe::App for JmtApp {
                     // since resizing a state may affect containment
                     if let Some(state) = self.current_diagram_mut() {
                         state.diagram.update_all_node_regions();
-                        // Run full recalculate with intersection avoidance now that drag is done
-                        state.diagram.recalculate_connections();
+                        // Use fast recalculate - don't add intersection avoidance pivots
+                        state.diagram.recalculate_connections_fast();
                     }
                     self.resize_state.clear();
                     self.status_message = "Ready".to_string();
@@ -3902,8 +3902,9 @@ impl eframe::App for JmtApp {
                         // - A parent state was moved, affecting child relationships
                         if let Some(state) = self.current_diagram_mut() {
                             state.diagram.update_all_node_regions();
-                            // Run full recalculate with intersection avoidance now that drag is done
-                            state.diagram.recalculate_connections();
+                            // Use fast recalculate - don't add intersection avoidance pivots on every move
+                            // Intersection avoidance should only happen when new connections are created
+                            state.diagram.recalculate_connections_fast();
                         }
                         self.dragging_nodes = false;
                     } else {
