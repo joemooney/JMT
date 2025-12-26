@@ -77,7 +77,7 @@ impl DiagramCanvas {
         );
     }
 
-    /// Render title in UML frame notation (dog-eared pentagon in top-left)
+    /// Render title in UML frame notation (rectangle around diagram with dog-eared label in top-left)
     fn render_title_frame(&self, diagram: &Diagram, painter: &egui::Painter, zoom: f32) {
         let font_size = 14.0 * zoom;
         let font = egui::FontId::proportional(font_size);
@@ -91,27 +91,55 @@ impl DiagramCanvas {
         let text_width = galley.size().x;
         let text_height = galley.size().y;
 
-        // Frame dimensions
+        // Label dimensions
         let padding_h = 10.0 * zoom;
         let padding_v = 6.0 * zoom;
         let dog_ear_size = 12.0 * zoom;
+        let label_height = text_height + padding_v * 2.0;
 
-        let frame_left = 50.0 * zoom + self.offset.x;
-        let frame_top = 50.0 * zoom + self.offset.y;
-        let frame_right = frame_left + text_width + padding_h * 2.0;
-        let frame_bottom = frame_top + text_height + padding_v * 2.0;
+        // Get content bounds and add margin for the frame
+        let frame_margin = 20.0; // Margin around content in diagram units
+        let content_bounds = diagram.content_bounds();
 
-        // Draw the dog-eared pentagon shape
+        // Frame rectangle coordinates (in screen space)
+        let outer_left = (content_bounds.x1 - frame_margin) * zoom + self.offset.x;
+        let outer_top = (content_bounds.y1 - frame_margin - label_height / zoom) * zoom + self.offset.y;
+        let outer_right = (content_bounds.x2 + frame_margin) * zoom + self.offset.x;
+        let outer_bottom = (content_bounds.y2 + frame_margin) * zoom + self.offset.y;
+
+        // Ensure minimum frame size
+        let min_width = text_width + padding_h * 2.0 + dog_ear_size + 100.0 * zoom;
+        let min_height = label_height + 100.0 * zoom;
+        let outer_right = outer_right.max(outer_left + min_width);
+        let outer_bottom = outer_bottom.max(outer_top + min_height);
+
+        // Draw the outer frame rectangle
+        painter.rect_stroke(
+            Rect::from_min_max(
+                Pos2::new(outer_left, outer_top),
+                Pos2::new(outer_right, outer_bottom),
+            ),
+            Rounding::ZERO,
+            Stroke::new(zoom, Color32::BLACK),
+        );
+
+        // Label position (attached to top-left of frame)
+        let label_left = outer_left;
+        let label_top = outer_top;
+        let label_right = label_left + text_width + padding_h * 2.0 + dog_ear_size;
+        let label_bottom = label_top + label_height;
+
+        // Draw the dog-eared pentagon shape for the label
         // Points: top-left, bottom-left, bottom-right (with dog-ear), top-right
         let points = vec![
-            Pos2::new(frame_left, frame_top),                           // top-left
-            Pos2::new(frame_left, frame_bottom),                        // bottom-left
-            Pos2::new(frame_right - dog_ear_size, frame_bottom),        // bottom before dog-ear
-            Pos2::new(frame_right, frame_bottom - dog_ear_size),        // dog-ear corner
-            Pos2::new(frame_right, frame_top),                          // top-right
+            Pos2::new(label_left, label_top),                           // top-left
+            Pos2::new(label_left, label_bottom),                        // bottom-left
+            Pos2::new(label_right - dog_ear_size, label_bottom),        // bottom before dog-ear
+            Pos2::new(label_right, label_bottom - dog_ear_size),        // dog-ear corner
+            Pos2::new(label_right, label_top),                          // top-right
         ];
 
-        // Fill
+        // Fill label background
         painter.add(egui::Shape::convex_polygon(
             points.clone(),
             Color32::from_rgb(255, 255, 240), // Light yellow/cream
@@ -121,21 +149,21 @@ impl DiagramCanvas {
         // Draw the dog-ear fold line
         painter.line_segment(
             [
-                Pos2::new(frame_right - dog_ear_size, frame_bottom),
-                Pos2::new(frame_right - dog_ear_size, frame_bottom - dog_ear_size),
+                Pos2::new(label_right - dog_ear_size, label_bottom),
+                Pos2::new(label_right - dog_ear_size, label_bottom - dog_ear_size),
             ],
             Stroke::new(zoom * 0.5, Color32::GRAY),
         );
         painter.line_segment(
             [
-                Pos2::new(frame_right - dog_ear_size, frame_bottom - dog_ear_size),
-                Pos2::new(frame_right, frame_bottom - dog_ear_size),
+                Pos2::new(label_right - dog_ear_size, label_bottom - dog_ear_size),
+                Pos2::new(label_right, label_bottom - dog_ear_size),
             ],
             Stroke::new(zoom * 0.5, Color32::GRAY),
         );
 
         // Draw the text
-        let text_pos = Pos2::new(frame_left + padding_h, frame_top + padding_v);
+        let text_pos = Pos2::new(label_left + padding_h, label_top + padding_v);
         painter.galley(text_pos, galley, Color32::BLACK);
     }
 
