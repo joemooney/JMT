@@ -34,6 +34,9 @@ pub struct DiagramSettings {
     /// Whether to show leader lines connecting labels to their connection midpoints
     #[serde(default = "default_show_leader_lines")]
     pub show_leader_lines: bool,
+    /// Minimum spacing between nodes (used when placing new nodes and for connection routing)
+    #[serde(default = "default_min_node_spacing")]
+    pub min_node_spacing: f32,
 }
 
 fn default_show_activities() -> bool {
@@ -42,6 +45,10 @@ fn default_show_activities() -> bool {
 
 fn default_show_leader_lines() -> bool {
     true
+}
+
+fn default_min_node_spacing() -> f32 {
+    40.0
 }
 
 impl Default for DiagramSettings {
@@ -61,6 +68,7 @@ impl Default for DiagramSettings {
             default_pseudo_size: 20.0,
             show_activities: true,
             show_leader_lines: true,
+            min_node_spacing: 40.0,
         }
     }
 }

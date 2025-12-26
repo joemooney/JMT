@@ -611,5 +611,29 @@ impl PropertiesPanel {
             ui.checkbox(&mut settings.snap_to_grid, "Snap to Grid")
                 .on_hover_text("Snap elements to grid when moving");
         });
+
+        ui.collapsing("⚙ Layout Settings", |ui| {
+            ui.horizontal(|ui| {
+                ui.label("Min Node Spacing:");
+                if ui.add(egui::Slider::new(&mut state.diagram.settings.min_node_spacing, 20.0..=100.0)
+                    .suffix(" px"))
+                    .on_hover_text("Minimum spacing between nodes (used for placement and routing)")
+                    .changed()
+                {
+                    state.modified = true;
+                }
+            });
+
+            ui.horizontal(|ui| {
+                ui.label("Stub Length:");
+                if ui.add(egui::Slider::new(&mut state.diagram.settings.stub_length, 5.0..=30.0)
+                    .suffix(" px"))
+                    .on_hover_text("Length of connection stubs leaving nodes")
+                    .changed()
+                {
+                    state.modified = true;
+                }
+            });
+        });
     }
 }
