@@ -248,6 +248,10 @@ pub struct DiagramState {
     pub modified: bool,
     /// File path where this diagram is saved (None if not yet saved)
     pub file_path: Option<std::path::PathBuf>,
+    /// True if this is an embedded sub-statemachine (stored in parent file)
+    pub is_embedded_sub: bool,
+    /// The state ID in the parent diagram that contains this sub-statemachine
+    pub parent_state_id: Option<NodeId>,
 }
 
 impl DiagramState {
@@ -257,6 +261,8 @@ impl DiagramState {
             diagram,
             modified: false,
             file_path: None,
+            is_embedded_sub: false,
+            parent_state_id: None,
         }
     }
 
@@ -269,6 +275,8 @@ impl DiagramState {
             diagram,
             modified: false,
             file_path: Some(path),
+            is_embedded_sub: false,
+            parent_state_id: None,
         }
     }
 }
@@ -881,8 +889,14 @@ impl JmtApp {
 
         if let Some((path, state_name, title)) = substatemachine_info {
             if path.is_empty() {
-                // Embedded sub-statemachine - create a new diagram view
-                self.open_embedded_substatemachine(state_id, &state_name, &title);
+                // Embedded sub-statemachine - get parent file info
+                let parent_file_path = self.current_diagram()
+                    .and_then(|s| s.file_path.clone());
+                let parent_file_name = parent_file_path.as_ref()
+                    .and_then(|p| p.file_stem())
+                    .map(|s| s.to_string_lossy().to_string());
+                // Create a new diagram view
+                self.open_embedded_substatemachine(state_id, &state_name, &title, parent_file_path, parent_file_name);
             } else {
                 // External file - load it
                 self.open_file_at_path(&path);
@@ -905,7 +919,14 @@ impl JmtApp {
     }
 
     /// Open an embedded sub-statemachine as a new tab
-    fn open_embedded_substatemachine(&mut self, state_id: NodeId, state_name: &str, title: &str) {
+    fn open_embedded_substatemachine(
+        &mut self,
+        state_id: NodeId,
+        state_name: &str,
+        title: &str,
+        parent_file_path: Option<std::path::PathBuf>,
+        parent_file_name: Option<String>,
+    ) {
         // Extract child nodes and connections from the parent state
         let (nodes, connections) = if let Some(diagram_state) = self.current_diagram() {
             diagram_state.diagram.extract_substatemachine_contents(state_id)
@@ -915,7 +936,9 @@ impl JmtApp {
 
         // Create a new diagram with the extracted contents
         let display_name = if title.is_empty() { state_name } else { title };
-        let name = format!("{} (sub)", display_name);
+        // Use parent file name in tab title to indicate which file contains this sub-statemachine
+        let parent_indicator = parent_file_name.as_deref().unwrap_or("sub");
+        let name = format!("{} ({})", display_name, parent_indicator);
         let mut diagram = Diagram::new(&name);
         diagram.title = display_name.to_string();
         diagram.diagram_type = DiagramType::StateMachine;
@@ -924,7 +947,17 @@ impl JmtApp {
         let node_count = nodes.len();
         diagram.import_nodes_and_connections(nodes, connections);
 
-        self.diagrams.push(DiagramState::new(diagram));
+        // Create diagram state with parent's file path so Save works correctly
+        let mut diagram_state = if let Some(path) = parent_file_path {
+            DiagramState::with_path(diagram, path)
+        } else {
+            DiagramState::new(diagram)
+        };
+        // Mark as embedded sub-statemachine so we know to save to parent
+        diagram_state.is_embedded_sub = true;
+        diagram_state.parent_state_id = Some(state_id);
+
+        self.diagrams.push(diagram_state);
         self.active_diagram = self.diagrams.len() - 1;
         self.edit_mode = EditMode::Arrow;
 
