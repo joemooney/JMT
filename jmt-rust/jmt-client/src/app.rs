@@ -3122,6 +3122,19 @@ impl eframe::App for JmtApp {
                 state.canvas.render_with_zoom(&state.diagram, &painter, response.rect, zoom);
             }
 
+            // Draw expanded hit area for small nodes when hovering
+            if self.edit_mode == EditMode::Arrow {
+                if let Some(pos) = response.hover_pos() {
+                    let diagram_pos = Point::new(
+                        (pos.x - canvas_origin.x) / zoom,
+                        (pos.y - canvas_origin.y) / zoom
+                    );
+                    if let Some(state) = self.current_diagram() {
+                        state.canvas.render_small_node_hover(&state.diagram, &painter, Some(diagram_pos), zoom);
+                    }
+                }
+            }
+
             // Draw cursor preview for add modes
             if let Some(pos) = self.cursor_pos {
                 self.render_cursor_preview(&painter, pos, zoom);

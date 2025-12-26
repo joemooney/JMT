@@ -540,6 +540,80 @@ impl DiagramCanvas {
         );
     }
 
+    /// Render expanded hit area indicator for small nodes when hovering
+    /// Shows a dashed rectangle around small nodes when the cursor is within the expanded hit area
+    pub fn render_small_node_hover(
+        &self,
+        diagram: &Diagram,
+        painter: &egui::Painter,
+        hover_pos: Option<jmt_core::geometry::Point>,
+        zoom: f32,
+    ) {
+        let Some(pos) = hover_pos else { return };
+
+        let small_threshold = diagram.settings.small_node_threshold;
+        let small_margin = diagram.settings.small_node_hit_margin;
+
+        for node in diagram.nodes() {
+            let bounds = node.bounds();
+
+            // Check if this is a small node
+            let is_small = bounds.width() <= small_threshold && bounds.height() <= small_threshold;
+            if !is_small {
+                continue;
+            }
+
+            // Calculate expanded bounds
+            let expanded_bounds = jmt_core::geometry::Rect::new(
+                bounds.x1 - small_margin,
+                bounds.y1 - small_margin,
+                bounds.x2 + small_margin,
+                bounds.y2 + small_margin,
+            );
+
+            // Check if cursor is in expanded area
+            if expanded_bounds.contains_point(pos) {
+                // Draw dashed rectangle showing the expanded hit area
+                let expanded_rect = self.scale_rect(&expanded_bounds, zoom);
+                let stroke = egui::Stroke::new(zoom, Color32::from_rgba_unmultiplied(100, 100, 200, 150));
+
+                // Draw dashed rectangle (four sides)
+                self.draw_dashed_line(
+                    painter,
+                    Pos2::new(expanded_rect.min.x, expanded_rect.min.y),
+                    Pos2::new(expanded_rect.max.x, expanded_rect.min.y),
+                    stroke,
+                    4.0 * zoom,
+                    2.0 * zoom,
+                );
+                self.draw_dashed_line(
+                    painter,
+                    Pos2::new(expanded_rect.max.x, expanded_rect.min.y),
+                    Pos2::new(expanded_rect.max.x, expanded_rect.max.y),
+                    stroke,
+                    4.0 * zoom,
+                    2.0 * zoom,
+                );
+                self.draw_dashed_line(
+                    painter,
+                    Pos2::new(expanded_rect.max.x, expanded_rect.max.y),
+                    Pos2::new(expanded_rect.min.x, expanded_rect.max.y),
+                    stroke,
+                    4.0 * zoom,
+                    2.0 * zoom,
+                );
+                self.draw_dashed_line(
+                    painter,
+                    Pos2::new(expanded_rect.min.x, expanded_rect.max.y),
+                    Pos2::new(expanded_rect.min.x, expanded_rect.min.y),
+                    stroke,
+                    4.0 * zoom,
+                    2.0 * zoom,
+                );
+            }
+        }
+    }
+
     /// Render a connection
     fn render_connection(&self, conn: &Connection, painter: &egui::Painter, settings: &jmt_core::DiagramSettings, zoom: f32) {
         let stroke = if conn.selected {
