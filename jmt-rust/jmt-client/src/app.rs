@@ -546,12 +546,29 @@ impl JmtApp {
         }
 
         // 4. Check nodes - collect all containing nodes with their areas
+        // For small nodes, use expanded bounds to make them easier to click
+        let small_threshold = state.diagram.settings.small_node_threshold;
+        let small_margin = state.diagram.settings.small_node_hit_margin;
         let mut node_candidates: Vec<(NodeId, f32, String)> = Vec::new();
         for node in state.diagram.nodes() {
             let bounds = node.bounds();
-            let contains = node.contains_point(pos);
-            eprintln!("[CANDIDATES] Node '{}' bounds: ({:.1},{:.1})-({:.1},{:.1}), contains: {}",
-                node.name(), bounds.x1, bounds.y1, bounds.x2, bounds.y2, contains);
+            let is_small = bounds.width() <= small_threshold && bounds.height() <= small_threshold;
+
+            // For small nodes, expand the hit area
+            let contains = if is_small {
+                let expanded = Rect::new(
+                    bounds.x1 - small_margin,
+                    bounds.y1 - small_margin,
+                    bounds.x2 + small_margin,
+                    bounds.y2 + small_margin,
+                );
+                expanded.contains_point(pos)
+            } else {
+                node.contains_point(pos)
+            };
+
+            eprintln!("[CANDIDATES] Node '{}' bounds: ({:.1},{:.1})-({:.1},{:.1}), small: {}, contains: {}",
+                node.name(), bounds.x1, bounds.y1, bounds.x2, bounds.y2, is_small, contains);
             if contains {
                 let area = bounds.width() * bounds.height();
                 node_candidates.push((node.id(), area, node.name().to_string()));
@@ -3131,14 +3148,22 @@ impl eframe::App for JmtApp {
                     let point = Point::new(diagram_pos.x, diagram_pos.y);
 
                     // Check if pressing on an already-selected node - that's what will be dragged
+                    // Use the drag tolerance (15px) for selected nodes
+                    let drag_tolerance = 15.0;
                     let will_drag = self.current_diagram().and_then(|state| {
                         let selected = state.diagram.selected_nodes();
-                        // Find the smallest selected node containing the point
+                        // Find the smallest selected node containing the point (with tolerance)
                         let mut selected_under_cursor: Vec<_> = selected.iter()
                             .filter_map(|&id| {
                                 state.diagram.find_node(id).and_then(|n| {
-                                    if n.contains_point(point) {
-                                        let b = n.bounds();
+                                    let b = n.bounds();
+                                    let expanded = Rect::new(
+                                        b.x1 - drag_tolerance,
+                                        b.y1 - drag_tolerance,
+                                        b.x2 + drag_tolerance,
+                                        b.y2 + drag_tolerance,
+                                    );
+                                    if expanded.contains_point(point) {
                                         let name = if n.name().is_empty() {
                                             n.seq_id().to_string()
                                         } else {
@@ -3165,18 +3190,35 @@ impl eframe::App for JmtApp {
                         self.status_message = format!("Will drag: {}", name);
                     } else {
                         // Not pressing on a selected node - show what would be selected
-                        // (smallest node containing the point)
+                        // (smallest node containing the point, with expanded bounds for small nodes)
                         let will_select = self.current_diagram().and_then(|state| {
+                            let small_threshold = state.diagram.settings.small_node_threshold;
+                            let small_margin = state.diagram.settings.small_node_hit_margin;
                             let mut nodes_under_cursor: Vec<_> = state.diagram.nodes().iter()
-                                .filter(|n| n.contains_point(point))
-                                .map(|n| {
+                                .filter_map(|n| {
                                     let b = n.bounds();
-                                    let name = if n.name().is_empty() {
-                                        n.seq_id().to_string()
+                                    let is_small = b.width() <= small_threshold && b.height() <= small_threshold;
+                                    let contains = if is_small {
+                                        let expanded = Rect::new(
+                                            b.x1 - small_margin,
+                                            b.y1 - small_margin,
+                                            b.x2 + small_margin,
+                                            b.y2 + small_margin,
+                                        );
+                                        expanded.contains_point(point)
                                     } else {
-                                        n.name().to_string()
+                                        n.contains_point(point)
                                     };
-                                    (b.width() * b.height(), name, n.node_type().display_name())
+                                    if contains {
+                                        let name = if n.name().is_empty() {
+                                            n.seq_id().to_string()
+                                        } else {
+                                            n.name().to_string()
+                                        };
+                                        Some((b.width() * b.height(), name, n.node_type().display_name()))
+                                    } else {
+                                        None
+                                    }
                                 })
                                 .collect();
                             nodes_under_cursor.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
@@ -3478,13 +3520,30 @@ impl eframe::App for JmtApp {
                                 self.status_message = "Dragging selected node(s)".to_string();
                             } else {
                                 // Not on a selected node - find the SMALLEST node at this position
-                                // and select+drag it. This is more intuitive than cycling through candidates.
+                                // and select+drag it. Use expanded bounds for small nodes.
                                 let smallest_node = self.current_diagram().and_then(|state| {
+                                    let small_threshold = state.diagram.settings.small_node_threshold;
+                                    let small_margin = state.diagram.settings.small_node_hit_margin;
                                     let mut nodes_at_point: Vec<_> = state.diagram.nodes().iter()
-                                        .filter(|n| n.contains_point(point))
-                                        .map(|n| {
+                                        .filter_map(|n| {
                                             let b = n.bounds();
-                                            (n.id(), b.width() * b.height(), n.name().to_string())
+                                            let is_small = b.width() <= small_threshold && b.height() <= small_threshold;
+                                            let contains = if is_small {
+                                                let expanded = Rect::new(
+                                                    b.x1 - small_margin,
+                                                    b.y1 - small_margin,
+                                                    b.x2 + small_margin,
+                                                    b.y2 + small_margin,
+                                                );
+                                                expanded.contains_point(point)
+                                            } else {
+                                                n.contains_point(point)
+                                            };
+                                            if contains {
+                                                Some((n.id(), b.width() * b.height(), n.name().to_string()))
+                                            } else {
+                                                None
+                                            }
                                         })
                                         .collect();
                                     // Sort by area (smallest first)

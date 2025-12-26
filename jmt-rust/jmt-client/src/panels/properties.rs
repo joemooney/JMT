@@ -634,6 +634,31 @@ impl PropertiesPanel {
                     state.modified = true;
                 }
             });
+
+            ui.separator();
+            ui.label("Small Node Selection:");
+
+            ui.horizontal(|ui| {
+                ui.label("Hit Margin:");
+                if ui.add(egui::Slider::new(&mut state.diagram.settings.small_node_hit_margin, 0.0..=20.0)
+                    .suffix(" px"))
+                    .on_hover_text("Extra clickable area around small nodes (like Initial/Final)")
+                    .changed()
+                {
+                    state.modified = true;
+                }
+            });
+
+            ui.horizontal(|ui| {
+                ui.label("Size Threshold:");
+                if ui.add(egui::Slider::new(&mut state.diagram.settings.small_node_threshold, 20.0..=50.0)
+                    .suffix(" px"))
+                    .on_hover_text("Nodes smaller than this get extra hit margin")
+                    .changed()
+                {
+                    state.modified = true;
+                }
+            });
         });
     }
 }

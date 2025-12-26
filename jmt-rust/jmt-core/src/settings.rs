@@ -37,10 +37,24 @@ pub struct DiagramSettings {
     /// Minimum spacing between nodes (used when placing new nodes and for connection routing)
     #[serde(default = "default_min_node_spacing")]
     pub min_node_spacing: f32,
+    /// Extra hit margin for small nodes (makes them easier to click/select)
+    #[serde(default = "default_small_node_hit_margin")]
+    pub small_node_hit_margin: f32,
+    /// Size threshold below which nodes get the extra hit margin
+    #[serde(default = "default_small_node_threshold")]
+    pub small_node_threshold: f32,
 }
 
 fn default_show_activities() -> bool {
     true
+}
+
+fn default_small_node_hit_margin() -> f32 {
+    10.0  // 10 pixels extra on each side for small nodes
+}
+
+fn default_small_node_threshold() -> f32 {
+    30.0  // Nodes smaller than 30x30 are considered "small"
 }
 
 fn default_show_leader_lines() -> bool {
@@ -69,6 +83,8 @@ impl Default for DiagramSettings {
             show_activities: true,
             show_leader_lines: true,
             min_node_spacing: 40.0,
+            small_node_hit_margin: 10.0,
+            small_node_threshold: 30.0,
         }
     }
 }
