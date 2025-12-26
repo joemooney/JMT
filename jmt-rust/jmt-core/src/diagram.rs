@@ -2575,7 +2575,18 @@ impl Diagram {
     }
 
     /// Recalculate all connection segments (call after nodes move)
+    /// This includes intersection avoidance - use recalculate_connections_fast during drag
     pub fn recalculate_connections(&mut self) {
+        self.recalculate_connections_internal(true);
+    }
+
+    /// Fast recalculation without intersection avoidance (use during drag operations)
+    pub fn recalculate_connections_fast(&mut self) {
+        self.recalculate_connections_internal(false);
+    }
+
+    /// Internal implementation of connection recalculation
+    fn recalculate_connections_internal(&mut self, avoid_intersections: bool) {
         let stub_len = self.settings.stub_length;
 
         // First pass: recalculate sides for all connections
@@ -2644,8 +2655,10 @@ impl Diagram {
             }
         }
 
-        // Fourth pass: avoid intersections between connections
-        self.avoid_connection_intersections(&all_bounds, &node_types, stub_len);
+        // Fourth pass: avoid intersections between connections (skip during drag for performance)
+        if avoid_intersections {
+            self.avoid_connection_intersections(&all_bounds, &node_types, stub_len);
+        }
     }
 
     /// Avoid intersections between connection lines by adding pivot points
