@@ -1413,6 +1413,185 @@ impl Diagram {
         }
     }
 
+    /// Add a node with spacing enforcement - adjusts position to maintain minimum spacing
+    pub fn add_node_with_spacing(&mut self, node_type: NodeType, x: f32, y: f32) -> (NodeId, Point) {
+        let (adjusted_x, adjusted_y) = self.find_valid_position(x, y, node_type);
+        let id = self.add_node(node_type, adjusted_x, adjusted_y);
+        (id, Point::new(adjusted_x, adjusted_y))
+    }
+
+    /// Calculate the distance from a point to the nearest edge of a rectangle
+    fn distance_to_rect_edge(point: Point, rect: &Rect) -> f32 {
+        // If point is inside the rect, return negative distance
+        if rect.contains_point(point) {
+            let dx = (point.x - rect.x1).min(rect.x2 - point.x);
+            let dy = (point.y - rect.y1).min(rect.y2 - point.y);
+            return -dx.min(dy);
+        }
+
+        // Calculate distance to nearest edge
+        let dx = if point.x < rect.x1 {
+            rect.x1 - point.x
+        } else if point.x > rect.x2 {
+            point.x - rect.x2
+        } else {
+            0.0
+        };
+
+        let dy = if point.y < rect.y1 {
+            rect.y1 - point.y
+        } else if point.y > rect.y2 {
+            point.y - rect.y2
+        } else {
+            0.0
+        };
+
+        (dx * dx + dy * dy).sqrt()
+    }
+
+    /// Find the distance from a point to the nearest node's edge
+    /// Returns (distance, Option<node_id>) - distance is negative if point is inside a node
+    pub fn distance_to_nearest_node(&self, point: Point) -> (f32, Option<NodeId>) {
+        let mut min_distance = f32::MAX;
+        let mut nearest_node: Option<NodeId> = None;
+
+        for node in &self.nodes {
+            let bounds = node.bounds();
+            let dist = Self::distance_to_rect_edge(point, &bounds);
+            if dist < min_distance {
+                min_distance = dist;
+                nearest_node = Some(node.id());
+            }
+        }
+
+        (min_distance, nearest_node)
+    }
+
+    /// Get the bounds of the node that would be created at position (x, y)
+    fn get_prospective_node_bounds(&self, x: f32, y: f32, node_type: NodeType) -> Rect {
+        match node_type {
+            NodeType::State => {
+                let w = self.settings.default_state_width;
+                let h = self.settings.default_state_height;
+                // State is placed with top-left at (x, y)
+                Rect::new(x, y, x + w, y + h)
+            }
+            _ => {
+                // Pseudo-states are centered on (x, y)
+                let size = self.settings.default_pseudo_size;
+                let half = size / 2.0;
+                Rect::new(x - half, y - half, x + half, y + half)
+            }
+        }
+    }
+
+    /// Check if placing a node at (x, y) would violate minimum spacing
+    /// Returns the distance to the nearest node (negative if overlapping)
+    pub fn check_node_spacing(&self, x: f32, y: f32, node_type: NodeType) -> f32 {
+        let prospective_bounds = self.get_prospective_node_bounds(x, y, node_type);
+        let mut min_gap = f32::MAX;
+
+        for node in &self.nodes {
+            let existing_bounds = node.bounds();
+            // Calculate the gap between the two rectangles
+            let gap = Self::rect_gap(&prospective_bounds, &existing_bounds);
+            if gap < min_gap {
+                min_gap = gap;
+            }
+        }
+
+        min_gap
+    }
+
+    /// Calculate the gap between two rectangles (negative if overlapping)
+    fn rect_gap(r1: &Rect, r2: &Rect) -> f32 {
+        // Calculate horizontal and vertical gaps
+        let h_gap = if r1.x2 < r2.x1 {
+            r2.x1 - r1.x2
+        } else if r2.x2 < r1.x1 {
+            r1.x1 - r2.x2
+        } else {
+            // Overlapping horizontally
+            0.0
+        };
+
+        let v_gap = if r1.y2 < r2.y1 {
+            r2.y1 - r1.y2
+        } else if r2.y2 < r1.y1 {
+            r1.y1 - r2.y2
+        } else {
+            // Overlapping vertically
+            0.0
+        };
+
+        // If either gap is positive, rects don't overlap
+        if h_gap > 0.0 || v_gap > 0.0 {
+            // Return the Euclidean distance between nearest corners
+            (h_gap * h_gap + v_gap * v_gap).sqrt()
+        } else {
+            // Rects overlap - return negative of the overlap amount
+            let h_overlap = (r1.x2.min(r2.x2) - r1.x1.max(r2.x1)).max(0.0);
+            let v_overlap = (r1.y2.min(r2.y2) - r1.y1.max(r2.y1)).max(0.0);
+            -h_overlap.min(v_overlap)
+        }
+    }
+
+    /// Find a valid position for a new node that maintains minimum spacing
+    /// Tries to stay as close to the requested position as possible
+    pub fn find_valid_position(&self, x: f32, y: f32, node_type: NodeType) -> (f32, f32) {
+        let min_spacing = self.settings.min_node_spacing;
+        let current_gap = self.check_node_spacing(x, y, node_type);
+
+        // If current position is valid, use it
+        if current_gap >= min_spacing {
+            return (x, y);
+        }
+
+        // Find the nearest node and push away from it
+        let prospective_bounds = self.get_prospective_node_bounds(x, y, node_type);
+        let center = Point::new(
+            (prospective_bounds.x1 + prospective_bounds.x2) / 2.0,
+            (prospective_bounds.y1 + prospective_bounds.y2) / 2.0,
+        );
+
+        // Find the node that's too close
+        let mut closest_node_center: Option<Point> = None;
+        let mut min_gap = f32::MAX;
+
+        for node in &self.nodes {
+            let bounds = node.bounds();
+            let gap = Self::rect_gap(&prospective_bounds, &bounds);
+            if gap < min_gap {
+                min_gap = gap;
+                closest_node_center = Some(Point::new(
+                    (bounds.x1 + bounds.x2) / 2.0,
+                    (bounds.y1 + bounds.y2) / 2.0,
+                ));
+            }
+        }
+
+        if let Some(nearest_center) = closest_node_center {
+            // Calculate direction from nearest node to our position
+            let dx = center.x - nearest_center.x;
+            let dy = center.y - nearest_center.y;
+            let dist = (dx * dx + dy * dy).sqrt();
+
+            if dist > 0.001 {
+                // Push away in this direction
+                let push_amount = min_spacing - min_gap + 1.0; // +1 for safety margin
+                let push_x = (dx / dist) * push_amount;
+                let push_y = (dy / dist) * push_amount;
+
+                return (x + push_x, y + push_y);
+            } else {
+                // Same position - push to the right
+                return (x + min_spacing, y);
+            }
+        }
+
+        (x, y)
+    }
+
     /// Remove a node by ID
     pub fn remove_node(&mut self, id: NodeId) {
         // Remove from parent region first

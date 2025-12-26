@@ -1937,68 +1937,96 @@ impl JmtApp {
             }
             EditMode::AddState => {
                 state.diagram.push_undo();
-                let id = state.diagram.add_node(NodeType::State, pos.x, pos.y);
+                let (id, actual_pos) = state.diagram.add_node_with_spacing(NodeType::State, pos.x, pos.y);
                 state.diagram.select_node(id);
                 state.modified = true;
-                self.status_message = "Added state".to_string();
+                if (actual_pos.x - pos.x).abs() > 1.0 || (actual_pos.y - pos.y).abs() > 1.0 {
+                    self.status_message = "Added state (adjusted for spacing)".to_string();
+                } else {
+                    self.status_message = "Added state".to_string();
+                }
                 if switch_to_arrow {
                     self.edit_mode = EditMode::Arrow;
                 }
             }
             EditMode::AddInitial => {
                 state.diagram.push_undo();
-                let id = state.diagram.add_node(NodeType::Initial, pos.x, pos.y);
+                let (id, actual_pos) = state.diagram.add_node_with_spacing(NodeType::Initial, pos.x, pos.y);
                 state.diagram.select_node(id);
                 state.modified = true;
-                self.status_message = "Added initial pseudo-state".to_string();
+                if (actual_pos.x - pos.x).abs() > 1.0 || (actual_pos.y - pos.y).abs() > 1.0 {
+                    self.status_message = "Added initial pseudo-state (adjusted for spacing)".to_string();
+                } else {
+                    self.status_message = "Added initial pseudo-state".to_string();
+                }
                 // Auto-switch back to Arrow mode (typically only one initial state)
                 self.edit_mode = EditMode::Arrow;
             }
             EditMode::AddFinal => {
                 state.diagram.push_undo();
-                let id = state.diagram.add_node(NodeType::Final, pos.x, pos.y);
+                let (id, actual_pos) = state.diagram.add_node_with_spacing(NodeType::Final, pos.x, pos.y);
                 state.diagram.select_node(id);
                 state.modified = true;
-                self.status_message = "Added final pseudo-state".to_string();
+                if (actual_pos.x - pos.x).abs() > 1.0 || (actual_pos.y - pos.y).abs() > 1.0 {
+                    self.status_message = "Added final pseudo-state (adjusted for spacing)".to_string();
+                } else {
+                    self.status_message = "Added final pseudo-state".to_string();
+                }
                 // Auto-switch back to Arrow mode (typically only one final state)
                 self.edit_mode = EditMode::Arrow;
             }
             EditMode::AddChoice => {
                 state.diagram.push_undo();
-                let id = state.diagram.add_node(NodeType::Choice, pos.x, pos.y);
+                let (id, actual_pos) = state.diagram.add_node_with_spacing(NodeType::Choice, pos.x, pos.y);
                 state.diagram.select_node(id);
                 state.modified = true;
-                self.status_message = "Added choice pseudo-state".to_string();
+                if (actual_pos.x - pos.x).abs() > 1.0 || (actual_pos.y - pos.y).abs() > 1.0 {
+                    self.status_message = "Added choice pseudo-state (adjusted for spacing)".to_string();
+                } else {
+                    self.status_message = "Added choice pseudo-state".to_string();
+                }
                 if switch_to_arrow {
                     self.edit_mode = EditMode::Arrow;
                 }
             }
             EditMode::AddJunction => {
                 state.diagram.push_undo();
-                let id = state.diagram.add_node(NodeType::Junction, pos.x, pos.y);
+                let (id, actual_pos) = state.diagram.add_node_with_spacing(NodeType::Junction, pos.x, pos.y);
                 state.diagram.select_node(id);
                 state.modified = true;
-                self.status_message = "Added junction pseudo-state".to_string();
+                if (actual_pos.x - pos.x).abs() > 1.0 || (actual_pos.y - pos.y).abs() > 1.0 {
+                    self.status_message = "Added junction pseudo-state (adjusted for spacing)".to_string();
+                } else {
+                    self.status_message = "Added junction pseudo-state".to_string();
+                }
                 if switch_to_arrow {
                     self.edit_mode = EditMode::Arrow;
                 }
             }
             EditMode::AddFork => {
                 state.diagram.push_undo();
-                let id = state.diagram.add_node(NodeType::Fork, pos.x, pos.y);
+                let (id, actual_pos) = state.diagram.add_node_with_spacing(NodeType::Fork, pos.x, pos.y);
                 state.diagram.select_node(id);
                 state.modified = true;
-                self.status_message = "Added fork pseudo-state".to_string();
+                if (actual_pos.x - pos.x).abs() > 1.0 || (actual_pos.y - pos.y).abs() > 1.0 {
+                    self.status_message = "Added fork pseudo-state (adjusted for spacing)".to_string();
+                } else {
+                    self.status_message = "Added fork pseudo-state".to_string();
+                }
                 if switch_to_arrow {
                     self.edit_mode = EditMode::Arrow;
                 }
             }
             EditMode::AddJoin => {
                 state.diagram.push_undo();
-                let id = state.diagram.add_node(NodeType::Join, pos.x, pos.y);
+                let (id, actual_pos) = state.diagram.add_node_with_spacing(NodeType::Join, pos.x, pos.y);
                 state.diagram.select_node(id);
                 state.modified = true;
-                self.status_message = "Added join pseudo-state".to_string();
+                if (actual_pos.x - pos.x).abs() > 1.0 || (actual_pos.y - pos.y).abs() > 1.0 {
+                    self.status_message = "Added join pseudo-state (adjusted for spacing)".to_string();
+                } else {
+                    self.status_message = "Added join pseudo-state".to_string();
+                }
                 if switch_to_arrow {
                     self.edit_mode = EditMode::Arrow;
                 }
