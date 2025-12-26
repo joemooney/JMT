@@ -1886,3 +1886,47 @@ When a sub-statemachine is stored embedded in the parent file:
 - Successfully compiles with `cargo build`
 
 ---
+
+### Prompt: Add minimum node spacing setting and enforcement
+
+**User Request:**
+"As a diagram setting, we should have a preferred minimum length of a connection or distance between nodes?"
+
+Then when asked to implement the behavior: "yes"
+
+**Actions Taken:**
+
+1. **Added min_node_spacing to DiagramSettings:**
+   - New field `min_node_spacing: f32` with default of 40px
+   - Uses `#[serde(default)]` for backwards compatibility
+   - Added `default_min_node_spacing()` function
+
+2. **Added Layout Settings UI in Properties panel:**
+   - New "⚙ Layout Settings" collapsible section
+   - Slider for Min Node Spacing (20-100px)
+   - Slider for Stub Length (5-30px, moved here for discoverability)
+
+3. **Implemented spacing enforcement in Diagram:**
+   - `add_node_with_spacing()`: wrapper that auto-adjusts position
+   - `check_node_spacing()`: check gap between prospective and existing nodes
+   - `find_valid_position()`: find nearest valid position maintaining spacing
+   - `distance_to_nearest_node()`: measure distance to closest node
+   - `rect_gap()`: calculate gap between two rectangles (negative if overlapping)
+   - `distance_to_rect_edge()`: helper for point-to-rect distance
+   - `get_prospective_node_bounds()`: get bounds of node that would be created
+
+4. **Updated node placement in app.rs:**
+   - All Add modes (AddState, AddInitial, AddFinal, AddChoice, AddJunction, AddFork, AddJoin) now use `add_node_with_spacing()`
+   - Status bar shows "(adjusted for spacing)" when position is auto-corrected
+   - Nodes are pushed away from existing nodes to maintain the minimum gap
+
+**Files Modified:**
+- `jmt-core/src/settings.rs` - Added min_node_spacing field
+- `jmt-core/src/diagram.rs` - Added spacing check and adjustment methods
+- `jmt-client/src/panels/properties.rs` - Added Layout Settings UI section
+- `jmt-client/src/app.rs` - Updated all node placement to use spacing enforcement
+
+**Build Status:**
+- Successfully compiles with `cargo build`
+
+---
