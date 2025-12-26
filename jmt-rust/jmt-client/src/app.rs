@@ -3119,6 +3119,83 @@ impl eframe::App for JmtApp {
                 }
             }
 
+            // Handle pointer press (mouse button down) - show what will be dragged
+            // This gives immediate feedback before drag_started fires
+            let primary_pressed = ui.input(|i| i.pointer.primary_pressed());
+            if primary_pressed && self.edit_mode == EditMode::Arrow {
+                if let Some(pos) = response.hover_pos() {
+                    let diagram_pos = egui::Pos2::new(
+                        (pos.x - canvas_origin.x) / zoom,
+                        (pos.y - canvas_origin.y) / zoom
+                    );
+                    let point = Point::new(diagram_pos.x, diagram_pos.y);
+
+                    // Check if pressing on an already-selected node - that's what will be dragged
+                    let will_drag = self.current_diagram().and_then(|state| {
+                        let selected = state.diagram.selected_nodes();
+                        // Find the smallest selected node containing the point
+                        let mut selected_under_cursor: Vec<_> = selected.iter()
+                            .filter_map(|&id| {
+                                state.diagram.find_node(id).and_then(|n| {
+                                    if n.contains_point(point) {
+                                        let b = n.bounds();
+                                        let name = if n.name().is_empty() {
+                                            n.seq_id().to_string()
+                                        } else {
+                                            n.name().to_string()
+                                        };
+                                        Some((id, b.width() * b.height(), name, n.node_type().display_name()))
+                                    } else {
+                                        None
+                                    }
+                                })
+                            })
+                            .collect();
+                        selected_under_cursor.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+                        selected_under_cursor.first().map(|(_, _, name, type_name)| {
+                            if name.is_empty() {
+                                type_name.to_string()
+                            } else {
+                                format!("{} ({})", name, type_name)
+                            }
+                        })
+                    });
+
+                    if let Some(name) = will_drag {
+                        self.status_message = format!("Will drag: {}", name);
+                    } else {
+                        // Not pressing on a selected node - show what would be selected
+                        // (smallest node containing the point)
+                        let will_select = self.current_diagram().and_then(|state| {
+                            let mut nodes_under_cursor: Vec<_> = state.diagram.nodes().iter()
+                                .filter(|n| n.contains_point(point))
+                                .map(|n| {
+                                    let b = n.bounds();
+                                    let name = if n.name().is_empty() {
+                                        n.seq_id().to_string()
+                                    } else {
+                                        n.name().to_string()
+                                    };
+                                    (b.width() * b.height(), name, n.node_type().display_name())
+                                })
+                                .collect();
+                            nodes_under_cursor.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+                            nodes_under_cursor.first().map(|(_, name, type_name)| {
+                                if name.is_empty() {
+                                    type_name.to_string()
+                                } else {
+                                    format!("{} ({})", name, type_name)
+                                }
+                            })
+                        });
+
+                        if let Some(name) = will_select {
+                            self.status_message = format!("Will select: {} (not on selected node)", name);
+                        }
+                    }
+                }
+            }
+
             // Handle mouse clicks with custom double-click detection (500ms window)
             // Double-click in add mode will add element AND switch back to arrow mode
             let ctrl_held = ui.input(|i| i.modifiers.ctrl);
