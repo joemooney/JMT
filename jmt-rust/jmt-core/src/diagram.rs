@@ -2641,13 +2641,16 @@ impl Diagram {
                 .map(|(_, b)| b.clone());
 
             // Check if source/target are circular pseudo-states that should use center
+            // Initial: connections originate FROM center (small filled circle)
+            // Junction: connections can go to/from center (small filled circle, routing point)
+            // Final: connections should terminate at PERIMETER (so arrowhead is visible on the outer ring)
             let source_use_center = node_types.get(&conn.source_id)
                 .and_then(|k| *k)
                 .map(|k| matches!(k, PseudoStateKind::Initial | PseudoStateKind::Junction))
                 .unwrap_or(false);
             let target_use_center = node_types.get(&conn.target_id)
                 .and_then(|k| *k)
-                .map(|k| matches!(k, PseudoStateKind::Final | PseudoStateKind::Junction))
+                .map(|k| matches!(k, PseudoStateKind::Junction))  // Only Junction, not Final
                 .unwrap_or(false);
 
             if let (Some(sb), Some(tb)) = (source_bounds, target_bounds) {
@@ -2790,7 +2793,7 @@ impl Diagram {
                     .unwrap_or(false);
                 let target_use_center = node_types.get(&self.connections[idx].target_id)
                     .and_then(|k| *k)
-                    .map(|k| matches!(k, PseudoStateKind::Final | PseudoStateKind::Junction))
+                    .map(|k| matches!(k, PseudoStateKind::Junction))  // Only Junction, not Final
                     .unwrap_or(false);
 
                 if let (Some(sb), Some(tb)) = (source_bounds, target_bounds) {
